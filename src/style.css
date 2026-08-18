@@ -1,0 +1,4 @@
+/* src/style.css */
+html, body { margin: 0; height: 100%; }
+#app { width: 100%; height: 100%; }
+#scene-canvas { width: 100%; height: 100%; display: block; }
