@@ -1030,11 +1030,15 @@ describe("tick", () => {
 
   it("flags an isolated gear as unconnected and does not rotate it", () => {
     const gears = [
+      // Note: this crank has nothing meshed to it either, so it is ALSO
+      // unconnected -- classify() applies the same "no edges" rule to every
+      // gear type (spec §4 draws no type exception), so a crank sitting alone
+      // is exactly as "not doing anything" as any other lone gear.
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "lonely", teeth: 20, module: 1, position: [1000, 0, 0] }),
     ];
     const result = tick(gears, 1, 1);
-    expect(result.diagnostics.unconnectedIds).toEqual(["lonely"]);
+    expect(result.diagnostics.unconnectedIds.sort()).toEqual(["crank", "lonely"]);
     expect(result.gears.find((g) => g.id === "lonely")!.angularVelocity).toBe(0);
   });
 });
