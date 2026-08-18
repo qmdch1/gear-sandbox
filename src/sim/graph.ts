@@ -36,7 +36,7 @@ export function classify(gears: GearInstance[], edges: MeshEdge[]): SimDiagnosti
     adjacency.get(e.b)!.push(e.a);
   }
 
-  const unconnectedIds = gears.filter((g) => (neighborCount.get(g.id) ?? 0) === 0).map((g) => g.id);
+  const unconnectedIds = gears.filter((g) => g.type !== "crank" && g.type !== "load" && (neighborCount.get(g.id) ?? 0) === 0).map((g) => g.id);
 
   const poweredIds = new Set<string>();
   for (const crank of gears.filter((g) => g.type === "crank")) {
