@@ -304,13 +304,26 @@ function pitchRadius(g: GearInstance): number {
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
   if (a.type === "load" || b.type === "load") {
-    const load = a.type === "load" ? a : b;
-    const other = a.type === "load" ? b : a;
-    if (other.type === "load") return null; // two load objects never couple
+    if (a.type === "load" && b.type === "load") return null; // two load objects never couple
     if (dist(a.position, b.position) > COUPLING_DISTANCE_TOLERANCE) return null;
     if (Math.abs(dot(a.axis, b.axis)) < PARALLEL_DOT_THRESHOLD) return null;
-    void load;
     return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+  }
+
+  // A worm's driving shaft attaches directly (coincident position, same axis) to
+  // whatever powers it -- in this simplified model a worm has no separate "input
+  // tooth mesh," so without this it could never receive rotation at all (its only
+  // other rule, below, is a ONE-WAY mesh *out* toward its wheel). This coupling
+  // check is geometrically distinguishable from that mesh check (coincident vs.
+  // pitch-radius-apart), so there's no ambiguity between the two for the same pair.
+  if (a.type === "worm" || b.type === "worm") {
+    const bothWorm = a.type === "worm" && b.type === "worm";
+    const coincident = dist(a.position, b.position) <= COUPLING_DISTANCE_TOLERANCE;
+    if (!bothWorm && coincident && Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD) {
+      return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+    }
+    // Not a coincident shaft coupling -- fall through to the perpendicular
+    // one-way mesh check below, which covers the worm-to-wheel case.
   }
 
   const centerDistance = dist(a.position, b.position);
@@ -335,8 +348,11 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   return null;
 }
 
-/** True when two gears geometrically overlap (closer than a valid mesh distance allows). */
+/** True when two gears geometrically overlap (closer than a valid mesh distance allows,
+ *  and NOT already a legitimate connection -- a load or worm coupling is intentionally
+ *  coincident with its host gear, so a valid `evaluatePair` result is never an overlap). */
 export function isOverlapping(a: GearInstance, b: GearInstance): boolean {
+  if (evaluatePair(a, b)) return false;
   const centerDistance = dist(a.position, b.position);
   const expected = pitchRadius(a) + pitchRadius(b);
   return centerDistance > 0.001 && centerDistance < expected * (1 - MESH_TOLERANCE);
@@ -407,6 +423,21 @@ describe("evaluatePair", () => {
     expect(edge!.oneWay).toBe("aToB"); // a === worm
   });
 
+  it("couples a worm directly onto a coincident driving shaft (e.g. a crank), so it can receive power", () => {
+    const crank = makeGear({ id: "crank", type: "crank", axis: [0, 1, 0], position: [0, 0, 0] });
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(crank, worm);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+    expect(edge!.oneWay).toBe("none");
+  });
+
+  it("does not let two worms couple to each other", () => {
+    const wormA = makeGear({ id: "wa", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
+    const wormB = makeGear({ id: "wb", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
+    expect(evaluatePair(wormA, wormB)).toBeNull();
+  });
+
   it("couples a load object directly onto a coincident, axis-aligned gear", () => {
     const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
     const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
@@ -435,6 +466,12 @@ describe("isOverlapping", () => {
     const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] });
     expect(isOverlapping(a, b)).toBe(false);
   });
+
+  it("does not flag a coincident load coupling as overlapping, even though it's geometrically close", () => {
+    const gear = makeGear({ id: "g", teeth: 20, module: 1, position: [0, 0, 0] });
+    const load = makeGear({ id: "l", type: "load", teeth: 0, position: [0, 0, 0] });
+    expect(isOverlapping(gear, load)).toBe(false);
+  });
 });
 ```
 
@@ -446,7 +483,7 @@ Expected: FAIL — `src/sim/meshing.ts` does not exist yet (skip this step if St
 - [ ] **Step 4: Run tests and confirm they pass**
 
 Run: `npx vitest run tests/sim/meshing.test.ts`
-Expected: 9 passed.
+Expected: 12 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -714,6 +751,25 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("worm")).toBe(0);
   });
 
+  it("lets a crank drive a worm via direct shaft coupling, which then drives its wheel one-way", () => {
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [0, 1, 0], teeth: 20, module: 1,
+      position: [0, 0, 0], angularVelocity: 3,
+    });
+    const worm = makeGear({
+      id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1,
+      position: [0, 0, 0], // coincident with the crank -> shaft coupling, not a tooth mesh
+    });
+    const wheel = makeGear({
+      id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1,
+      position: [11, 0, 0], // perpendicular to the worm's axis -> one-way mesh
+    });
+    const gears = [crank, worm, wheel];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("worm")).toBeCloseTo(3);      // rigid coupling: same speed as the crank
+    expect(angularVelocities.get("wheel")).toBeCloseTo(-0.3);  // -(2/20) * 3, one-way from the worm
+  });
+
   it("stops propagation at a broken gear", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
@@ -730,7 +786,7 @@ describe("propagateRotation", () => {
 - [ ] **Step 3: Run tests and confirm they pass**
 
 Run: `npx vitest run tests/sim/rotation.test.ts`
-Expected: 4 passed.
+Expected: 5 passed.
 
 - [ ] **Step 4: Commit**
 
