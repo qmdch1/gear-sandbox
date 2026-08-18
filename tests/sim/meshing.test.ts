@@ -1,0 +1,111 @@
+// tests/sim/meshing.test.ts
+import { describe, it, expect } from "vitest";
+import { evaluatePair, isOverlapping } from "../../src/sim/meshing";
+import type { GearInstance } from "../../src/sim/types";
+
+function makeGear(overrides: Partial<GearInstance>): GearInstance {
+  return {
+    id: "g",
+    type: "spur",
+    position: [0, 0, 0],
+    axis: [0, 1, 0],
+    teeth: 20,
+    module: 1,
+    durabilityMax: 100,
+    durabilityCurrent: 100,
+    broken: false,
+    rotation: 0,
+    angularVelocity: 0,
+    ...overrides,
+  };
+}
+
+describe("evaluatePair", () => {
+  it("meshes two spur gears at the correct center distance with parallel axes", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }); // (20+10)/2=15
+    const edge = evaluatePair(a, b);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+    expect(edge!.ratio).toBeCloseTo(2); // 20/10
+    expect(edge!.oneWay).toBe("none");
+  });
+
+  it("rejects two spur gears placed too far apart", () => {
+    const a = makeGear({ id: "a", position: [0, 0, 0] });
+    const b = makeGear({ id: "b", position: [50, 0, 0] });
+    expect(evaluatePair(a, b)).toBeNull();
+  });
+
+  it("rejects two spur gears with non-parallel axes", () => {
+    const a = makeGear({ id: "a", axis: [0, 1, 0], position: [0, 0, 0] });
+    const b = makeGear({ id: "b", axis: [1, 0, 0], position: [15, 0, 0] });
+    expect(evaluatePair(a, b)).toBeNull();
+  });
+
+  it("meshes a bevel pair only with perpendicular axes", () => {
+    const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [20, 0, 0] });
+    const edge = evaluatePair(a, b);
+    expect(edge).not.toBeNull();
+    expect(edge!.oneWay).toBe("none");
+  });
+
+  it("marks a worm-to-wheel edge one-way from the worm", () => {
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1, position: [0, 0, 0] });
+    const wheel = makeGear({ id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1, position: [11, 0, 0] });
+    const edge = evaluatePair(worm, wheel);
+    expect(edge).not.toBeNull();
+    expect(edge!.oneWay).toBe("aToB"); // a === worm
+  });
+
+  it("couples a worm directly onto a coincident driving shaft (e.g. a crank), so it can receive power", () => {
+    const crank = makeGear({ id: "crank", type: "crank", axis: [0, 1, 0], position: [0, 0, 0] });
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(crank, worm);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+    expect(edge!.oneWay).toBe("none");
+  });
+
+  it("does not let two worms couple to each other", () => {
+    const wormA = makeGear({ id: "wa", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
+    const wormB = makeGear({ id: "wb", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
+    expect(evaluatePair(wormA, wormB)).toBeNull();
+  });
+
+  it("couples a load object directly onto a coincident, axis-aligned gear", () => {
+    const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
+    const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+    const edge = evaluatePair(gear, load);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+    expect(edge!.ratio).toBe(1);
+  });
+
+  it("does not couple a load object that is not coincident with a gear", () => {
+    const gear = makeGear({ id: "g", position: [0, 0, 0] });
+    const load = makeGear({ id: "l", type: "load", teeth: 0, position: [5, 0, 0] });
+    expect(evaluatePair(gear, load)).toBeNull();
+  });
+});
+
+describe("isOverlapping", () => {
+  it("flags two gears placed closer than a valid mesh distance", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [5, 0, 0] }); // expected 15, actual 5
+    expect(isOverlapping(a, b)).toBe(true);
+  });
+
+  it("does not flag correctly meshed gears as overlapping", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] });
+    expect(isOverlapping(a, b)).toBe(false);
+  });
+
+  it("does not flag a coincident load coupling as overlapping, even though it's geometrically close", () => {
+    const gear = makeGear({ id: "g", teeth: 20, module: 1, position: [0, 0, 0] });
+    const load = makeGear({ id: "l", type: "load", teeth: 0, position: [0, 0, 0] });
+    expect(isOverlapping(gear, load)).toBe(false);
+  });
+});
