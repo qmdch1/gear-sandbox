@@ -1187,7 +1187,7 @@ describe("file export/import", () => {
 - [ ] **Step 6: Run tests and confirm they pass**
 
 Run: `npx vitest run tests/persistence`
-Expected: 4 passed.
+Expected: 5 passed (2 from serialize.test.ts + 3 from storage.test.ts).
 
 - [ ] **Step 7: Commit**
 
