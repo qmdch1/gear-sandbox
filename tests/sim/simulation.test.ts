@@ -46,7 +46,7 @@ describe("tick", () => {
       makeGear({ id: "lonely", teeth: 20, module: 1, position: [1000, 0, 0] }),
     ];
     const result = tick(gears, 1, 1);
-    expect(result.diagnostics.unconnectedIds).toEqual(["lonely"]);
+    expect(result.diagnostics.unconnectedIds.sort()).toEqual(["crank", "lonely"]);
     expect(result.gears.find((g) => g.id === "lonely")!.angularVelocity).toBe(0);
   });
 });
