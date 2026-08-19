@@ -18,7 +18,7 @@ export interface PartInfo {
 export const PART_INFO: Record<GearType, PartInfo> = {
   spur: {
     label: "평기어",
-    description: "가장 기본적인 기어입니다. 같은 방향을 보는 다른 평기어·헬리컬·손잡이 기어와 나란히 붙이면 반대 방향으로 맞물려 돕니다.",
+    description: "가장 기본적인 기어입니다. 같은 방향을 보는 다른 평기어·손잡이 기어·배터리·콘센트와 나란히 붙이면 반대 방향으로 맞물려 돕니다. 헬리컬 기어는 이(치형) 각도가 달라서 맞물리지 않습니다.",
     purpose:
       "시계, 자동차 변속기, 장난감 등 회전을 전달하는 모든 기계의 기본 부품입니다. 잇수 비율을 다르게 하면 속도(RPM)와 힘(토크)을 바꿀 수 있습니다 — 작은 기어가 큰 기어를 돌리면, 큰 기어는 느리게 돌지만 힘은 세집니다.",
     icon: `<circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="6"/>
@@ -33,7 +33,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
   },
   helical: {
     label: "헬리컬 기어",
-    description: "평기어와 연결 방식은 완전히 같습니다. 다만 이가 비스듬히 나 있어서 맞물릴 때 여러 개가 동시에 걸립니다.",
+    description: "이가 비스듬히 나 있어서 맞물릴 때 여러 개가 동시에 걸립니다. 단, 이 각도가 평기어와 달라서 평기어·손잡이 기어와는 맞물리지 않고, 다른 헬리컬 기어끼리만 맞물립니다.",
     purpose:
       "실제 자동차 변속기 대부분이 평기어 대신 이걸 씁니다 — 하중이 이 하나에 몰리지 않고 여러 이에 나뉘어서 더 조용하고 덜 닳습니다(이 샌드박스에서도 내구도가 더 높게 설정되어 있습니다).",
     icon: `<circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="6"/>

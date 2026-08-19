@@ -46,6 +46,38 @@ describe("evaluatePair", () => {
     expect(evaluatePair(a, b)).toBeNull();
   });
 
+  it("does not mesh a spur gear with a helical gear, even at the right distance and parallel axes", () => {
+    // Real gears: a 0°-helix spur gear can't properly mesh with an angled-tooth
+    // helical gear even on parallel shafts -- only with another 0°-helix gear.
+    const spur = makeGear({ id: "spur", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
+    const helical = makeGear({ id: "helical", type: "helical", teeth: 10, module: 1, position: [15, 0, 0] });
+    expect(evaluatePair(spur, helical)).toBeNull();
+  });
+
+  it("meshes two helical gears with each other, same as two spur gears", () => {
+    const a = makeGear({ id: "a", type: "helical", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "helical", teeth: 10, module: 1, position: [15, 0, 0] });
+    const edge = evaluatePair(a, b);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+  });
+
+  it("meshes a spur gear with a crank/battery/outlet -- all mechanically plain (0°-helix) gears", () => {
+    const spur = makeGear({ id: "spur", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
+    for (const type of ["crank", "battery", "outlet"] as const) {
+      const partner = makeGear({ id: type, type, teeth: 10, module: 1, position: [15, 0, 0] });
+      expect(evaluatePair(spur, partner)).not.toBeNull();
+    }
+  });
+
+  it("does not mesh a helical gear with a crank/battery/outlet (all plain 0°-helix gears)", () => {
+    const helical = makeGear({ id: "helical", type: "helical", teeth: 20, module: 1, position: [0, 0, 0] });
+    for (const type of ["crank", "battery", "outlet"] as const) {
+      const partner = makeGear({ id: type, type, teeth: 10, module: 1, position: [15, 0, 0] });
+      expect(evaluatePair(helical, partner)).toBeNull();
+    }
+  });
+
   it("rejects two spur gears with non-parallel axes", () => {
     const a = makeGear({ id: "a", axis: [0, 1, 0], position: [0, 0, 0] });
     const b = makeGear({ id: "b", axis: [1, 0, 0], position: [15, 0, 0] });
@@ -161,6 +193,12 @@ describe("idealConnectionDistance", () => {
     const gear = makeGear({ id: "g", position: [0, 0, 0] });
     const load = makeGear({ id: "l", type: "load", teeth: 0, position: [999, 0, 0] });
     expect(idealConnectionDistance(gear, load)).toBe(0);
+  });
+
+  it("returns null for a spur/helical pair -- they never mesh regardless of distance", () => {
+    const spur = makeGear({ id: "spur", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
+    const helical = makeGear({ id: "helical", type: "helical", teeth: 10, module: 1, position: [999, 0, 0] });
+    expect(idealConnectionDistance(spur, helical)).toBeNull();
   });
 
   it("returns null for axes that could never align (e.g. two parallel-family gears at right angles)", () => {

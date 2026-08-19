@@ -5,7 +5,19 @@ const PARALLEL_DOT_THRESHOLD = 0.98;  // |axis dot| above this => parallel axes
 const PERP_DOT_THRESHOLD = 0.1;       // |axis dot| below this => perpendicular axes
 const COUPLING_DISTANCE_TOLERANCE = 0.05;
 
-const PARALLEL_FAMILY = new Set<GearInstance["type"]>(["spur", "helical", "crank", "battery", "outlet"]);
+// Parallel-shaft gears only mesh within their OWN helix-angle family, not across it --
+// exactly like real gears: a plain (0°-helix) spur gear cannot properly mesh with an
+// angled-tooth helical gear even on parallel shafts (their tooth lines don't line up
+// across the face width), only with another 0°-helix gear. Crank/battery/outlet are
+// mechanically plain spur gears (no twist in their geometry) with a different
+// accessory bolted on, so they belong in the spur bucket, not a separate one.
+const SPUR_FAMILY = new Set<GearInstance["type"]>(["spur", "crank", "battery", "outlet"]);
+const HELICAL_FAMILY = new Set<GearInstance["type"]>(["helical"]);
+
+function sameParallelFamily(a: GearInstance["type"], b: GearInstance["type"]): boolean {
+  return (SPUR_FAMILY.has(a) && SPUR_FAMILY.has(b)) || (HELICAL_FAMILY.has(a) && HELICAL_FAMILY.has(b));
+}
+
 // Accessories that never mesh via teeth — they only ever attach by sitting coincident
 // on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge or a
 // fan is functionally the same attach rule, just a different indicator/output device).
@@ -53,7 +65,7 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   const expected = pitchRadius(a) + pitchRadius(b);
   const withinDistance = Math.abs(centerDistance - expected) <= expected * MESH_TOLERANCE;
 
-  const bothParallelFamily = PARALLEL_FAMILY.has(a.type) && PARALLEL_FAMILY.has(b.type);
+  const bothParallelFamily = sameParallelFamily(a.type, b.type);
   if (bothParallelFamily) {
     if (Math.abs(axisDot) < PARALLEL_DOT_THRESHOLD || !withinDistance) return null;
     return { a: a.id, b: b.id, kind: "mesh", ratio: a.teeth / b.teeth, oneWay: "none" };
@@ -94,7 +106,7 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
   }
 
   const axisDot = dot(a.axis, b.axis);
-  const bothParallelFamily = PARALLEL_FAMILY.has(a.type) && PARALLEL_FAMILY.has(b.type);
+  const bothParallelFamily = sameParallelFamily(a.type, b.type);
   if (bothParallelFamily) {
     if (Math.abs(axisDot) < PARALLEL_DOT_THRESHOLD) return null;
     return pitchRadius(a) + pitchRadius(b);
