@@ -81,10 +81,18 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    environmentMatchGlobs: [["tests/ui/**", "jsdom"]],
   },
 });
 ```
+
+> Note: an earlier draft of this config used `environmentMatchGlobs` to route
+> `tests/ui/**`/`tests/render/**` to jsdom automatically. That option was
+> removed in Vitest 4 (this project's installed version) — it's silently
+> ignored, not an error, which made the mistake easy to miss. The actual,
+> working convention used throughout this plan is a per-file
+> `// @vitest-environment jsdom` pragma at the top of any test that touches
+> the DOM (see Tasks 8, 9, 11, 12, 14) — every such test already carries one,
+> so nothing downstream needs the global option at all.
 
 - [ ] **Step 5: Write `index.html`**
 
