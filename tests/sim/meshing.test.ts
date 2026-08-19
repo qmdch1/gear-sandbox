@@ -12,6 +12,15 @@ function toothPhase(teeth: number, rotation: number, worldAngle: number): number
   return (((localAngle % pitch) + pitch) % pitch) / pitch;
 }
 
+/** Same idea as `toothPhase`, but for a bevel gear's own Y-Z rotation plane, where
+ *  the world-angle relation is `worldAngleYZ = phi + rotation - PI` (see meshing.ts's
+ *  bevel derivation) instead of the +Y-axis profile types' `-(local + rotation)`. */
+function bevelToothPhase(teeth: number, rotation: number, worldAngleYZ: number): number {
+  const phi = worldAngleYZ - rotation + Math.PI;
+  const pitch = (Math.PI * 2) / teeth;
+  return (((phi % pitch) + pitch) % pitch) / pitch;
+}
+
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
   return {
     id: "g",
@@ -251,5 +260,39 @@ describe("meshPhaseAlignment", () => {
     const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, position: [0, 0, 0] });
     const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 20, position: [20, 0, 0] });
     expect(meshPhaseAlignment(a, 0, b)).toBeNull();
+  });
+
+  it("aligns a dragged bevel gear's tooth-center to face a stationary spur partner (same height)", () => {
+    const partner = makeGear({ id: "partner", type: "spur", teeth: 20, module: 1, position: [0, 0, 0], rotation: 0.37 });
+    const dragged = makeGear({ id: "dragged", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+
+    const alignment = meshPhaseAlignment(dragged, 1.0, partner);
+    expect(alignment).not.toBeNull();
+
+    const partnerPhaseAtContact = toothPhase(partner.teeth, partner.rotation, alignment!.worldAngleTowardPartner + Math.PI);
+    expect(partnerPhaseAtContact).toBeCloseTo(0.5, 5); // gap-center, same rule as a same-axis pair
+
+    const contactAngleYZ = Math.atan2(Math.sin(alignment!.worldAngleTowardPartner), 0);
+    const draggedPhaseAtContact = bevelToothPhase(dragged.teeth, alignment!.rotation, contactAngleYZ);
+    expect(draggedPhaseAtContact).toBeCloseTo(0, 5); // tooth-center facing the partner
+  });
+
+  it("sets a dragged spur gear's tooth-center to face a stationary bevel partner (same height)", () => {
+    const partner = makeGear({ id: "partner", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0], rotation: 0.9 });
+    const dragged = makeGear({ id: "dragged", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
+
+    const alignment = meshPhaseAlignment(dragged, 1.2, partner);
+    expect(alignment).not.toBeNull();
+    // The bevel partner's rotation is fixed and (per the same-height derivation) its
+    // contact angle doesn't depend on the exact raw angle, only which side -- so there's
+    // no detent to round the placement angle to; only dragged's own rotation is set.
+    expect(alignment!.worldAngleTowardPartner).toBeCloseTo(1.2, 10);
+    expect(alignment!.rotation).toBeCloseTo(-1.2, 10);
+  });
+
+  it("returns null for a bevel/profile-type pair at different heights (not solved for yet)", () => {
+    const partner = makeGear({ id: "partner", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
+    const dragged = makeGear({ id: "dragged", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 5, 0] });
+    expect(meshPhaseAlignment(dragged, 1.0, partner)).toBeNull();
   });
 });

@@ -51,12 +51,22 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   directional.position.set(20, 40, 20);
   scene.add(ambient, directional);
 
+  // Invisible (not removed!) -- dragControls.ts raycasts against this specific mesh to
+  // turn pointer position into a world (x, z) point, and a hidden (`visible = false`)
+  // object is skipped by the raycaster entirely, which would break dragging outright.
+  // A solid fill color here used to visually compete with parts sitting low/at ground
+  // level (bevel gears especially), so it's fully transparent instead.
   const groundPlane = new THREE.Mesh(
     new THREE.PlaneGeometry(500, 500),
-    new THREE.MeshStandardMaterial({ color: 0x2a2e35 }),
+    new THREE.MeshStandardMaterial({ color: 0x2a2e35, transparent: true, opacity: 0 }),
   );
   groundPlane.rotation.x = -Math.PI / 2;
   scene.add(groundPlane);
+
+  // A faint reference grid instead -- enough to judge position/height by without the
+  // opaque fill's visual competition with the parts themselves.
+  const grid = new THREE.GridHelper(500, 50, 0x3a3f47, 0x2a2e35);
+  scene.add(grid);
 
   return { scene, camera, renderer, controls, groundPlane };
 }

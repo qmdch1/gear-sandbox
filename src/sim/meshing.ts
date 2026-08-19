@@ -129,6 +129,20 @@ function isWorldYAxis(g: GearInstance): boolean {
   return Math.abs(g.axis[1]) > 0.98 && Math.abs(g.axis[0]) < 0.2 && Math.abs(g.axis[2]) < 0.2;
 }
 
+function isWorldXAxis(g: GearInstance): boolean {
+  return Math.abs(g.axis[0]) > 0.98 && Math.abs(g.axis[1]) < 0.2 && Math.abs(g.axis[2]) < 0.2;
+}
+
+// A bevel gear's tooth studs (gearGeometry.ts's `bevelGeometry`) sit at the same
+// "tooth i's center is at angle i*pitch" convention as the involute profile types --
+// only the axis differs (world +X, not +Y), so a bevel pair needs its own (much
+// simpler) version of the phase math below rather than reusing PROFILE_TYPES'.
+const HEIGHT_MATCH_TOLERANCE = 0.05;
+
+function isBevelOnWorldXAxis(g: GearInstance): boolean {
+  return g.type === "bevel" && isWorldXAxis(g);
+}
+
 export interface PhaseAlignment {
   /** Corrected angle (dragged -> partner, atan2(dz,dx) convention) that centers the
    *  mesh exactly on the partner's nearest tooth-pitch "detent," instead of whatever
@@ -162,25 +176,70 @@ export function meshPhaseAlignment(
   rawWorldAngleTowardPartner: number,
   partner: GearInstance,
 ): PhaseAlignment | null {
-  if (!PROFILE_TYPES.has(dragged.type) || !PROFILE_TYPES.has(partner.type)) return null;
-  if (!isWorldYAxis(dragged) || !isWorldYAxis(partner)) return null;
+  if (PROFILE_TYPES.has(dragged.type) && PROFILE_TYPES.has(partner.type) && isWorldYAxis(dragged) && isWorldYAxis(partner)) {
+    // Snap the angle (as seen from the partner) to the nearest one where the partner
+    // shows an exact gap-center (phase 0.5) at the contact point. Valid solutions
+    // repeat every `partnerPitch`, so solving for the nearest one is a "round to the
+    // nearest grid line" over that fixed step -- picking a random point in the gap (a
+    // valid, non-clashing but off-center mesh) is exactly the bug this fixes.
+    const partnerPitch = TWO_PI / partner.teeth;
+    const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.5;
+    const n = Math.round(continuousN);
+    const worldAngleTowardPartner = -Math.PI - partner.rotation - (0.5 + n) * partnerPitch;
 
-  // Snap the angle (as seen from the partner) to the nearest one where the partner
-  // shows an exact gap-center (phase 0.5) at the contact point. Valid solutions
-  // repeat every `partnerPitch`, so solving for the nearest one is a "round to the
-  // nearest grid line" over that fixed step -- picking a random point in the gap (a
-  // valid, non-clashing but off-center mesh) is exactly the bug this fixes.
-  const partnerPitch = TWO_PI / partner.teeth;
-  const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.5;
-  const n = Math.round(continuousN);
-  const worldAngleTowardPartner = -Math.PI - partner.rotation - (0.5 + n) * partnerPitch;
+    // With the partner locked to phase 0.5 (gap-center) at this angle by construction,
+    // dragged's own tooth-center (phase 0) should face back toward the partner --
+    // giving a properly centered mesh rather than just an arbitrary non-clashing one.
+    const rotation = -worldAngleTowardPartner;
+    return { worldAngleTowardPartner, rotation };
+  }
 
-  // With the partner locked to phase 0.5 (gap-center) at this angle by construction,
-  // dragged's own tooth-center (phase 0) should face back toward the partner --
-  // giving a properly centered mesh rather than just an arbitrary non-clashing one.
-  const rotation = -worldAngleTowardPartner;
+  // A bevel gear meshes on a perpendicular (world +X) axis against a profile-type
+  // partner on the usual +Y axis. Both gears sitting at the same height (the only
+  // case handled here -- see HEIGHT_MATCH_TOLERANCE) makes the geometry degenerate
+  // in a useful way: the contact direction, seen in the bevel's OWN rotation plane
+  // (world Y-Z, perpendicular to its +X axis), only ever works out to exactly +/-90°
+  // (whichever side of the bevel the partner sits on) -- never anything in between.
+  // Derivation: gearMesh.ts's quaternion+rotateZ composition puts a bevel tooth at
+  // index i (local angle phi = i*pitch, same "tooth center at phi=0" convention as
+  // the involute profile types) at world angle `phi + gear.rotation - PI` in that Y-Z
+  // plane (verified numerically against the actual transform, mirroring the +Y-axis
+  // derivation above but for this different axis).
+  const draggedIsBevel = isBevelOnWorldXAxis(dragged);
+  const partnerIsBevel = isBevelOnWorldXAxis(partner);
+  const sameHeight = Math.abs(dragged.position[1] - partner.position[1]) <= HEIGHT_MATCH_TOLERANCE;
 
-  return { worldAngleTowardPartner, rotation };
+  if (draggedIsBevel && PROFILE_TYPES.has(partner.type) && isWorldYAxis(partner) && sameHeight) {
+    // Partner side: identical rounding to the parallel-pair case above (partner is
+    // still a +Y-axis profile type with real involute teeth, so it still needs a
+    // proper detent in its own rotation plane).
+    const partnerPitch = TWO_PI / partner.teeth;
+    const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.5;
+    const n = Math.round(continuousN);
+    const worldAngleTowardPartner = -Math.PI - partner.rotation - (0.5 + n) * partnerPitch;
+
+    // Bevel (dragged) side: the contact direction from dragged to partner, projected
+    // into dragged's own Y-Z rotation plane, has z ~ sin(worldAngleTowardPartner) and
+    // y = 0 (same height) -- i.e. exactly the +/-90° described above. Point dragged's
+    // own tooth-center (phi=0) at that angle.
+    const contactAngleYZ = Math.atan2(Math.sin(worldAngleTowardPartner), 0);
+    const rotation = contactAngleYZ + Math.PI;
+    return { worldAngleTowardPartner, rotation };
+  }
+
+  if (partnerIsBevel && PROFILE_TYPES.has(dragged.type) && isWorldYAxis(dragged) && sameHeight) {
+    // The bevel partner's rotation is already fixed, and (per the derivation above)
+    // its own contact angle is insensitive to exactly which raw angle the drag landed
+    // on -- only which side of it. There's no useful detent to round the placement
+    // angle to here, so it's used as-is; only dragged's own tooth-center is aligned
+    // to face the bevel, which is still a real improvement over leaving dragged's
+    // rotation completely untouched (this pairing returned null entirely before).
+    const worldAngleTowardPartner = rawWorldAngleTowardPartner;
+    const rotation = -worldAngleTowardPartner;
+    return { worldAngleTowardPartner, rotation };
+  }
+
+  return null;
 }
 
 /** True when two gears geometrically overlap (closer than a valid mesh distance allows,

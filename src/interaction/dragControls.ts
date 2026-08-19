@@ -103,8 +103,14 @@ export interface DragControlsOptions {
 /** Thin pointer-event wiring: raycast onto the ground plane, drag the picked gear's
  *  position (and, by default, its whole connected assembly along with it — hold Alt
  *  to detach and drag just the one gear), and delegate the "is this a valid drop spot"
- *  question to `findSnapTarget`. Verified via manual QA (Task 15) — pointer/raycaster
- *  behavior is not meaningfully unit-testable without a real WebGL context. */
+ *  question to `findSnapTarget`. Hold Shift instead to drag that one gear's height
+ *  (Y) up/down via vertical pointer movement, e.g. to line up a bevel gear with a
+ *  partner at a different height -- mutually exclusive with the normal X/Z drag.
+ *  Verified via manual QA (Task 15) — pointer/raycaster behavior is not meaningfully
+ *  unit-testable without a real WebGL context. */
+const HEIGHT_DRAG_UNITS_PER_PIXEL = 0.12; // dragging up/down this many screen px moves 1 unit
+const MIN_HEIGHT = 0; // can't drag a gear below the ground plane
+
 export class DragControls {
   private raycaster = new THREE.Raycaster();
   private draggingId: string | null = null;
@@ -112,6 +118,11 @@ export class DragControls {
   // start — moved together by the same delta the anchor (draggingId) gear moves by.
   private dragGroupStart: Map<string, [number, number, number]> | null = null;
   private dragAnchorStart: [number, number, number] | null = null;
+  // Shift+drag instead moves just the one picked gear's height (Y), independent of
+  // the ground-plane raycast used for the normal X/Z drag (a plane at a fixed Y can't
+  // itself tell you a *different* Y) -- driven by vertical screen-pixel movement
+  // since drag-start instead.
+  private heightDrag: { id: string; startY: number; startClientY: number } | null = null;
 
   constructor(private options: DragControlsOptions) {
     const { domElement } = options.ctx.renderer;
@@ -143,11 +154,21 @@ export class DragControls {
     const hits = this.raycaster.intersectObjects(ctx.scene.children.filter((c) => c.name));
     const hitId = hits.length > 0 ? hits[0].object.name : null;
     if (hitId) {
+      const gears = this.options.getGears();
+      const anchor = gears.find((g) => g.id === hitId);
+
+      // Shift+drag: adjust just this one gear's height instead of the normal X/Z
+      // group drag -- mutually exclusive with it, so skip the group-drag setup below.
+      if (event.shiftKey && anchor) {
+        this.heightDrag = { id: hitId, startY: anchor.position[1], startClientY: event.clientY };
+        ctx.controls.enabled = false;
+        this.options.onSelect?.(hitId);
+        return;
+      }
+
       this.draggingId = hitId;
       ctx.controls.enabled = false;
 
-      const gears = this.options.getGears();
-      const anchor = gears.find((g) => g.id === hitId);
       if (anchor) {
         this.dragAnchorStart = anchor.position;
         // Alt+drag detaches: drag just this one gear, not its connected assembly.
@@ -163,6 +184,16 @@ export class DragControls {
   };
 
   private onPointerMove = (event: PointerEvent): void => {
+    if (this.heightDrag) {
+      const { id, startY, startClientY } = this.heightDrag;
+      const gears = this.options.getGears();
+      const gear = gears.find((g) => g.id === id);
+      if (!gear) return;
+      // Dragging UP (smaller clientY) raises the gear.
+      const newY = Math.max(MIN_HEIGHT, startY + (startClientY - event.clientY) * HEIGHT_DRAG_UNITS_PER_PIXEL);
+      this.options.onMove(id, [gear.position[0], newY, gear.position[2]]);
+      return;
+    }
     if (!this.draggingId || !this.dragGroupStart || !this.dragAnchorStart) return;
     const point = this.pointerToGroundPoint(event);
     if (!point) return;
@@ -203,6 +234,7 @@ export class DragControls {
     this.draggingId = null;
     this.dragGroupStart = null;
     this.dragAnchorStart = null;
+    this.heightDrag = null;
     this.options.ctx.controls.enabled = true;
     this.options.onPreview?.(null);
   };
