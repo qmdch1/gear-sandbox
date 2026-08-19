@@ -62,20 +62,16 @@ describe("evaluatePair", () => {
     expect(edge!.kind).toBe("mesh");
   });
 
-  it("meshes a spur gear with a crank/battery/outlet -- all mechanically plain (0°-helix) gears", () => {
+  it("meshes a spur gear with a crank -- both mechanically plain (0°-helix) gears", () => {
     const spur = makeGear({ id: "spur", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
-    for (const type of ["crank", "battery", "outlet"] as const) {
-      const partner = makeGear({ id: type, type, teeth: 10, module: 1, position: [15, 0, 0] });
-      expect(evaluatePair(spur, partner)).not.toBeNull();
-    }
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 10, module: 1, position: [15, 0, 0] });
+    expect(evaluatePair(spur, crank)).not.toBeNull();
   });
 
-  it("does not mesh a helical gear with a crank/battery/outlet (all plain 0°-helix gears)", () => {
+  it("does not mesh a helical gear with a crank (plain 0°-helix vs. angled-tooth)", () => {
     const helical = makeGear({ id: "helical", type: "helical", teeth: 20, module: 1, position: [0, 0, 0] });
-    for (const type of ["crank", "battery", "outlet"] as const) {
-      const partner = makeGear({ id: type, type, teeth: 10, module: 1, position: [15, 0, 0] });
-      expect(evaluatePair(helical, partner)).toBeNull();
-    }
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 10, module: 1, position: [15, 0, 0] });
+    expect(evaluatePair(helical, crank)).toBeNull();
   });
 
   it("rejects two spur gears with non-parallel axes", () => {
@@ -229,8 +225,8 @@ describe("meshPhaseAlignment", () => {
     const partnerPhaseAtContact = toothPhase(partner.teeth, partner.rotation, alignment!.worldAngleTowardPartner + Math.PI);
     const draggedPhaseAtContact = toothPhase(dragged.teeth, alignment!.rotation, alignment!.worldAngleTowardPartner);
 
-    expect(partnerPhaseAtContact).toBeCloseTo(0.75, 5); // gap-center
-    expect(draggedPhaseAtContact).toBeCloseTo(0.25, 5); // tooth-center
+    expect(partnerPhaseAtContact).toBeCloseTo(0.5, 5); // gap-center
+    expect(draggedPhaseAtContact).toBeCloseTo(0, 5); // tooth-center
   });
 
   it("snaps to the nearest valid detent to the raw angle, not an arbitrary one further around the gear", () => {

@@ -130,36 +130,6 @@ function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
   return mergeGeometries([base, handle]);
 }
 
-/** A power source shaped like a battery: the base gear (identical mesh rules to a
- *  crank) plus a squat cylinder with a small "+" terminal bump — a different picture
- *  of "where the energy comes from" for teaching, mechanically the same part. */
-function batteryGeometry(teeth: number, module: number): THREE.BufferGeometry {
-  const base = extrudedGearGeometry(teeth, module);
-  const pitchRadius = (module * teeth) / 2;
-  const body = new THREE.CylinderGeometry(module * 0.55, module * 0.55, module * 1.2, 16);
-  body.rotateX(Math.PI / 2);
-  body.translate(pitchRadius * 0.75, 0, GEAR_THICKNESS / 2 + module * 0.6);
-  const terminal = new THREE.CylinderGeometry(module * 0.2, module * 0.2, module * 0.3, 12);
-  terminal.rotateX(Math.PI / 2);
-  terminal.translate(pitchRadius * 0.75, 0, GEAR_THICKNESS / 2 + module * 1.35);
-  return mergeGeometries([base, body, terminal]);
-}
-
-/** A power source shaped like a wall outlet: the base gear plus a flat plate with two
- *  raised prong slots — another "where the energy comes from" picture for the same
- *  crank-equivalent part. */
-function outletGeometry(teeth: number, module: number): THREE.BufferGeometry {
-  const base = extrudedGearGeometry(teeth, module);
-  const pitchRadius = (module * teeth) / 2;
-  const plate = new THREE.BoxGeometry(module * 1.4, module * 1.8, module * 0.3);
-  plate.translate(pitchRadius * 0.75, 0, GEAR_THICKNESS / 2 + module * 0.15);
-  const slotA = new THREE.BoxGeometry(module * 0.15, module * 0.5, module * 0.15);
-  slotA.translate(pitchRadius * 0.75 - module * 0.3, module * 0.35, GEAR_THICKNESS / 2 + module * 0.3);
-  const slotB = new THREE.BoxGeometry(module * 0.15, module * 0.5, module * 0.15);
-  slotB.translate(pitchRadius * 0.75 + module * 0.3, module * 0.35, GEAR_THICKNESS / 2 + module * 0.3);
-  return mergeGeometries([base, plate, slotA, slotB]);
-}
-
 /** A flat, circular Shape extruded along Z, centered on its own thickness — the shared
  *  builder behind the flywheel and gauge dial (both are "solid disc with a hole,"
  *  differing only in radii and what else gets merged onto them). `ExtrudeGeometry`
@@ -208,6 +178,82 @@ function fanGeometry(module: number): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+/** A cone with actual tooth studs around its wide rim, instead of a perfectly smooth
+ *  cone -- built in the cone's own local Y-axis frame (radial = XZ, axis = Y), like
+ *  `ConeGeometry` itself; `buildGeometryForType` applies the same `rotateX(Math.PI/2)`
+ *  the old plain cone used, so the thickness axis still lands where `gearMesh.ts`
+ *  expects. Not a full Tredgold-approximation bevel-tooth loft (which would need to
+ *  taper each tooth all the way to the cone apex) -- these are fixed-size studs near
+ *  the rim, a deliberately simpler approximation that still reads as "a gear with
+ *  teeth" rather than a smooth truncated cone. `teeth` now only controls how many
+ *  tooth studs are placed (previously it was misused as the cone's smoothness
+ *  segment count, an unrelated cosmetic bug); the cone's own roundness uses a fixed,
+ *  generous segment count instead. */
+function bevelGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const pitchRadius = (module * teeth) / 2;
+  const baseRadius = pitchRadius + module * ADDENDUM_FACTOR;
+  const height = GEAR_THICKNESS * 3;
+  const cone = new THREE.ConeGeometry(baseRadius, height, 32);
+
+  const anglePerTooth = (Math.PI * 2) / teeth;
+  const toothWidth = Math.max(baseRadius * Math.sin(anglePerTooth / 2) * 1.1, module * 0.3);
+  const toothProtrusion = module * 0.8;
+  const toothDepth = height * 0.5;
+
+  const parts: THREE.BufferGeometry[] = [cone];
+  for (let i = 0; i < teeth; i++) {
+    const tooth = new THREE.BoxGeometry(toothWidth, toothDepth, toothProtrusion);
+    // Sits at the cone's wide end (y = -height/2), nudged slightly inward (-module*0.15)
+    // so it embeds into the cone's surface rather than floating with a visible gap.
+    tooth.translate(0, -height / 2 + toothDepth / 2, baseRadius + toothProtrusion / 2 - module * 0.15);
+    tooth.rotateY(i * anglePerTooth);
+    parts.push(tooth);
+  }
+  return mergeGeometries(parts);
+}
+
+/** A helix traced on the surface of a cylinder of `radius`, `turns` times over its
+ *  `length` -- the curve `TubeGeometry` sweeps a circular cross-section along to
+ *  build the worm's screw-thread ridge. Built in the same Y-axis frame as
+ *  `CylinderGeometry` (radial = XZ, axis = Y). */
+class HelixCurve extends THREE.Curve<THREE.Vector3> {
+  constructor(
+    private radius: number,
+    private length: number,
+    private turns: number,
+  ) {
+    super();
+  }
+  getPoint(t: number, target: THREE.Vector3 = new THREE.Vector3()): THREE.Vector3 {
+    const angle = t * Math.PI * 2 * this.turns;
+    const y = (t - 0.5) * this.length;
+    return target.set(Math.cos(angle) * this.radius, y, Math.sin(angle) * this.radius);
+  }
+}
+
+/** A worm gear with an actual helical thread ridge wound around its shaft, instead of
+ *  a perfectly smooth cylinder -- a thin core cylinder plus a `TubeGeometry` swept
+ *  along a `HelixCurve` and merged onto it, both built in the cylinder's own local
+ *  Y-axis frame; `buildGeometryForType` applies the same `rotateX(Math.PI/2)` the old
+ *  plain cylinder used. */
+function wormGeometry(module: number): THREE.BufferGeometry {
+  const length = module * 6;
+  const rootRadius = module * 0.85;
+  const threadCrestRadius = module * 1.35;
+  const tubeRadius = module * 0.32;
+  const turns = 4;
+
+  const core = new THREE.CylinderGeometry(rootRadius, rootRadius, length, 20, 1, false);
+  const thread = new THREE.TubeGeometry(
+    new HelixCurve(threadCrestRadius - tubeRadius, length * 0.94, turns),
+    turns * 24,
+    tubeRadius,
+    8,
+    false,
+  );
+  return mergeGeometries([core, thread]);
+}
+
 function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   // Carries `uv` along with position/normal so a texture map doesn't silently vanish
@@ -241,27 +287,15 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return extrudedGearGeometry(teeth, module, 1.2); // twisted teeth = helical
     case "crank":
       return crankGeometry(teeth, module);
-    case "bevel": {
-      const pitchRadius = (module * teeth) / 2;
-      const bevelGeometry = new THREE.ConeGeometry(pitchRadius + module * ADDENDUM_FACTOR, GEAR_THICKNESS * 3, teeth);
-      bevelGeometry.rotateX(Math.PI / 2);
-      return bevelGeometry;
-    }
-    case "worm": {
-      const length = module * 6;
-      const wormGeometry = new THREE.CylinderGeometry(module * 1.2, module * 1.2, length, 16, 1, false);
-      wormGeometry.rotateX(Math.PI / 2);
-      return wormGeometry;
-    }
+    case "bevel":
+      return bevelGeometry(teeth, module).rotateX(Math.PI / 2);
+    case "worm":
+      return wormGeometry(module).rotateX(Math.PI / 2);
     case "load":
       return loadGeometry(module);
     case "gauge":
       return gaugeGeometry(module);
     case "fan":
       return fanGeometry(module);
-    case "battery":
-      return batteryGeometry(teeth, module);
-    case "outlet":
-      return outletGeometry(teeth, module);
   }
 }

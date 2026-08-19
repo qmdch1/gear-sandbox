@@ -13,8 +13,6 @@ export const TYPE_HEALTHY_COLORS: Record<GearType, THREE.Color> = {
   load: new THREE.Color(0x5a6472), // dark slate
   gauge: new THREE.Color(0xd9d2bd), // ivory dial face
   fan: new THREE.Color(0x5aa9c9), // sky blue blades
-  battery: new THREE.Color(0x7bc47f), // battery green
-  outlet: new THREE.Color(0xe0b04a), // warning-yellow, like a real outlet plate
 };
 
 /** jsdom (used by this project's DOM-touching tests) implements `getContext` but has no

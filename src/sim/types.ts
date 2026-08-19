@@ -6,9 +6,7 @@ export type GearType =
   | "worm"
   | "load"
   | "gauge"
-  | "fan"
-  | "battery"
-  | "outlet";
+  | "fan";
 
 export interface GearInstance {
   id: string;

@@ -33,10 +33,44 @@ describe("computeSpurProfilePoints", () => {
 
 describe("buildGeometryForType", () => {
   it("builds a non-empty geometry for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "battery", "outlet"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan"] as const;
     for (const t of types) {
       const geometry = buildGeometryForType(t, 20, 1);
       expect(geometry.attributes.position.count).toBeGreaterThan(0);
     }
+  });
+
+  it("gives a bevel gear tooth studs that protrude past its smooth cone radius", () => {
+    // Regression: bevel used to be a perfectly smooth ConeGeometry with `teeth` misused
+    // as its radial segment count -- no actual teeth cut in at all.
+    const module = 1;
+    const teeth = 20;
+    const pitchRadius = (module * teeth) / 2;
+    const smoothConeRadius = pitchRadius + module * 1.25; // ADDENDUM_FACTOR, mirrored here
+    const geometry = buildGeometryForType("bevel", teeth, module);
+    const position = geometry.attributes.position;
+    let maxRadialExtent = 0;
+    for (let i = 0; i < position.count; i++) {
+      // Post rotateX(PI/2), the cone's original radial (XZ) plane becomes XY.
+      const radial = Math.hypot(position.getX(i), position.getY(i));
+      maxRadialExtent = Math.max(maxRadialExtent, radial);
+    }
+    expect(maxRadialExtent).toBeGreaterThan(smoothConeRadius + 1e-6);
+  });
+
+  it("gives a worm gear a helical thread ridge that protrudes past its plain cylinder radius", () => {
+    // Regression: worm used to be a perfectly smooth CylinderGeometry -- no visible
+    // thread groove at all.
+    const module = 1;
+    const rootRadius = module * 0.85; // mirrors wormGeometry's rootRadius
+    const geometry = buildGeometryForType("worm", 1, module);
+    const position = geometry.attributes.position;
+    let maxRadialExtent = 0;
+    for (let i = 0; i < position.count; i++) {
+      // Post rotateX(PI/2), the cylinder's original radial (XZ) plane becomes XY.
+      const radial = Math.hypot(position.getX(i), position.getY(i));
+      maxRadialExtent = Math.max(maxRadialExtent, radial);
+    }
+    expect(maxRadialExtent).toBeGreaterThan(rootRadius + 1e-6);
   });
 });

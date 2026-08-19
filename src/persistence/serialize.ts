@@ -3,8 +3,13 @@ import type { GearInstance, GearType } from "../sim/types";
 const SCHEMA_VERSION = 1;
 
 const GEAR_TYPES = new Set<GearType>([
-  "spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "battery", "outlet",
+  "spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan",
 ]);
+
+// "battery"/"outlet" used to be separate power-source types, mechanically identical to
+// "crank" -- since consolidated into a single "crank" part (see gearDefs.ts). Loading a
+// save file created before that change should still work rather than erroring out.
+const LEGACY_TYPE_ALIASES: Record<string, GearType> = { battery: "crank", outlet: "crank" };
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -42,6 +47,13 @@ export function deserializeGears(json: string): GearInstance[] {
   const parsed = JSON.parse(json);
   if (typeof parsed !== "object" || parsed === null || !Array.isArray(parsed.gears)) {
     throw new Error("Invalid gear-sandbox save file");
+  }
+  for (const g of parsed.gears) {
+    if (typeof g !== "object" || g === null) continue;
+    const record = g as Record<string, unknown>;
+    if (typeof record.type === "string" && record.type in LEGACY_TYPE_ALIASES) {
+      record.type = LEGACY_TYPE_ALIASES[record.type];
+    }
   }
   if (!parsed.gears.every(isValidGear)) {
     throw new Error("Invalid gear-sandbox save file");

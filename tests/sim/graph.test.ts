@@ -39,9 +39,9 @@ describe("classify", () => {
     expect(diagnostics.unconnectedIds).toEqual([]);
   });
 
-  it("also clears no-power for a battery or outlet power source, just like a crank", () => {
+  it("clears no-power via the generalized POWER_SOURCE_TYPES check, not a literal 'crank' comparison", () => {
     const gears = [
-      makeGear({ id: "outlet", type: "outlet", teeth: 20, module: 1, position: [0, 0, 0] }),
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0] }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
     const diagnostics = classify(gears, buildEdges(gears));

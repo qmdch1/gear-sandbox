@@ -67,9 +67,9 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("wheel")).toBeCloseTo(-0.3);  // -(2/20) * 3, one-way from the worm
   });
 
-  it("treats battery and outlet as power sources, exactly like a crank", () => {
+  it("drives propagation via the generalized POWER_SOURCE_TYPES check, not a literal 'crank' comparison", () => {
     const gears = [
-      makeGear({ id: "battery", type: "battery", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 }),
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
     const { angularVelocities } = propagateRotation(gears, buildEdges(gears));

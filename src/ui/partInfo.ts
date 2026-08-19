@@ -44,10 +44,11 @@ export const PART_INFO: Record<GearType, PartInfo> = {
     image: "/parts/helical.jpg",
   },
   crank: {
-    label: "손잡이 기어",
-    description: "놓으면 자동으로 돕니다 — 이 기어트레인의 동력원입니다. 평기어처럼 다른 기어와 나란히 붙이면 그 회전이 전달됩니다.",
+    label: "동력원 기어",
+    description:
+      "놓으면 자동으로 돕니다 — 이 기어트레인의 동력원입니다. 평기어처럼 다른 기어와 나란히 붙이면 그 회전이 전달됩니다. 실제로는 사람이 돌리는 손잡이, 배터리로 도는 모터, 콘센트 전원으로 도는 모터 등 여러 모습으로 나타나지만, 이 샌드박스에서는 전부 똑같이 동작하는 하나의 부품으로 다룹니다.",
     purpose:
-      "사람 손이나 모터가 기계에 처음 힘을 넣어주는 지점입니다. 우물 펌프 손잡이, 자전거 페달, 태엽시계의 태엽처럼 '에너지가 들어오는 입구' 역할을 합니다.",
+      "사람 손이나 모터가 기계에 처음 힘을 넣어주는 지점입니다. 우물 펌프 손잡이나 자전거 페달처럼 사람이 직접 돌리기도 하고, 장난감처럼 배터리로 돌아가기도 하고, 세탁기처럼 콘센트 전원으로 돌아가기도 합니다 — 겉모습은 달라도 '에너지가 들어오는 입구'라는 역할은 같습니다.",
     icon: `<circle cx="42" cy="50" r="24" fill="none" stroke="currentColor" stroke-width="5"/>
       <circle cx="42" cy="50" r="7" fill="none" stroke="currentColor" stroke-width="3"/>
       <line x1="60" y1="50" x2="85" y2="50" stroke="currentColor" stroke-width="5"/>
@@ -97,30 +98,6 @@ export const PART_INFO: Record<GearType, PartInfo> = {
         <line x1="50" y1="20" x2="50" y2="26"/><line x1="80" y1="50" x2="74" y2="50"/><line x1="20" y1="50" x2="26" y2="50"/>
       </g>`,
     image: "/parts/gauge.jpg",
-  },
-  battery: {
-    label: "배터리",
-    description: "손잡이 기어와 완전히 같은 방식으로 동작합니다 — 놓으면 자동으로 돌고, 다른 기어와 나란히 붙이면 그 회전이 전달됩니다.",
-    purpose:
-      "장난감이나 시계처럼, 사람이 직접 손잡이를 돌리지 않고 건전지의 전기 에너지로 모터가 자동으로 돌아가는 기계를 표현합니다 — 동력원이 '사람'이 아니라 '배터리'라는 것만 다릅니다.",
-    icon: `<circle cx="42" cy="50" r="24" fill="none" stroke="currentColor" stroke-width="5"/>
-      <circle cx="42" cy="50" r="7" fill="none" stroke="currentColor" stroke-width="3"/>
-      <rect x="66" y="38" width="20" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
-      <line x1="76" y1="30" x2="76" y2="38" stroke="currentColor" stroke-width="4"/>
-      <line x1="72" y1="34" x2="80" y2="34" stroke="currentColor" stroke-width="3"/>`,
-    image: "/parts/battery.jpg",
-  },
-  outlet: {
-    label: "콘센트",
-    description: "손잡이 기어와 완전히 같은 방식으로 동작합니다 — 놓으면 자동으로 돌고, 다른 기어와 나란히 붙이면 그 회전이 전달됩니다.",
-    purpose:
-      "세탁기나 냉장고처럼 벽면 콘센트(전원 플러그)에서 전기를 끌어와 계속 돌아가는 기계를 표현합니다 — 배터리와 달리 '끊기지 않고 계속 공급되는 전원'이라는 느낌을 줍니다.",
-    icon: `<circle cx="42" cy="50" r="24" fill="none" stroke="currentColor" stroke-width="5"/>
-      <circle cx="42" cy="50" r="7" fill="none" stroke="currentColor" stroke-width="3"/>
-      <rect x="64" y="34" width="26" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="4"/>
-      <line x1="74" y1="44" x2="74" y2="52" stroke="currentColor" stroke-width="3"/>
-      <line x1="82" y1="44" x2="82" y2="52" stroke="currentColor" stroke-width="3"/>`,
-    image: "/parts/outlet.jpg",
   },
   fan: {
     label: "팬(프로펠러)",

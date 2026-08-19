@@ -23,7 +23,7 @@ const CATEGORIES: Category[] = [
   },
   {
     label: "동력원",
-    types: ["crank", "battery", "outlet"],
+    types: ["crank"],
     icon: `<polygon points="55,8 24,56 44,56 40,92 76,44 53,44" fill="currentColor"/>`,
   },
   {

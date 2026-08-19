@@ -8,10 +8,10 @@ const COUPLING_DISTANCE_TOLERANCE = 0.05;
 // Parallel-shaft gears only mesh within their OWN helix-angle family, not across it --
 // exactly like real gears: a plain (0°-helix) spur gear cannot properly mesh with an
 // angled-tooth helical gear even on parallel shafts (their tooth lines don't line up
-// across the face width), only with another 0°-helix gear. Crank/battery/outlet are
-// mechanically plain spur gears (no twist in their geometry) with a different
-// accessory bolted on, so they belong in the spur bucket, not a separate one.
-const SPUR_FAMILY = new Set<GearInstance["type"]>(["spur", "crank", "battery", "outlet"]);
+// across the face width), only with another 0°-helix gear. "crank" is mechanically a
+// plain spur gear (no twist in its geometry) that also happens to auto-spin, so it
+// belongs in the spur bucket, not a separate one.
+const SPUR_FAMILY = new Set<GearInstance["type"]>(["spur", "crank"]);
 const HELICAL_FAMILY = new Set<GearInstance["type"]>(["helical"]);
 
 function sameParallelFamily(a: GearInstance["type"], b: GearInstance["type"]): boolean {
@@ -123,7 +123,7 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
 }
 
 const TWO_PI = Math.PI * 2;
-const PROFILE_TYPES = new Set<GearInstance["type"]>(["spur", "helical", "crank", "battery", "outlet"]);
+const PROFILE_TYPES = new Set<GearInstance["type"]>(["spur", "helical", "crank"]);
 
 function isWorldYAxis(g: GearInstance): boolean {
   return Math.abs(g.axis[1]) > 0.98 && Math.abs(g.axis[0]) < 0.2 && Math.abs(g.axis[2]) < 0.2;
@@ -138,15 +138,25 @@ export interface PhaseAlignment {
   rotation: number;
 }
 
-/** For a phase-alignable pair (both spur/helical/crank/battery/outlet -- the only
- *  types with an actual tooth profile to align, and only on the default world +Y axis
- *  both are placed on; bevel/worm/load/gauge/fan render as smooth cones/cylinders/rings
- *  with no teeth to clash), computes BOTH the angular correction and the dragged
- *  gear's resulting rotation so the mesh centers exactly tooth-middle-in-gap-middle,
- *  not just "doesn't clash." Hand-positioning a gear at the right center distance
- *  already needs `findSnapTarget`'s help; getting the rotational phase centered by
- *  hand on top of that is impractical. Returns `null` when phase-alignment doesn't
- *  apply, per the type/axis rule above. */
+/** For a phase-alignable pair (both spur/helical/crank -- the only types with an
+ *  actual tooth profile to align, and only on the default world +Y axis both are
+ *  placed on; bevel/worm/load/gauge/fan render as smooth cones/cylinders/rings with
+ *  no teeth to clash), computes BOTH the angular correction and the dragged gear's
+ *  resulting rotation so the mesh centers exactly tooth-middle-in-gap-middle, not
+ *  just "doesn't clash." Hand-positioning a gear at the right center distance already
+ *  needs `findSnapTarget`'s help; getting the rotational phase centered by hand on
+ *  top of that is impractical. Returns `null` when phase-alignment doesn't apply, per
+ *  the type/axis rule above.
+ *
+ *  Phase convention: `computeSpurProfilePoints` (gearGeometry.ts) places each tooth's
+ *  own center at local angle `tooth * pitch` -- i.e. tooth index 0's center sits at
+ *  local angle 0 -- with the gap between two teeth centered exactly half a pitch away
+ *  from either tooth-center, at local angle 0.5*pitch. So a gear's own tooth-center
+ *  target is local-angle-phase 0, and the gap-center a partner must show at the
+ *  contact point is phase 0.5. (Given `gearMesh.ts`'s `quaternion.setFromUnitVectors`
+ *  + `rotateZ(gear.rotation)` composition, a point at local angle L ends up at world
+ *  angle `-(L + gear.rotation)` for a gear on the default +Y axis -- hence the minus
+ *  signs throughout this derivation.) */
 export function meshPhaseAlignment(
   dragged: GearInstance,
   rawWorldAngleTowardPartner: number,
@@ -156,21 +166,19 @@ export function meshPhaseAlignment(
   if (!isWorldYAxis(dragged) || !isWorldYAxis(partner)) return null;
 
   // Snap the angle (as seen from the partner) to the nearest one where the partner
-  // shows an exact gap-center (phase 0.75) at the contact point. Valid solutions
+  // shows an exact gap-center (phase 0.5) at the contact point. Valid solutions
   // repeat every `partnerPitch`, so solving for the nearest one is a "round to the
   // nearest grid line" over that fixed step -- picking a random point in the gap (a
   // valid, non-clashing but off-center mesh) is exactly the bug this fixes.
   const partnerPitch = TWO_PI / partner.teeth;
-  const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.75;
+  const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.5;
   const n = Math.round(continuousN);
-  const worldAngleTowardPartner = -Math.PI - partner.rotation - (0.75 + n) * partnerPitch;
+  const worldAngleTowardPartner = -Math.PI - partner.rotation - (0.5 + n) * partnerPitch;
 
-  // With the partner locked to phase 0.75 (gap-center) at this angle by construction,
-  // dragged's target phase (partnerPhase + 0.5, same anti-phase logic as before) is
-  // exactly 0.25 -- its own tooth-center -- giving a properly centered mesh rather
-  // than just an arbitrary non-clashing one.
-  const draggedPitch = TWO_PI / dragged.teeth;
-  const rotation = -worldAngleTowardPartner - 0.25 * draggedPitch;
+  // With the partner locked to phase 0.5 (gap-center) at this angle by construction,
+  // dragged's own tooth-center (phase 0) should face back toward the partner --
+  // giving a properly centered mesh rather than just an arbitrary non-clashing one.
+  const rotation = -worldAngleTowardPartner;
 
   return { worldAngleTowardPartner, rotation };
 }
