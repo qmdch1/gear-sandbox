@@ -1,45 +1,25 @@
 import type { GearInstance } from "../sim/types";
 
-export interface LayoutSummary {
-  id: string;
-  name: string;
-  updatedAt: string;
-}
-
-export interface LayoutDetail extends LayoutSummary {
-  gears: GearInstance[];
-}
-
 async function parseOrThrow(res: Response): Promise<any> {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error ?? `request failed with status ${res.status}`);
   return body;
 }
 
-export async function listServerLayouts(): Promise<LayoutSummary[]> {
-  return parseOrThrow(await fetch("/api/layouts"));
+/** The single saved layout on the server -- there's no per-user separation, so this
+ *  always returns everything that's been saved (an empty array if nothing has). */
+export async function fetchServerLayout(): Promise<GearInstance[]> {
+  const body = await parseOrThrow(await fetch("/api/layout"));
+  return body.gears;
 }
 
-export async function fetchServerLayout(id: string): Promise<LayoutDetail> {
-  return parseOrThrow(await fetch(`/api/layouts/${id}`));
-}
-
-export async function saveNewServerLayout(name: string, gears: GearInstance[]): Promise<LayoutSummary> {
-  return parseOrThrow(
-    await fetch("/api/layouts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, gears }),
-    }),
-  );
-}
-
-export async function updateServerLayout(id: string, name: string, gears: GearInstance[]): Promise<LayoutSummary> {
-  return parseOrThrow(
-    await fetch(`/api/layouts/${id}`, {
+/** Overwrites the single saved layout on the server with the given gears. */
+export async function saveServerLayout(gears: GearInstance[]): Promise<void> {
+  await parseOrThrow(
+    await fetch("/api/layout", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, gears }),
+      body: JSON.stringify({ gears }),
     }),
   );
 }

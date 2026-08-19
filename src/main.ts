@@ -8,8 +8,7 @@ import { PaletteUI } from "./ui/paletteUI";
 import { PartInfoModal } from "./ui/partInfoModal";
 import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
-import { ServerSyncPanel } from "./ui/serverSyncPanel";
-import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
+import { fetchServerLayout, saveServerLayout } from "./persistence/serverClient";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -20,12 +19,8 @@ app.innerHTML = `
       <p id="power-hint">동력원 기어는 놓으면 자동으로 돌아갑니다. 다른 기어를 가까이 끌어오면 맞물리는 위치로 자동으로 붙습니다. 이미 붙어 있는 기어들은 하나를 끌면 같이 움직여요 — <b>Alt</b>+드래그로 하나만 떼어낼 수 있습니다.</p>
     </section>
     <section class="panel">
-      <h2>내 컴퓨터에 저장</h2>
+      <h2>저장</h2>
       <div id="save-load"></div>
-    </section>
-    <section class="panel">
-      <h2>온라인에 공유</h2>
-      <div id="server-sync"></div>
     </section>
     <section class="panel">
       <h2>확인할 것</h2>
@@ -42,12 +37,6 @@ const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnosti
 const partInfoModal = new PartInfoModal(document.body);
 
 let gears: GearInstance[] = [];
-try {
-  gears = loadFromLocalStorage() ?? [];
-} catch (err) {
-  console.error("Failed to load saved layout from localStorage; starting with an empty layout.", err);
-  gears = [];
-}
 
 // Durability/wear and its time-scale control are disabled for now (kept in the sim
 // core, just never advanced) — a fixed 0 keeps every gear at full health indefinitely,
@@ -59,13 +48,24 @@ function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
 }
 
-// A brand-new session (nothing in localStorage yet) starts on a completely empty
-// canvas, which gives a first-time user nothing to drag/connect to -- pre-place one
-// power-source gear at the origin (exactly where the default top-down camera looks)
-// so there's always something to build onto right away.
-if (gears.length === 0) {
-  addGear("crank", [0, 0, 0]);
+// No user accounts, so there's exactly one saved layout on the server (see
+// serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh
+// visit before anyone's ever hit "저장") has nothing saved yet, which would
+// otherwise start on a completely empty canvas with nothing to drag/connect to;
+// pre-place one power-source gear at the origin (exactly where the default
+// top-down camera looks) so there's always something to build onto right away.
+async function loadInitialGears(): Promise<void> {
+  try {
+    gears = await fetchServerLayout();
+  } catch (err) {
+    console.error("Failed to load the saved layout from the server; starting with an empty layout.", err);
+    gears = [];
+  }
+  if (gears.length === 0) {
+    addGear("crank", [0, 0, 0]);
+  }
 }
+void loadInitialGears();
 
 // Default gears (module 1, 20 teeth) need ~20 units of center distance to mesh, so a
 // tight spawn grid made every freshly-placed gear register as "겹침" (overlapping)
@@ -107,33 +107,19 @@ new PaletteUI(document.querySelector("#palette")!, (type) => {
 });
 
 new SaveLoadPanel(document.querySelector("#save-load")!, {
-  save: () => saveToLocalStorage(gears),
-  load: () => {
-    const loaded = loadFromLocalStorage();
-    if (loaded) gears = loaded;
-  },
-  exportFile: () => {
-    const blob = exportToFile(gears);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "gear-layout.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  },
-  importFile: async (file) => {
+  save: async () => {
     try {
-      gears = await importFromFile(file);
+      await saveServerLayout(gears);
     } catch (err) {
-      console.error("Failed to import gear layout file", err);
+      console.error("Failed to save the layout to the server", err);
     }
   },
-});
-
-new ServerSyncPanel(document.querySelector("#server-sync")!, {
-  getGears: () => gears,
-  applyLoadedGears: (loaded) => {
-    gears = loaded;
+  load: async () => {
+    try {
+      gears = await fetchServerLayout();
+    } catch (err) {
+      console.error("Failed to load the saved layout from the server", err);
+    }
   },
 });
 

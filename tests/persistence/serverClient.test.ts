@@ -1,28 +1,30 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { listServerLayouts, saveNewServerLayout, fetchServerLayout } from "../../src/persistence/serverClient";
+import { fetchServerLayout, saveServerLayout } from "../../src/persistence/serverClient";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("serverClient", () => {
-  it("lists layouts from GET /api/layouts", async () => {
-    const layouts = [{ id: "1", name: "a", updatedAt: "now" }];
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => layouts }));
-    expect(await listServerLayouts()).toEqual(layouts);
+  it("fetches the single saved layout's gears from GET /api/layout", async () => {
+    const gears = [{ id: "a", type: "spur" }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, json: async () => ({ gears }) }));
+    expect(await fetchServerLayout()).toEqual(gears);
   });
 
-  it("posts a new layout and returns its summary", async () => {
-    const summary = { id: "1", name: "a", updatedAt: "now" };
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => summary });
+  it("saves the layout via PUT /api/layout", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ updatedAt: "now" }) });
     vi.stubGlobal("fetch", fetchMock);
-    expect(await saveNewServerLayout("a", [])).toEqual(summary);
-    expect(fetchMock).toHaveBeenCalledWith("/api/layouts", expect.objectContaining({ method: "POST" }));
+    await saveServerLayout([{ id: "a", type: "spur" } as any]);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/layout",
+      expect.objectContaining({ method: "PUT" }),
+    );
   });
 
   it("throws with the server's error message on failure", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValue({ ok: false, status: 404, json: async () => ({ error: "layout not found" }) }),
+      vi.fn().mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: "gears (array) is required" }) }),
     );
-    await expect(fetchServerLayout("missing")).rejects.toThrow("layout not found");
+    await expect(saveServerLayout([])).rejects.toThrow("gears (array) is required");
   });
 });

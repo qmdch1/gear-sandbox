@@ -38,6 +38,13 @@ export class GearMeshObject {
       map: sharedMetalTexture,
       roughness: 0.55,
       metalness: 0.6,
+      // `emissive` is a flat additive term (sceneSync.ts uses it for the "unconnected /
+      // no-power / overlapping" warning tint and the drag preview highlight) -- at full
+      // strength it washes out the base per-type material color entirely, so every gear
+      // just reads as "red" the moment it's alone (which is every gear, right after you
+      // place it). Dimming it keeps the warning visible as a tint without hiding what
+      // the part actually looks like.
+      emissiveIntensity: 0.28,
     });
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.name = gear.id;
