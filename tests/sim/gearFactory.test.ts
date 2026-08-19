@@ -16,8 +16,8 @@ describe("defaultAxisForType", () => {
 });
 
 describe("defaultTeethForType", () => {
-  it("gives worm gears a low thread-start count for a real reduction ratio", () => {
-    expect(defaultTeethForType("worm")).toBe(2);
+  it("gives worm gears a single thread-start, the standard/simplest worm", () => {
+    expect(defaultTeethForType("worm")).toBe(1);
   });
 
   it("gives load gears zero teeth", () => {
