@@ -22,6 +22,31 @@ export function findOverlaps(gears: GearInstance[]): Array<[string, string]> {
   return pairs;
 }
 
+/** All gear ids in the same connected assembly as `gearId` (via mesh/coupling edges,
+ *  direction-agnostic — this is for "what moves together when you drag one of them,"
+ *  not power flow). Includes `gearId` itself. */
+export function connectedComponentIds(gearId: string, gears: GearInstance[], edges: MeshEdge[]): Set<string> {
+  const adjacency = new Map<string, string[]>();
+  for (const g of gears) adjacency.set(g.id, []);
+  for (const e of edges) {
+    adjacency.get(e.a)?.push(e.b);
+    adjacency.get(e.b)?.push(e.a);
+  }
+
+  const visited = new Set<string>([gearId]);
+  const queue = [gearId];
+  while (queue.length > 0) {
+    const cur = queue.shift()!;
+    for (const next of adjacency.get(cur) ?? []) {
+      if (!visited.has(next)) {
+        visited.add(next);
+        queue.push(next);
+      }
+    }
+  }
+  return visited;
+}
+
 export function classify(gears: GearInstance[], edges: MeshEdge[]): SimDiagnostics {
   const neighborCount = new Map<string, number>();
   const adjacency = new Map<string, string[]>();

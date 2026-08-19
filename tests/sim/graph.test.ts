@@ -1,6 +1,6 @@
 // tests/sim/graph.test.ts
 import { describe, it, expect } from "vitest";
-import { buildEdges, classify } from "../../src/sim/graph";
+import { buildEdges, classify, connectedComponentIds } from "../../src/sim/graph";
 import type { GearInstance } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -46,5 +46,31 @@ describe("classify", () => {
     ];
     const diagnostics = classify(gears, buildEdges(gears));
     expect(diagnostics.overlapPairs).toEqual([["a", "b"]]);
+  });
+});
+
+describe("connectedComponentIds", () => {
+  it("includes only the gear itself when nothing is meshed to it", () => {
+    const gears = [makeGear({ id: "a", position: [0, 0, 0] })];
+    expect(connectedComponentIds("a", gears, buildEdges(gears))).toEqual(new Set(["a"]));
+  });
+
+  it("includes every gear in a meshed chain, transitively", () => {
+    const gears = [
+      makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] }),
+      makeGear({ id: "b", teeth: 20, module: 1, position: [20, 0, 0] }),
+      makeGear({ id: "c", teeth: 20, module: 1, position: [40, 0, 0] }),
+    ];
+    const component = connectedComponentIds("a", gears, buildEdges(gears));
+    expect(component).toEqual(new Set(["a", "b", "c"]));
+  });
+
+  it("does not pull in a gear from a separate, unconnected chain", () => {
+    const gears = [
+      makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] }),
+      makeGear({ id: "b", teeth: 20, module: 1, position: [20, 0, 0] }),
+      makeGear({ id: "far", teeth: 20, module: 1, position: [1000, 0, 0] }),
+    ];
+    expect(connectedComponentIds("a", gears, buildEdges(gears))).toEqual(new Set(["a", "b"]));
   });
 });

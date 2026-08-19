@@ -16,6 +16,7 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <div id="sidebar">
     <div id="palette"></div>
+    <p id="power-hint">손잡이 기어는 놓으면 자동으로 돌아갑니다 — 다른 기어를 가까이 끌어오면 맞물릴 위치로 자동 스냅됩니다. 이미 맞물린 기어들은 하나를 끌면 같이 움직입니다 — <b>Alt</b>+드래그로 하나만 따로 떼어 옮길 수 있습니다.</p>
     <div id="save-load"></div>
     <div id="server-sync"></div>
     <label>시간배율 <div id="time-scale"></div></label>
@@ -44,9 +45,19 @@ function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
 }
 
-new PaletteUI(document.querySelector("#palette")!, (type) =>
-  addGear(type, [(gears.length % 5) * 3, 0, Math.floor(gears.length / 5) * 3]),
-);
+// Default gears (module 1, 20 teeth) need ~20 units of center distance to mesh, so a
+// tight spawn grid made every freshly-placed gear register as "겹침" (overlapping)
+// instead of a real, draggable starting point. 24 units of pitch, centered on the
+// origin, keeps fresh gears apart by default while staying in easy drag/snap range
+// of each other.
+const SPAWN_GRID_PITCH = 24;
+const SPAWN_GRID_COLUMNS = 5;
+new PaletteUI(document.querySelector("#palette")!, (type) => {
+  const column = gears.length % SPAWN_GRID_COLUMNS;
+  const row = Math.floor(gears.length / SPAWN_GRID_COLUMNS);
+  const center = (SPAWN_GRID_COLUMNS - 1) / 2;
+  addGear(type, [(column - center) * SPAWN_GRID_PITCH, 0, (row - center) * SPAWN_GRID_PITCH]);
+});
 
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
 

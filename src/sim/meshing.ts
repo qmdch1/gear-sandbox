@@ -66,6 +66,46 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   return null;
 }
 
+/** For drag-to-snap placement: the center distance two gears WOULD need to be at to
+ *  validly connect, based on type/axis compatibility alone — ignoring their current
+ *  distance. Returns `null` if the pair could never connect regardless of distance
+ *  (incompatible types or misaligned axes), and `0` for a coincident shaft coupling
+ *  (load-on-shaft or worm-on-shaft). Deliberately mirrors `evaluatePair`'s type/axis
+ *  rules as a separate function rather than refactoring `evaluatePair` to share it —
+ *  `evaluatePair` is exhaustively tested already, and this keeps that logic unrisked. */
+export function idealConnectionDistance(a: GearInstance, b: GearInstance): number | null {
+  if (a.type === "load" || b.type === "load") {
+    if (a.type === "load" && b.type === "load") return null;
+    if (Math.abs(dot(a.axis, b.axis)) < PARALLEL_DOT_THRESHOLD) return null;
+    return 0;
+  }
+
+  if (a.type === "worm" || b.type === "worm") {
+    const bothWorm = a.type === "worm" && b.type === "worm";
+    if (!bothWorm && Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD) {
+      return 0; // coincident shaft coupling
+    }
+    // Not eligible for shaft coupling -- fall through to the mesh check below,
+    // which covers the worm-to-wheel case.
+  }
+
+  const axisDot = dot(a.axis, b.axis);
+  const bothParallelFamily = PARALLEL_FAMILY.has(a.type) && PARALLEL_FAMILY.has(b.type);
+  if (bothParallelFamily) {
+    if (Math.abs(axisDot) < PARALLEL_DOT_THRESHOLD) return null;
+    return pitchRadius(a) + pitchRadius(b);
+  }
+
+  const wormPair = (a.type === "worm") !== (b.type === "worm");
+  const bevelInvolved = a.type === "bevel" || b.type === "bevel";
+  if (wormPair || bevelInvolved) {
+    if (Math.abs(axisDot) > PERP_DOT_THRESHOLD) return null;
+    return pitchRadius(a) + pitchRadius(b);
+  }
+
+  return null;
+}
+
 /** True when two gears geometrically overlap (closer than a valid mesh distance allows,
  *  and NOT already a legitimate connection -- a load or worm coupling is intentionally
  *  coincident with its host gear, so a valid `evaluatePair` result is never an overlap). */

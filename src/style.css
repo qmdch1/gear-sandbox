@@ -4,5 +4,6 @@ html, body { margin: 0; height: 100%; background: #1a1d22; color: #eee; font-fam
 #viewport { position: relative; }
 #scene-canvas { width: 100%; height: 100%; display: block; }
 #palette button { display: block; width: 100%; margin-bottom: 6px; }
+#power-hint { font-size: 11px; line-height: 1.4; color: #9aa0aa; margin: 4px 0 12px; }
 #durability-panel { margin-top: 12px; padding: 8px; background: #2f333b; border-radius: 4px; }
 #durability-panel[hidden] { display: none; }

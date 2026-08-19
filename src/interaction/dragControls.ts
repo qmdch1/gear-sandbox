@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
-import { evaluatePair } from "../sim/meshing";
+import { evaluatePair, idealConnectionDistance } from "../sim/meshing";
+import { buildEdges, connectedComponentIds } from "../sim/graph";
 import type { SceneContext } from "../render/scene";
 
 /** Among candidate gears, the closest one that would form a valid mesh/coupling with `dragged`. */
@@ -24,6 +25,52 @@ export function findNearestCompatiblePartner(
   return best;
 }
 
+const SNAP_SLACK = 6; // units of drop-point slack tolerated around the ideal meshing ring
+
+export interface SnapTarget {
+  position: [number, number, number];
+  partnerId: string;
+}
+
+/** Hand-positioning a gear at the exact center distance a mesh/coupling requires is
+ *  impractical (default gears need ~20 units, to the tenth of a unit, along the right
+ *  axis). Finds the nearest gear `dragged` COULD connect to (by type/axis, regardless of
+ *  its current distance) and, if the raw drop point is within `SNAP_SLACK` of the ideal
+ *  ring around that partner, returns the position `dragged` should snap to so the two
+ *  actually validly connect — preserving the drop point's direction from the partner. */
+export function findSnapTarget(
+  dragged: GearInstance,
+  rawPosition: [number, number, number],
+  others: GearInstance[],
+): SnapTarget | null {
+  let best: SnapTarget | null = null;
+  let bestSlack = Infinity;
+  for (const candidate of others) {
+    if (candidate.id === dragged.id) continue;
+    const idealDistance = idealConnectionDistance({ ...dragged, position: rawPosition }, candidate);
+    if (idealDistance === null) continue;
+
+    const dx = rawPosition[0] - candidate.position[0];
+    const dz = rawPosition[2] - candidate.position[2];
+    const rawDistance = Math.hypot(dx, dz);
+    const slack = Math.abs(rawDistance - idealDistance);
+    if (slack > SNAP_SLACK || slack >= bestSlack) continue;
+
+    const position: [number, number, number] =
+      idealDistance === 0 || rawDistance < 1e-6
+        ? [candidate.position[0], rawPosition[1], candidate.position[2]]
+        : [
+            candidate.position[0] + dx * (idealDistance / rawDistance),
+            rawPosition[1],
+            candidate.position[2] + dz * (idealDistance / rawDistance),
+          ];
+
+    bestSlack = slack;
+    best = { position, partnerId: candidate.id };
+  }
+  return best;
+}
+
 export interface DragControlsOptions {
   ctx: SceneContext;
   getGears: () => GearInstance[];
@@ -35,12 +82,17 @@ export interface DragControlsOptions {
 }
 
 /** Thin pointer-event wiring: raycast onto the ground plane, drag the picked gear's
- *  position, and delegate the "is this a valid drop spot" question to
- *  `findNearestCompatiblePartner`. Verified via manual QA (Task 15) — pointer/raycaster
+ *  position (and, by default, its whole connected assembly along with it — hold Alt
+ *  to detach and drag just the one gear), and delegate the "is this a valid drop spot"
+ *  question to `findSnapTarget`. Verified via manual QA (Task 15) — pointer/raycaster
  *  behavior is not meaningfully unit-testable without a real WebGL context. */
 export class DragControls {
   private raycaster = new THREE.Raycaster();
   private draggingId: string | null = null;
+  // The connected assembly being dragged, each mapped to ITS OWN position at drag
+  // start — moved together by the same delta the anchor (draggingId) gear moves by.
+  private dragGroupStart: Map<string, [number, number, number]> | null = null;
+  private dragAnchorStart: [number, number, number] | null = null;
 
   constructor(private options: DragControlsOptions) {
     const { domElement } = options.ctx.renderer;
@@ -74,32 +126,58 @@ export class DragControls {
     if (hitId) {
       this.draggingId = hitId;
       ctx.controls.enabled = false;
+
+      const gears = this.options.getGears();
+      const anchor = gears.find((g) => g.id === hitId);
+      if (anchor) {
+        this.dragAnchorStart = anchor.position;
+        // Alt+drag detaches: drag just this one gear, not its connected assembly.
+        const groupIds = event.altKey
+          ? new Set([hitId])
+          : connectedComponentIds(hitId, gears, buildEdges(gears));
+        this.dragGroupStart = new Map(
+          gears.filter((g) => groupIds.has(g.id)).map((g) => [g.id, g.position]),
+        );
+      }
     }
     this.options.onSelect?.(hitId);
   };
 
   private onPointerMove = (event: PointerEvent): void => {
-    if (!this.draggingId) return;
+    if (!this.draggingId || !this.dragGroupStart || !this.dragAnchorStart) return;
     const point = this.pointerToGroundPoint(event);
     if (!point) return;
-    const position: [number, number, number] = [point.x, 0, point.z];
-    this.options.onMove(this.draggingId, position);
+    const rawPosition: [number, number, number] = [point.x, 0, point.z];
 
-    if (this.options.onPreview) {
-      const gears = this.options.getGears();
-      const dragged = gears.find((g) => g.id === this.draggingId);
-      if (dragged) {
-        const candidate: GearInstance = { ...dragged, position };
-        const partner = findNearestCompatiblePartner(candidate, gears);
-        this.options.onPreview(partner ? partner.id : null);
-      } else {
-        this.options.onPreview(null);
-      }
+    const gears = this.options.getGears();
+    const dragged = gears.find((g) => g.id === this.draggingId);
+    if (!dragged) {
+      this.options.onMove(this.draggingId, rawPosition);
+      return;
     }
+
+    // Snap to a valid meshing position near the drop point, rather than requiring the
+    // user to hand-position gears at an exact center distance (see findSnapTarget) --
+    // excluding the assembly already being dragged, so it never tries to snap onto itself.
+    const others = gears.filter((g) => !this.dragGroupStart!.has(g.id));
+    const snap = findSnapTarget(dragged, rawPosition, others);
+    const anchorNewPosition = snap ? snap.position : rawPosition;
+    const delta: [number, number, number] = [
+      anchorNewPosition[0] - this.dragAnchorStart[0],
+      0,
+      anchorNewPosition[2] - this.dragAnchorStart[2],
+    ];
+
+    for (const [id, startPosition] of this.dragGroupStart) {
+      this.options.onMove(id, [startPosition[0] + delta[0], startPosition[1], startPosition[2] + delta[2]]);
+    }
+    this.options.onPreview?.(snap ? snap.partnerId : null);
   };
 
   private onPointerUp = (): void => {
     this.draggingId = null;
+    this.dragGroupStart = null;
+    this.dragAnchorStart = null;
     this.options.ctx.controls.enabled = true;
     this.options.onPreview?.(null);
   };

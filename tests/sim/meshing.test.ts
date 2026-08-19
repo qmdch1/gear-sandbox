@@ -1,6 +1,6 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
-import { evaluatePair, isOverlapping } from "../../src/sim/meshing";
+import { evaluatePair, isOverlapping, idealConnectionDistance } from "../../src/sim/meshing";
 import type { GearInstance } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -116,5 +116,31 @@ describe("isOverlapping", () => {
     const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
     const b = makeGear({ id: "b", teeth: 20, module: 1, position: [0, 0, 0] });
     expect(isOverlapping(a, b)).toBe(true);
+  });
+});
+
+describe("idealConnectionDistance", () => {
+  it("returns the pitch-radius sum for a parallel-family pair, regardless of current distance", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [999, 0, 0] }); // nowhere near ideal
+    expect(idealConnectionDistance(a, b)).toBeCloseTo(15); // (20+10)/2
+  });
+
+  it("returns 0 (coincident) for a load coupling", () => {
+    const gear = makeGear({ id: "g", position: [0, 0, 0] });
+    const load = makeGear({ id: "l", type: "load", teeth: 0, position: [999, 0, 0] });
+    expect(idealConnectionDistance(gear, load)).toBe(0);
+  });
+
+  it("returns null for axes that could never align (e.g. two parallel-family gears at right angles)", () => {
+    const a = makeGear({ id: "a", axis: [0, 1, 0], position: [0, 0, 0] });
+    const b = makeGear({ id: "b", axis: [1, 0, 0], position: [999, 0, 0] });
+    expect(idealConnectionDistance(a, b)).toBeNull();
+  });
+
+  it("returns the pitch-radius sum for a bevel pair on perpendicular axes", () => {
+    const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [999, 0, 0] });
+    expect(idealConnectionDistance(a, b)).toBeCloseTo(20); // (20+20)/2
   });
 });
