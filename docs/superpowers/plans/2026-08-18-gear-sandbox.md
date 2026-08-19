@@ -81,10 +81,18 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "node",
-    environmentMatchGlobs: [["tests/ui/**", "jsdom"]],
   },
 });
 ```
+
+> Note: an earlier draft of this config used `environmentMatchGlobs` to route
+> `tests/ui/**`/`tests/render/**` to jsdom automatically. That option was
+> removed in Vitest 4 (this project's installed version) — it's silently
+> ignored, not an error, which made the mistake easy to miss. The actual,
+> working convention used throughout this plan is a per-file
+> `// @vitest-environment jsdom` pragma at the top of any test that touches
+> the DOM (see Tasks 8, 9, 11, 12, 14) — every such test already carries one,
+> so nothing downstream needs the global option at all.
 
 - [ ] **Step 5: Write `index.html`**
 
@@ -304,13 +312,26 @@ function pitchRadius(g: GearInstance): number {
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
   if (a.type === "load" || b.type === "load") {
-    const load = a.type === "load" ? a : b;
-    const other = a.type === "load" ? b : a;
-    if (other.type === "load") return null; // two load objects never couple
+    if (a.type === "load" && b.type === "load") return null; // two load objects never couple
     if (dist(a.position, b.position) > COUPLING_DISTANCE_TOLERANCE) return null;
     if (Math.abs(dot(a.axis, b.axis)) < PARALLEL_DOT_THRESHOLD) return null;
-    void load;
     return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+  }
+
+  // A worm's driving shaft attaches directly (coincident position, same axis) to
+  // whatever powers it -- in this simplified model a worm has no separate "input
+  // tooth mesh," so without this it could never receive rotation at all (its only
+  // other rule, below, is a ONE-WAY mesh *out* toward its wheel). This coupling
+  // check is geometrically distinguishable from that mesh check (coincident vs.
+  // pitch-radius-apart), so there's no ambiguity between the two for the same pair.
+  if (a.type === "worm" || b.type === "worm") {
+    const bothWorm = a.type === "worm" && b.type === "worm";
+    const coincident = dist(a.position, b.position) <= COUPLING_DISTANCE_TOLERANCE;
+    if (!bothWorm && coincident && Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD) {
+      return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+    }
+    // Not a coincident shaft coupling -- fall through to the perpendicular
+    // one-way mesh check below, which covers the worm-to-wheel case.
   }
 
   const centerDistance = dist(a.position, b.position);
@@ -335,8 +356,11 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   return null;
 }
 
-/** True when two gears geometrically overlap (closer than a valid mesh distance allows). */
+/** True when two gears geometrically overlap (closer than a valid mesh distance allows,
+ *  and NOT already a legitimate connection -- a load or worm coupling is intentionally
+ *  coincident with its host gear, so a valid `evaluatePair` result is never an overlap). */
 export function isOverlapping(a: GearInstance, b: GearInstance): boolean {
+  if (evaluatePair(a, b)) return false;
   const centerDistance = dist(a.position, b.position);
   const expected = pitchRadius(a) + pitchRadius(b);
   return centerDistance > 0.001 && centerDistance < expected * (1 - MESH_TOLERANCE);
@@ -407,6 +431,21 @@ describe("evaluatePair", () => {
     expect(edge!.oneWay).toBe("aToB"); // a === worm
   });
 
+  it("couples a worm directly onto a coincident driving shaft (e.g. a crank), so it can receive power", () => {
+    const crank = makeGear({ id: "crank", type: "crank", axis: [0, 1, 0], position: [0, 0, 0] });
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(crank, worm);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+    expect(edge!.oneWay).toBe("none");
+  });
+
+  it("does not let two worms couple to each other", () => {
+    const wormA = makeGear({ id: "wa", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
+    const wormB = makeGear({ id: "wb", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
+    expect(evaluatePair(wormA, wormB)).toBeNull();
+  });
+
   it("couples a load object directly onto a coincident, axis-aligned gear", () => {
     const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
     const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
@@ -435,6 +474,12 @@ describe("isOverlapping", () => {
     const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] });
     expect(isOverlapping(a, b)).toBe(false);
   });
+
+  it("does not flag a coincident load coupling as overlapping, even though it's geometrically close", () => {
+    const gear = makeGear({ id: "g", teeth: 20, module: 1, position: [0, 0, 0] });
+    const load = makeGear({ id: "l", type: "load", teeth: 0, position: [0, 0, 0] });
+    expect(isOverlapping(gear, load)).toBe(false);
+  });
 });
 ```
 
@@ -446,7 +491,7 @@ Expected: FAIL — `src/sim/meshing.ts` does not exist yet (skip this step if St
 - [ ] **Step 4: Run tests and confirm they pass**
 
 Run: `npx vitest run tests/sim/meshing.test.ts`
-Expected: 9 passed.
+Expected: 12 passed.
 
 - [ ] **Step 5: Commit**
 
@@ -714,6 +759,25 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("worm")).toBe(0);
   });
 
+  it("lets a crank drive a worm via direct shaft coupling, which then drives its wheel one-way", () => {
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [0, 1, 0], teeth: 20, module: 1,
+      position: [0, 0, 0], angularVelocity: 3,
+    });
+    const worm = makeGear({
+      id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1,
+      position: [0, 0, 0], // coincident with the crank -> shaft coupling, not a tooth mesh
+    });
+    const wheel = makeGear({
+      id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1,
+      position: [11, 0, 0], // perpendicular to the worm's axis -> one-way mesh
+    });
+    const gears = [crank, worm, wheel];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("worm")).toBeCloseTo(3);      // rigid coupling: same speed as the crank
+    expect(angularVelocities.get("wheel")).toBeCloseTo(-0.3);  // -(2/20) * 3, one-way from the worm
+  });
+
   it("stops propagation at a broken gear", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
@@ -730,7 +794,7 @@ describe("propagateRotation", () => {
 - [ ] **Step 3: Run tests and confirm they pass**
 
 Run: `npx vitest run tests/sim/rotation.test.ts`
-Expected: 4 passed.
+Expected: 5 passed.
 
 - [ ] **Step 4: Commit**
 
@@ -974,11 +1038,15 @@ describe("tick", () => {
 
   it("flags an isolated gear as unconnected and does not rotate it", () => {
     const gears = [
+      // Note: this crank has nothing meshed to it either, so it is ALSO
+      // unconnected -- classify() applies the same "no edges" rule to every
+      // gear type (spec §4 draws no type exception), so a crank sitting alone
+      // is exactly as "not doing anything" as any other lone gear.
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "lonely", teeth: 20, module: 1, position: [1000, 0, 0] }),
     ];
     const result = tick(gears, 1, 1);
-    expect(result.diagnostics.unconnectedIds).toEqual(["lonely"]);
+    expect(result.diagnostics.unconnectedIds.sort()).toEqual(["crank", "lonely"]);
     expect(result.gears.find((g) => g.id === "lonely")!.angularVelocity).toBe(0);
   });
 });
@@ -1127,7 +1195,7 @@ describe("file export/import", () => {
 - [ ] **Step 6: Run tests and confirm they pass**
 
 Run: `npx vitest run tests/persistence`
-Expected: 4 passed.
+Expected: 5 passed (2 from serialize.test.ts + 3 from storage.test.ts).
 
 - [ ] **Step 7: Commit**
 
@@ -1198,7 +1266,25 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 ```ts
 // tests/render/scene.test.ts
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// jsdom has no real WebGL context, and `THREE.WebGLRenderer` THROWS ("Error
+// creating WebGL context") rather than silently falling back to a headless
+// no-op renderer. Mock just the renderer for this test file so
+// `src/render/scene.ts` stays exactly the real browser code with zero
+// jsdom-specific branching, try/catch, or `any` typing in production.
+vi.mock("three", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("three")>();
+  return {
+    ...actual,
+    WebGLRenderer: vi.fn().mockImplementation(() => ({
+      domElement: document.createElement("canvas"),
+      setSize: vi.fn(),
+      render: vi.fn(),
+    })),
+  };
+});
+
 import { createScene } from "../../src/render/scene";
 
 describe("createScene", () => {
@@ -1219,7 +1305,14 @@ describe("createScene", () => {
 Run: `npx vitest run tests/render/scene.test.ts`
 Expected: 1 passed.
 
-> Note: `WebGLRenderer` falls back to a headless/no-op context under jsdom (no real GPU), which is sufficient here — this test only checks scene graph contents and camera/controls configuration, not actual pixel output. Real rendering is verified by manual QA in Task 15.
+> Note: an earlier draft of this note assumed `WebGLRenderer` silently falls back to a
+> headless/no-op context under jsdom. That's wrong — verified empirically against this
+> project's three@0.185.1, it throws. The fix belongs entirely in the test file (mocking
+> `THREE.WebGLRenderer` via `vi.mock`, above) — `src/render/scene.ts` itself must stay
+> exactly as Step 1 specifies: no try/catch, no mock class, no `any`. A workaround for a
+> jsdom-only limitation has no business shipping into the production render path, and
+> `SceneContext.renderer` must stay a real `THREE.WebGLRenderer` for Tasks 12 and 15, which
+> call real renderer methods on it. Real rendering is verified by manual QA in Task 15.
 
 - [ ] **Step 4: Commit**
 
@@ -2204,9 +2297,14 @@ npm install -D @types/express @types/cors @types/better-sqlite3 supertest @types
 - [ ] **Step 2: Write `server/db.ts`**
 
 ```ts
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import Database from "better-sqlite3";
 
 export function openDb(path: string): Database.Database {
+  if (path !== ":memory:") {
+    mkdirSync(dirname(path), { recursive: true });
+  }
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.exec(`
@@ -2224,6 +2322,7 @@ export function openDb(path: string): Database.Database {
 ```
 
 > `user_id` is written but never read yet (spec §11) — every row gets `NULL` until account support lands later; no auth middleware belongs in this task.
+> `server/data/` is `.gitignore`d and never created by anything else, so `openDb` must create its parent directory itself (skipped for the special `:memory:` path used by tests) — otherwise the real boot script (`server/index.ts`) throws "Cannot open database because the directory does not exist" on every fresh checkout.
 
 - [ ] **Step 3: Write `server/app.ts`**
 
@@ -2303,7 +2402,13 @@ export function createApp(db: Database.Database): express.Express {
 import { openDb } from "./db";
 import { createApp } from "./app";
 
-const PORT = Number(process.env.PORT ?? 3001);
+// Deliberately NOT the generic `PORT` env var: this repo runs two servers
+// under one `npm run dev` (vite on 5173 + this API on 3001), and many
+// hosting/preview tools inject `PORT` expecting a single process to bind
+// it -- which would collide with vite's own port. `API_PORT` is this
+// server's own, unambiguous knob; `vite.config.ts`'s proxy target must
+// stay in sync with it.
+const PORT = Number(process.env.API_PORT ?? 3001);
 const db = openDb(process.env.DB_PATH ?? "server/data/layouts.db");
 createApp(db).listen(PORT, () => {
   console.log(`gear-sandbox server listening on :${PORT}`);

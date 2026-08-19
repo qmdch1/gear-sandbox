@@ -1,0 +1,8 @@
+html, body { margin: 0; height: 100%; background: #1a1d22; color: #eee; font-family: sans-serif; }
+#app { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+#sidebar { padding: 12px; overflow-y: auto; background: #23262d; }
+#viewport { position: relative; }
+#scene-canvas { width: 100%; height: 100%; display: block; }
+#palette button { display: block; width: 100%; margin-bottom: 6px; }
+#durability-panel { margin-top: 12px; padding: 8px; background: #2f333b; border-radius: 4px; }
+#durability-panel[hidden] { display: none; }
