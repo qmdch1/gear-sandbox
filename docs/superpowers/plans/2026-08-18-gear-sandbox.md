@@ -1258,7 +1258,25 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 ```ts
 // tests/render/scene.test.ts
 // @vitest-environment jsdom
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+// jsdom has no real WebGL context, and `THREE.WebGLRenderer` THROWS ("Error
+// creating WebGL context") rather than silently falling back to a headless
+// no-op renderer. Mock just the renderer for this test file so
+// `src/render/scene.ts` stays exactly the real browser code with zero
+// jsdom-specific branching, try/catch, or `any` typing in production.
+vi.mock("three", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("three")>();
+  return {
+    ...actual,
+    WebGLRenderer: vi.fn().mockImplementation(() => ({
+      domElement: document.createElement("canvas"),
+      setSize: vi.fn(),
+      render: vi.fn(),
+    })),
+  };
+});
+
 import { createScene } from "../../src/render/scene";
 
 describe("createScene", () => {
@@ -1279,7 +1297,14 @@ describe("createScene", () => {
 Run: `npx vitest run tests/render/scene.test.ts`
 Expected: 1 passed.
 
-> Note: `WebGLRenderer` falls back to a headless/no-op context under jsdom (no real GPU), which is sufficient here — this test only checks scene graph contents and camera/controls configuration, not actual pixel output. Real rendering is verified by manual QA in Task 15.
+> Note: an earlier draft of this note assumed `WebGLRenderer` silently falls back to a
+> headless/no-op context under jsdom. That's wrong — verified empirically against this
+> project's three@0.185.1, it throws. The fix belongs entirely in the test file (mocking
+> `THREE.WebGLRenderer` via `vi.mock`, above) — `src/render/scene.ts` itself must stay
+> exactly as Step 1 specifies: no try/catch, no mock class, no `any`. A workaround for a
+> jsdom-only limitation has no business shipping into the production render path, and
+> `SceneContext.renderer` must stay a real `THREE.WebGLRenderer` for Tasks 12 and 15, which
+> call real renderer methods on it. Real rendering is verified by manual QA in Task 15.
 
 - [ ] **Step 4: Commit**
 
