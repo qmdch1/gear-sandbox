@@ -18,6 +18,17 @@ function sameParallelFamily(a: GearInstance["type"], b: GearInstance["type"]): b
   return (SPUR_FAMILY.has(a) && SPUR_FAMILY.has(b)) || (HELICAL_FAMILY.has(a) && HELICAL_FAMILY.has(b));
 }
 
+// Same real-gear reasoning as `sameParallelFamily`, applied to the perpendicular
+// case: a bevel gear's teeth are cut straight (0° helix, like a plain spur gear),
+// so it can properly mesh with another straight-cut gear (another bevel, or a
+// plain spur/crank) at a right angle -- but not with a helical (angled-tooth) gear,
+// whose tooth lines wouldn't line up across the face width there either.
+function bevelMeshCompatible(a: GearInstance["type"], b: GearInstance["type"]): boolean {
+  if (a !== "bevel" && b !== "bevel") return false;
+  const other = a === "bevel" ? b : a;
+  return other === "bevel" || SPUR_FAMILY.has(other);
+}
+
 // Accessories that never mesh via teeth — they only ever attach by sitting coincident
 // on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge or a
 // fan is functionally the same attach rule, just a different indicator/output device).
@@ -72,7 +83,7 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   }
 
   const wormPair = (a.type === "worm") !== (b.type === "worm");
-  const bevelInvolved = a.type === "bevel" || b.type === "bevel";
+  const bevelInvolved = bevelMeshCompatible(a.type, b.type);
   if (wormPair || bevelInvolved) {
     if (Math.abs(axisDot) > PERP_DOT_THRESHOLD || !withinDistance) return null;
     const oneWay: MeshEdge["oneWay"] = wormPair ? (a.type === "worm" ? "aToB" : "bToA") : "none";
@@ -113,7 +124,7 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
   }
 
   const wormPair = (a.type === "worm") !== (b.type === "worm");
-  const bevelInvolved = a.type === "bevel" || b.type === "bevel";
+  const bevelInvolved = bevelMeshCompatible(a.type, b.type);
   if (wormPair || bevelInvolved) {
     if (Math.abs(axisDot) > PERP_DOT_THRESHOLD) return null;
     return pitchRadius(a) + pitchRadius(b);
@@ -194,8 +205,11 @@ export function meshPhaseAlignment(
     return { worldAngleTowardPartner, rotation };
   }
 
-  // A bevel gear meshes on a perpendicular (world +X) axis against a profile-type
-  // partner on the usual +Y axis. Both gears sitting at the same height (the only
+  // A bevel gear meshes on a perpendicular (world +X) axis against a plain
+  // (0°-helix) partner on the usual +Y axis -- spur or crank, not helical (see
+  // `bevelMeshCompatible` above; same "straight teeth don't line up against
+  // angled ones" reasoning as the parallel-axis case). Both gears sitting at the
+  // same height (the only
   // case handled here -- see HEIGHT_MATCH_TOLERANCE) makes the geometry degenerate
   // in a useful way: the contact direction, seen in the bevel's OWN rotation plane
   // (world Y-Z, perpendicular to its +X axis), only ever works out to exactly +/-90°
@@ -209,7 +223,7 @@ export function meshPhaseAlignment(
   const partnerIsBevel = isBevelOnWorldXAxis(partner);
   const sameHeight = Math.abs(dragged.position[1] - partner.position[1]) <= HEIGHT_MATCH_TOLERANCE;
 
-  if (draggedIsBevel && PROFILE_TYPES.has(partner.type) && isWorldYAxis(partner) && sameHeight) {
+  if (draggedIsBevel && SPUR_FAMILY.has(partner.type) && isWorldYAxis(partner) && sameHeight) {
     // Partner side: identical rounding to the parallel-pair case above (partner is
     // still a +Y-axis profile type with real involute teeth, so it still needs a
     // proper detent in its own rotation plane).
@@ -227,7 +241,7 @@ export function meshPhaseAlignment(
     return { worldAngleTowardPartner, rotation };
   }
 
-  if (partnerIsBevel && PROFILE_TYPES.has(dragged.type) && isWorldYAxis(dragged) && sameHeight) {
+  if (partnerIsBevel && SPUR_FAMILY.has(dragged.type) && isWorldYAxis(dragged) && sameHeight) {
     // The bevel partner's rotation is already fixed, and (per the derivation above)
     // its own contact angle is insensitive to exactly which raw angle the drag landed
     // on -- only which side of it. There's no useful detent to round the placement

@@ -97,6 +97,18 @@ describe("evaluatePair", () => {
     expect(edge!.oneWay).toBe("none");
   });
 
+  it("meshes a bevel gear with a plain spur/crank gear on a perpendicular axis", () => {
+    const bevel = makeGear({ id: "bevel", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const spur = makeGear({ id: "spur", type: "spur", axis: [0, 1, 0], teeth: 20, module: 1, position: [20, 0, 0] });
+    expect(evaluatePair(bevel, spur)).not.toBeNull();
+  });
+
+  it("does not mesh a bevel gear with a helical gear (straight vs. angled teeth)", () => {
+    const bevel = makeGear({ id: "bevel", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const helical = makeGear({ id: "helical", type: "helical", axis: [0, 1, 0], teeth: 20, module: 1, position: [20, 0, 0] });
+    expect(evaluatePair(bevel, helical)).toBeNull();
+  });
+
   it("marks a worm-to-wheel edge one-way from the worm", () => {
     const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1, position: [0, 0, 0] });
     const wheel = makeGear({ id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1, position: [11, 0, 0] });
@@ -217,6 +229,12 @@ describe("idealConnectionDistance", () => {
     const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [999, 0, 0] });
     expect(idealConnectionDistance(a, b)).toBeCloseTo(20); // (20+20)/2
   });
+
+  it("returns null for a bevel/helical pair regardless of distance -- straight vs. angled teeth", () => {
+    const bevel = makeGear({ id: "bevel", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const helical = makeGear({ id: "helical", type: "helical", axis: [0, 1, 0], teeth: 20, module: 1, position: [999, 0, 0] });
+    expect(idealConnectionDistance(bevel, helical)).toBeNull();
+  });
 });
 
 describe("meshPhaseAlignment", () => {
@@ -293,6 +311,12 @@ describe("meshPhaseAlignment", () => {
   it("returns null for a bevel/profile-type pair at different heights (not solved for yet)", () => {
     const partner = makeGear({ id: "partner", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
     const dragged = makeGear({ id: "dragged", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 5, 0] });
+    expect(meshPhaseAlignment(dragged, 1.0, partner)).toBeNull();
+  });
+
+  it("returns null for a bevel/helical pair -- they don't mesh at all, so there's no phase to align", () => {
+    const partner = makeGear({ id: "partner", type: "helical", teeth: 20, module: 1, position: [0, 0, 0] });
+    const dragged = makeGear({ id: "dragged", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
     expect(meshPhaseAlignment(dragged, 1.0, partner)).toBeNull();
   });
 });
