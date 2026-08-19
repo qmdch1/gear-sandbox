@@ -232,17 +232,22 @@ function fanGeometry(module: number): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
-/** A cone with actual tooth studs around its wide rim, instead of a perfectly smooth
- *  cone -- built in the cone's own local Y-axis frame (radial = XZ, axis = Y), like
- *  `ConeGeometry` itself; `buildGeometryForType` applies the same `rotateX(Math.PI/2)`
- *  the old plain cone used, so the thickness axis still lands where `gearMesh.ts`
- *  expects. Not a full Tredgold-approximation bevel-tooth loft (which would need to
- *  taper each tooth all the way to the cone apex) -- these are fixed-size studs near
- *  the rim, a deliberately simpler approximation that still reads as "a gear with
- *  teeth" rather than a smooth truncated cone. `teeth` now only controls how many
- *  tooth studs are placed (previously it was misused as the cone's smoothness
- *  segment count, an unrelated cosmetic bug); the cone's own roundness uses a fixed,
- *  generous segment count instead. */
+/** A cone with real teeth cut into its slanted face -- tapering from wide at the rim
+ *  down toward the apex, the actual visual signature of a bevel gear that makes it
+ *  legible as "this meshes at an angle" (fixed-size studs near the rim, tried
+ *  earlier, just read as a spiky crown, not a cone with teeth on its slant). Each
+ *  tooth is a small angular wedge of a SECOND, slightly larger cone sharing the same
+ *  apex/height/slant as the body -- `THREE.CylinderGeometry`'s `thetaStart`/
+ *  `thetaLength` params slice out that wedge directly, so it inherits the cone's
+ *  taper for free instead of needing a hand-rolled lofted shape. Built in the cone's
+ *  own local Y-axis frame (radial = XZ, axis = Y, apex at +Y per `ConeGeometry`'s own
+ *  convention) like the plain cone was; `buildGeometryForType` applies the same
+ *  `rotateX(Math.PI/2)` the old plain cone used. A wedge's angular center sits at
+ *  `i * anglePerTooth` via `thetaStart`/`thetaLength` directly -- CylinderGeometry's
+ *  own theta parameterization (x = r*sin(theta), z = r*cos(theta)) is exactly what
+ *  `rotateY(theta)` produces on a point starting at local +Z, so this lines up with
+ *  every other gear type's "tooth i's center is at angle i*pitch" convention (and
+ *  with `meshPhaseAlignment`'s bevel phase math in meshing.ts, which depends on it). */
 function bevelGeometry(teeth: number, module: number): THREE.BufferGeometry {
   const pitchRadius = (module * teeth) / 2;
   const baseRadius = pitchRadius + module * ADDENDUM_FACTOR;
@@ -250,18 +255,27 @@ function bevelGeometry(teeth: number, module: number): THREE.BufferGeometry {
   const cone = new THREE.ConeGeometry(baseRadius, height, 32);
 
   const anglePerTooth = (Math.PI * 2) / teeth;
-  const toothWidth = Math.max(baseRadius * Math.sin(anglePerTooth / 2) * 1.1, module * 0.3);
-  const toothProtrusion = module * 0.8;
-  const toothDepth = height * 0.5;
+  const toothAngularWidth = anglePerTooth * 0.6;
+  const toothProtrusion = module * 1.1; // pronounced enough to read clearly against a meshed partner
+  const toothAxialSpan = height * 0.55; // from the wide base, most of the way toward the apex
+
+  // The body cone's own radius at height y (apex at +height/2, base at -height/2,
+  // per ConeGeometry's convention) -- the taper a tooth wedge rides on top of.
+  const bodyRadiusAt = (y: number) => (baseRadius * (height / 2 - y)) / height;
+
+  const yBase = -height / 2;
+  const yInner = yBase + toothAxialSpan;
+  const radiusAtBase = bodyRadiusAt(yBase) + toothProtrusion;
+  const radiusAtInner = bodyRadiusAt(yInner) + toothProtrusion;
 
   const parts: THREE.BufferGeometry[] = [cone];
   for (let i = 0; i < teeth; i++) {
-    const tooth = new THREE.BoxGeometry(toothWidth, toothDepth, toothProtrusion);
-    // Sits at the cone's wide end (y = -height/2), nudged slightly inward (-module*0.15)
-    // so it embeds into the cone's surface rather than floating with a visible gap.
-    tooth.translate(0, -height / 2 + toothDepth / 2, baseRadius + toothProtrusion / 2 - module * 0.15);
-    tooth.rotateY(i * anglePerTooth);
-    parts.push(tooth);
+    const thetaStart = i * anglePerTooth - toothAngularWidth / 2;
+    // CylinderGeometry(radiusTop, radiusBottom, ...) -- top is +Y (toward the apex,
+    // narrower), bottom is -Y (the wide base), matching yInner/yBase above.
+    const wedge = new THREE.CylinderGeometry(radiusAtInner, radiusAtBase, toothAxialSpan, 2, 1, false, thetaStart, toothAngularWidth);
+    wedge.translate(0, (yBase + yInner) / 2, 0);
+    parts.push(wedge);
   }
   return mergeGeometries(parts);
 }
@@ -293,9 +307,9 @@ class HelixCurve extends THREE.Curve<THREE.Vector3> {
 function wormGeometry(module: number): THREE.BufferGeometry {
   const length = module * 6;
   const rootRadius = module * 0.85;
-  const threadCrestRadius = module * 1.35;
-  const tubeRadius = module * 0.32;
-  const turns = 4;
+  const threadCrestRadius = module * 1.7; // chunkier ridge -- read clearly as an actual thread, not a fine groove
+  const tubeRadius = module * 0.5;
+  const turns = 3; // fewer, wider-pitched turns are easier to read as "a screw thread" than a dense one
 
   const core = new THREE.CylinderGeometry(rootRadius, rootRadius, length, 20, 1, false);
   const thread = new THREE.TubeGeometry(

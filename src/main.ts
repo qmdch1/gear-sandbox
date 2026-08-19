@@ -48,25 +48,6 @@ function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
 }
 
-// No user accounts, so there's exactly one saved layout on the server (see
-// serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh
-// visit before anyone's ever hit "저장") has nothing saved yet, which would
-// otherwise start on a completely empty canvas with nothing to drag/connect to;
-// pre-place one power-source gear at the origin (exactly where the default
-// top-down camera looks) so there's always something to build onto right away.
-async function loadInitialGears(): Promise<void> {
-  try {
-    gears = await fetchServerLayout();
-  } catch (err) {
-    console.error("Failed to load the saved layout from the server; starting with an empty layout.", err);
-    gears = [];
-  }
-  if (gears.length === 0) {
-    addGear("crank", [0, 0, 0]);
-  }
-}
-void loadInitialGears();
-
 // Default gears (module 1, 20 teeth) need ~20 units of center distance to mesh, so a
 // tight spawn grid made every freshly-placed gear register as "겹침" (overlapping)
 // instead of a real, draggable starting point. 24 units of pitch keeps fresh gears
@@ -99,11 +80,38 @@ function spiralGridCell(index: number): [number, number] {
   return [x, y];
 }
 
+function spawnGridPosition(index: number): [number, number, number] {
+  const [col, row] = spiralGridCell(index);
+  return [col * SPAWN_GRID_PITCH, 0, row * SPAWN_GRID_PITCH];
+}
+
+// With this few part types total, a brand-new session showing just one lone gear
+// left everything else undiscoverable unless you dug through the palette -- one of
+// every type instead, spiraling out from the origin (crank first, so the one
+// power-source gear still lands dead center where the default camera looks).
+const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan"];
+
+// No user accounts, so there's exactly one saved layout on the server (see
+// serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh
+// visit before anyone's ever hit "저장") has nothing saved yet, which would
+// otherwise start on a completely empty canvas with nothing to see or connect to;
+// pre-place one of every part type instead, so there's always something to look
+// at and build onto right away.
+async function loadInitialGears(): Promise<void> {
+  try {
+    gears = await fetchServerLayout();
+  } catch (err) {
+    console.error("Failed to load the saved layout from the server; starting with an empty layout.", err);
+    gears = [];
+  }
+  if (gears.length === 0) {
+    for (const type of STARTER_TYPES) addGear(type, spawnGridPosition(gears.length));
+  }
+}
+void loadInitialGears();
+
 new PaletteUI(document.querySelector("#palette")!, (type) => {
-  partInfoModal.show(type, () => {
-    const [col, row] = spiralGridCell(gears.length);
-    addGear(type, [col * SPAWN_GRID_PITCH, 0, row * SPAWN_GRID_PITCH]);
-  });
+  partInfoModal.show(type, () => addGear(type, spawnGridPosition(gears.length)));
 });
 
 new SaveLoadPanel(document.querySelector("#save-load")!, {
