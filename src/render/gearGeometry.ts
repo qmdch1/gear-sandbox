@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { GearType } from "../sim/types";
 
-const GEAR_THICKNESS = 0.4;
+const GEAR_THICKNESS = 1.2; // face width -- chunkier than the original 0.4, which read as a flat paper cutout rather than a solid mechanical part
 const ADDENDUM_FACTOR = 1.25; // bevel/worm tip radius beyond the pitch radius, in modules (unrelated to the involute profile below)
 const BEVEL_OPTIONS = { bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 2 };
 
@@ -98,13 +98,15 @@ function extrudedGearGeometry(teeth: number, module: number, twistPerUnit = 0): 
   const points = computeSpurProfilePoints(teeth, module);
   const shape = new THREE.Shape(points);
   const pitchRadius = (module * teeth) / 2;
-  shape.holes.push(boreHole(Math.max(pitchRadius * 0.3, module * 0.6)));
+  const boreRadius = Math.max(pitchRadius * 0.3, module * 0.6);
+  shape.holes.push(boreHole(boreRadius));
 
   const geometry = new THREE.ExtrudeGeometry(shape, {
     ...BEVEL_OPTIONS,
     depth: GEAR_THICKNESS,
     curveSegments: 1,
   });
+  geometry.translate(0, 0, -GEAR_THICKNESS / 2); // center on its own origin, like discWithHole below
   if (twistPerUnit !== 0) {
     const position = geometry.attributes.position;
     for (let i = 0; i < position.count; i++) {
@@ -118,7 +120,16 @@ function extrudedGearGeometry(teeth: number, module: number, twistPerUnit = 0): 
     position.needsUpdate = true;
     geometry.computeVertexNormals();
   }
-  return geometry;
+
+  // A raised hub/collar around the shaft bore, protruding a little past both faces --
+  // real gears almost never sit flush from the tooth face straight down to a bare
+  // hole; the hub is the single biggest visual cue that reads as "a real mechanical
+  // part" rather than a flat toothed cutout.
+  const hubOuterRadius = Math.max(boreRadius * 1.7, module * 1.1);
+  const hubThickness = GEAR_THICKNESS + module * 0.7;
+  const hub = discWithHole(hubOuterRadius, boreRadius, hubThickness);
+
+  return mergeGeometries([geometry, hub]);
 }
 
 function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
@@ -126,7 +137,7 @@ function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
   const pitchRadius = (module * teeth) / 2;
   const handle = new THREE.CylinderGeometry(module * 0.3, module * 0.3, pitchRadius * 1.4, 12);
   handle.rotateX(Math.PI / 2);
-  handle.translate(pitchRadius * 0.9, 0, GEAR_THICKNESS / 2);
+  handle.translate(pitchRadius * 0.9, 0, 0); // centered through the (now centered) gear body's thickness
   return mergeGeometries([base, handle]);
 }
 
