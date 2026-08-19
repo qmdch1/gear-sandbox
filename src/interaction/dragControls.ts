@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
-import { evaluatePair, idealConnectionDistance } from "../sim/meshing";
+import { evaluatePair, idealConnectionDistance, meshPhaseRotation } from "../sim/meshing";
 import { buildEdges, connectedComponentIds } from "../sim/graph";
 import type { SceneContext } from "../render/scene";
 
@@ -30,14 +30,19 @@ const SNAP_SLACK = 6; // units of drop-point slack tolerated around the ideal me
 export interface SnapTarget {
   position: [number, number, number];
   partnerId: string;
+  /** The dragged gear's rotation should be set to this so its tooth interlocks into
+   *  the partner's gap, rather than the two tooth profiles clashing. Undefined when
+   *  phase-alignment doesn't apply (see `meshPhaseRotation`). */
+  rotation?: number;
 }
 
 /** Hand-positioning a gear at the exact center distance a mesh/coupling requires is
  *  impractical (default gears need ~20 units, to the tenth of a unit, along the right
  *  axis). Finds the nearest gear `dragged` COULD connect to (by type/axis, regardless of
  *  its current distance) and, if the raw drop point is within `SNAP_SLACK` of the ideal
- *  ring around that partner, returns the position `dragged` should snap to so the two
- *  actually validly connect — preserving the drop point's direction from the partner. */
+ *  ring around that partner, returns the position (and, where it applies, the tooth-
+ *  interlocking rotation) `dragged` should snap to so the two actually validly connect
+ *  — preserving the drop point's direction from the partner. */
 export function findSnapTarget(
   dragged: GearInstance,
   rawPosition: [number, number, number],
@@ -66,7 +71,8 @@ export function findSnapTarget(
           ];
 
     bestSlack = slack;
-    best = { position, partnerId: candidate.id };
+    const rotation = meshPhaseRotation(dragged, position, candidate);
+    best = rotation === null ? { position, partnerId: candidate.id } : { position, partnerId: candidate.id, rotation };
   }
   return best;
 }
@@ -74,7 +80,10 @@ export function findSnapTarget(
 export interface DragControlsOptions {
   ctx: SceneContext;
   getGears: () => GearInstance[];
-  onMove: (id: string, position: [number, number, number]) => void;
+  /** `rotation`, when present, is the tooth-interlocking snap rotation for the anchor
+   *  gear only — group members always move by position delta alone, keeping whatever
+   *  relative phase they already had with each other. */
+  onMove: (id: string, position: [number, number, number], rotation?: number) => void;
   /** Fired unconditionally on pointerdown with the id of the gear mesh hit, or null if none. */
   onSelect?: (gearId: string | null) => void;
   /** Fired during a drag with the nearest compatible partner's id at the candidate drop point, or null. */
@@ -169,7 +178,13 @@ export class DragControls {
     ];
 
     for (const [id, startPosition] of this.dragGroupStart) {
-      this.options.onMove(id, [startPosition[0] + delta[0], startPosition[1], startPosition[2] + delta[2]]);
+      const newPosition: [number, number, number] = [
+        startPosition[0] + delta[0],
+        startPosition[1],
+        startPosition[2] + delta[2],
+      ];
+      const rotation = id === this.draggingId ? snap?.rotation : undefined;
+      this.options.onMove(id, newPosition, rotation);
     }
     this.options.onPreview?.(snap ? snap.partnerId : null);
   };

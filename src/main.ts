@@ -95,9 +95,11 @@ new ServerSyncPanel(document.querySelector("#server-sync")!, {
 new DragControls({
   ctx,
   getGears: () => gears,
-  onMove: (id, position) => {
+  onMove: (id, position, rotation) => {
     const gear = gears.find((g) => g.id === id);
-    if (gear) gear.position = position;
+    if (!gear) return;
+    gear.position = position;
+    if (rotation !== undefined) gear.rotation = rotation; // tooth-interlocking snap
   },
   onSelect: (id) => {
     const gear = id ? gears.find((g) => g.id === id) : undefined;

@@ -106,6 +106,67 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
   return null;
 }
 
+const TWO_PI = Math.PI * 2;
+const PROFILE_TYPES = new Set<GearInstance["type"]>(["spur", "helical", "crank"]);
+
+function isWorldYAxis(g: GearInstance): boolean {
+  return Math.abs(g.axis[1]) > 0.98 && Math.abs(g.axis[0]) < 0.2 && Math.abs(g.axis[2]) < 0.2;
+}
+
+function fraction01(value: number): number {
+  return ((value % 1) + 1) % 1;
+}
+
+/** For a world +Y-axis gear with an actual tooth profile (spur/helical/crank -- bevel/
+ *  worm/load render as smooth cones/cylinders with no teeth to visually clash), the
+ *  fraction (0..1) of one tooth-pitch that `worldAngle` (direction from the gear's own
+ *  center, in the XZ ground plane) currently falls at: [0, 0.5) is tooth material,
+ *  [0.5, 1) is the gap between teeth. Mirrors the exact quaternion `gearMesh.ts` uses
+ *  to place a mesh (`setFromUnitVectors((0,0,1), axis)` then `rotateZ(gear.rotation)`),
+ *  worked out algebraically for the world +Y axis case rather than replicated with an
+ *  actual quaternion type here, to keep this module's zero-Three.js dependency. */
+function toothPhaseAtWorldAngle(gear: GearInstance, worldAngle: number): number {
+  const localAngle = -worldAngle - gear.rotation;
+  const pitch = TWO_PI / gear.teeth;
+  return fraction01(localAngle / pitch);
+}
+
+/** The `rotation` the dragged gear should be set to so its tooth interlocks into
+ *  `partner`'s gap at the point of contact, instead of the two tooth profiles visually
+ *  clashing — hand-positioning a gear at the right center distance already needs
+ *  `findSnapTarget`'s help; getting the rotational *phase* right by hand on top of that
+ *  is impractical. Returns `null` when phase-alignment doesn't apply: only spur/helical/
+ *  crank actually render a tooth profile to align, and only for the default world +Y
+ *  axis both of them are placed on (bevel/worm's perpendicular-axis meshes have no teeth
+ *  in their geometry to clash in the first place, so there's nothing to correct there). */
+export function meshPhaseRotation(
+  dragged: GearInstance,
+  draggedPosition: [number, number, number],
+  partner: GearInstance,
+): number | null {
+  if (!PROFILE_TYPES.has(dragged.type) || !PROFILE_TYPES.has(partner.type)) return null;
+  if (!isWorldYAxis(dragged) || !isWorldYAxis(partner)) return null;
+
+  const dx = partner.position[0] - draggedPosition[0];
+  const dz = partner.position[2] - draggedPosition[2];
+  const worldAngleTowardPartner = Math.atan2(dz, dx);
+  const partnerWorldAngle = worldAngleTowardPartner + Math.PI; // contact, from the partner's side
+  const partnerPhase = toothPhaseAtWorldAngle(partner, partnerWorldAngle);
+
+  // Target: dragged sits exactly anti-phase (its own phase offset by 0.5 from whatever
+  // the partner currently shows) at the contact point. A 0.5 phase offset is exactly
+  // half of one tooth-pitch (one tooth-width OR one gap-width, given the 50% duty
+  // cycle) -- and since pitchRadius*(2π/teeth) = module*π regardless of teeth count,
+  // both gears' tooth/gap arc widths are identical in real terms, so this offset is
+  // the correct target (matching real gears' rolling-contact geometry) no matter how
+  // many teeth either one has.
+  const targetDraggedPhase = fraction01(partnerPhase + 0.5);
+  const draggedPitch = TWO_PI / dragged.teeth;
+  // Solve toothPhaseAtWorldAngle(dragged, worldAngleTowardPartner) === targetDraggedPhase
+  // for dragged.rotation: any coterminal solution renders identically via rotateZ.
+  return -worldAngleTowardPartner - targetDraggedPhase * draggedPitch;
+}
+
 /** True when two gears geometrically overlap (closer than a valid mesh distance allows,
  *  and NOT already a legitimate connection -- a load or worm coupling is intentionally
  *  coincident with its host gear, so a valid `evaluatePair` result is never an overlap). */
