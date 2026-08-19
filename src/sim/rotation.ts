@@ -31,7 +31,19 @@ export function propagateRotation(gears: GearInstance[], edges: MeshEdge[]): Rot
         if (visited.has(otherId)) continue;
         const other = byId.get(otherId)!;
         if (other.broken) continue; // broken gears absorb rotation, don't relay it
-        const sign = edge.kind === "coupling" ? 1 : -1;
+        // A tooth mesh between two PARALLEL-axis gears (evaluatePair's SPUR_FAMILY/
+        // HELICAL_FAMILY case) has adjacent gears rotate in opposite senses about
+        // that same shared axis -- the standard "external gears spin opposite ways"
+        // fact, which the -1 below reproduces. A bevel gear only ever meshes on a
+        // PERPENDICULAR axis (evaluatePair rejects a bevel pair whose axes aren't
+        // near-perpendicular), where the two gears don't share a rotation plane at
+        // all -- there's no "opposite direction about the same axis" relationship to
+        // preserve, so flipping the sign there was an unexamined carry-over from the
+        // parallel-axis case, not a derived fact. Keeping it same-sign instead.
+        const a = byId.get(edge.a)!;
+        const b = byId.get(edge.b)!;
+        const isBevelMesh = edge.kind === "mesh" && (a.type === "bevel" || b.type === "bevel");
+        const sign = edge.kind === "coupling" || isBevelMesh ? 1 : -1;
         const ratio = isForward ? edge.ratio : 1 / edge.ratio;
         angularVelocities.set(otherId, curSpeed * sign * ratio);
         visited.add(otherId);

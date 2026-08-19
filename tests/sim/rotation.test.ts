@@ -22,6 +22,18 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("b")).toBeCloseTo(-2); // -(20/10) * 1
   });
 
+  it("spins a bevel gear meshed with a crank in the SAME sense, not flipped", () => {
+    // Unlike a parallel-axis mesh (spur/helical/crank), a bevel gear only ever
+    // meshes on a perpendicular axis -- there's no "opposite direction about a
+    // shared axis" relationship to preserve there, so it shouldn't get the -1 flip.
+    const gears = [
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
+      makeGear({ id: "bevel", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [20, 0, 0] }),
+    ];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("bevel")).toBeCloseTo(1); // same sign, (20/20) * 1
+  });
+
   it("leaves a gear with no path to a crank at zero angular velocity", () => {
     const gears = [
       makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] }),
