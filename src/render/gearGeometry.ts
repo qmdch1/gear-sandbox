@@ -83,13 +83,20 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return crankGeometry(teeth, module);
     case "bevel": {
       const pitchRadius = (module * teeth) / 2;
-      return new THREE.ConeGeometry(pitchRadius + module * ADDENDUM_FACTOR, GEAR_THICKNESS * 3, teeth);
+      const bevelGeometry = new THREE.ConeGeometry(pitchRadius + module * ADDENDUM_FACTOR, GEAR_THICKNESS * 3, teeth);
+      bevelGeometry.rotateX(Math.PI / 2);
+      return bevelGeometry;
     }
     case "worm": {
       const length = module * 6;
-      return new THREE.CylinderGeometry(module * 1.2, module * 1.2, length, 16, 1, false);
+      const wormGeometry = new THREE.CylinderGeometry(module * 1.2, module * 1.2, length, 16, 1, false);
+      wormGeometry.rotateX(Math.PI / 2);
+      return wormGeometry;
     }
-    case "load":
-      return new THREE.CylinderGeometry(module * 2, module * 2, GEAR_THICKNESS * 2, 24);
+    case "load": {
+      const loadGeometry = new THREE.CylinderGeometry(module * 2, module * 2, GEAR_THICKNESS * 2, 24);
+      loadGeometry.rotateX(Math.PI / 2);
+      return loadGeometry;
+    }
   }
 }

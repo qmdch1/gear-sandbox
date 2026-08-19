@@ -4,6 +4,7 @@ import type { SceneContext } from "./scene";
 import { GearMeshObject } from "./gearMesh";
 
 const PROBLEM_HIGHLIGHT = new THREE.Color(0xff3b30);
+const PREVIEW_HIGHLIGHT = new THREE.Color(0x2ecc71);
 
 /** Pure diff: which gears need a new mesh, which stale meshes need removing. */
 export function computeSyncActions(
@@ -18,6 +19,7 @@ export function computeSyncActions(
 
 export class SceneSync {
   private objects = new Map<string, GearMeshObject>();
+  private previewId: string | null = null;
 
   constructor(private ctx: SceneContext) {}
 
@@ -49,7 +51,11 @@ export class SceneSync {
       const obj = this.objects.get(gear.id)!;
       obj.update(gear);
       const material = obj.mesh.material as THREE.MeshStandardMaterial;
-      material.emissive = problemIds.has(gear.id) ? PROBLEM_HIGHLIGHT.clone() : new THREE.Color(0x000000);
+      if (this.previewId === gear.id) {
+        material.emissive = PREVIEW_HIGHLIGHT.clone();
+      } else {
+        material.emissive = problemIds.has(gear.id) ? PROBLEM_HIGHLIGHT.clone() : new THREE.Color(0x000000);
+      }
     }
   }
 
@@ -58,5 +64,11 @@ export class SceneSync {
     if (!obj) return;
     this.ctx.controls.target.copy(obj.mesh.position);
     this.ctx.controls.update();
+  }
+
+  /** Tints the given gear's mesh green as a "would connect here" preview while dragging,
+   *  clearing any previous preview. Pass null to clear. Applied on the next sync(). */
+  setPreviewHighlight(id: string | null): void {
+    this.previewId = id;
   }
 }

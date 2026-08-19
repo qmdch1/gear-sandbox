@@ -40,7 +40,11 @@ export class ServerSyncPanel {
   }
 
   async refresh(): Promise<void> {
-    this.renderList(await listServerLayouts());
+    try {
+      this.renderList(await listServerLayouts());
+    } catch (err) {
+      console.error("Failed to refresh server layout list", err);
+    }
   }
 
   private renderList(layouts: LayoutSummary[]): void {
@@ -59,21 +63,33 @@ export class ServerSyncPanel {
   private async saveNew(): Promise<void> {
     const name = this.nameInput.value.trim();
     if (!name) return;
-    const summary = await saveNewServerLayout(name, this.api.getGears());
-    this.currentId = summary.id;
-    await this.refresh();
+    try {
+      const summary = await saveNewServerLayout(name, this.api.getGears());
+      this.currentId = summary.id;
+      await this.refresh();
+    } catch (err) {
+      console.error("Failed to save new server layout", err);
+    }
   }
 
   private async overwrite(): Promise<void> {
     if (!this.currentId) return;
-    await updateServerLayout(this.currentId, this.nameInput.value.trim() || "이름 없음", this.api.getGears());
-    await this.refresh();
+    try {
+      await updateServerLayout(this.currentId, this.nameInput.value.trim() || "이름 없음", this.api.getGears());
+      await this.refresh();
+    } catch (err) {
+      console.error("Failed to overwrite server layout", err);
+    }
   }
 
   private async load(id: string): Promise<void> {
-    const detail = await fetchServerLayout(id);
-    this.currentId = detail.id;
-    this.nameInput.value = detail.name;
-    this.api.applyLoadedGears(detail.gears);
+    try {
+      const detail = await fetchServerLayout(id);
+      this.currentId = detail.id;
+      this.nameInput.value = detail.name;
+      this.api.applyLoadedGears(detail.gears);
+    } catch (err) {
+      console.error("Failed to load server layout", err);
+    }
   }
 }
