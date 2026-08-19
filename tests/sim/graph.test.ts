@@ -39,6 +39,15 @@ describe("classify", () => {
     expect(diagnostics.unconnectedIds).toEqual([]);
   });
 
+  it("also clears no-power for a battery or outlet power source, just like a crank", () => {
+    const gears = [
+      makeGear({ id: "outlet", type: "outlet", teeth: 20, module: 1, position: [0, 0, 0] }),
+      makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
+    ];
+    const diagnostics = classify(gears, buildEdges(gears));
+    expect(diagnostics.noPowerIds).toEqual([]);
+  });
+
   it("reports overlapping gears that are placed too close to mesh validly", () => {
     const gears = [
       makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] }),

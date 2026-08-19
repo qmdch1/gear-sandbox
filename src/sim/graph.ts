@@ -1,5 +1,6 @@
 import type { GearInstance, MeshEdge, SimDiagnostics } from "./types";
 import { evaluatePair, isOverlapping } from "./meshing";
+import { POWER_SOURCE_TYPES } from "./gearDefs";
 
 export function buildEdges(gears: GearInstance[]): MeshEdge[] {
   const edges: MeshEdge[] = [];
@@ -64,7 +65,7 @@ export function classify(gears: GearInstance[], edges: MeshEdge[]): SimDiagnosti
   const unconnectedIds = gears.filter((g) => (neighborCount.get(g.id) ?? 0) === 0).map((g) => g.id);
 
   const poweredIds = new Set<string>();
-  for (const crank of gears.filter((g) => g.type === "crank")) {
+  for (const crank of gears.filter((g) => POWER_SOURCE_TYPES.has(g.type))) {
     if (poweredIds.has(crank.id)) continue;
     const queue = [crank.id];
     poweredIds.add(crank.id);

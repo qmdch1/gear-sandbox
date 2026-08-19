@@ -5,7 +5,7 @@ const PARALLEL_DOT_THRESHOLD = 0.98;  // |axis dot| above this => parallel axes
 const PERP_DOT_THRESHOLD = 0.1;       // |axis dot| below this => perpendicular axes
 const COUPLING_DISTANCE_TOLERANCE = 0.05;
 
-const PARALLEL_FAMILY = new Set<GearInstance["type"]>(["spur", "helical", "crank"]);
+const PARALLEL_FAMILY = new Set<GearInstance["type"]>(["spur", "helical", "crank", "battery", "outlet"]);
 // Accessories that never mesh via teeth — they only ever attach by sitting coincident
 // on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge or a
 // fan is functionally the same attach rule, just a different indicator/output device).
@@ -111,7 +111,7 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
 }
 
 const TWO_PI = Math.PI * 2;
-const PROFILE_TYPES = new Set<GearInstance["type"]>(["spur", "helical", "crank"]);
+const PROFILE_TYPES = new Set<GearInstance["type"]>(["spur", "helical", "crank", "battery", "outlet"]);
 
 function isWorldYAxis(g: GearInstance): boolean {
   return Math.abs(g.axis[1]) > 0.98 && Math.abs(g.axis[0]) < 0.2 && Math.abs(g.axis[2]) < 0.2;

@@ -1,4 +1,5 @@
 import type { GearInstance, MeshEdge } from "./types";
+import { POWER_SOURCE_TYPES } from "./gearDefs";
 
 export interface RotationResult {
   angularVelocities: Map<string, number>;
@@ -7,7 +8,7 @@ export interface RotationResult {
 export function propagateRotation(gears: GearInstance[], edges: MeshEdge[]): RotationResult {
   const byId = new Map(gears.map((g) => [g.id, g] as const));
   const angularVelocities = new Map<string, number>();
-  for (const g of gears) angularVelocities.set(g.id, g.type === "crank" ? g.angularVelocity : 0);
+  for (const g of gears) angularVelocities.set(g.id, POWER_SOURCE_TYPES.has(g.type) ? g.angularVelocity : 0);
 
   const adjacency = new Map<string, MeshEdge[]>();
   for (const g of gears) adjacency.set(g.id, []);
@@ -17,7 +18,7 @@ export function propagateRotation(gears: GearInstance[], edges: MeshEdge[]): Rot
   }
 
   const visited = new Set<string>();
-  for (const crank of gears.filter((g) => g.type === "crank" && !g.broken)) {
+  for (const crank of gears.filter((g) => POWER_SOURCE_TYPES.has(g.type) && !g.broken)) {
     if (visited.has(crank.id)) continue;
     visited.add(crank.id);
     const queue = [crank.id];

@@ -4,7 +4,7 @@ import { createMetalTexture, TYPE_HEALTHY_COLORS } from "../../src/render/metalT
 
 describe("TYPE_HEALTHY_COLORS", () => {
   it("has a distinct tint for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "battery", "outlet"] as const;
     const hexes = types.map((t) => TYPE_HEALTHY_COLORS[t].getHexString());
     expect(new Set(hexes).size).toBe(types.length);
   });

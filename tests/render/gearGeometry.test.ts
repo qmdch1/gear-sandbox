@@ -17,7 +17,7 @@ describe("computeSpurProfilePoints", () => {
 
 describe("buildGeometryForType", () => {
   it("builds a non-empty geometry for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "battery", "outlet"] as const;
     for (const t of types) {
       const geometry = buildGeometryForType(t, 20, 1);
       expect(geometry.attributes.position.count).toBeGreaterThan(0);

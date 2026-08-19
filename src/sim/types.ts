@@ -1,4 +1,14 @@
-export type GearType = "spur" | "helical" | "crank" | "bevel" | "worm" | "load" | "gauge" | "fan";
+export type GearType =
+  | "spur"
+  | "helical"
+  | "crank"
+  | "bevel"
+  | "worm"
+  | "load"
+  | "gauge"
+  | "fan"
+  | "battery"
+  | "outlet";
 
 export interface GearInstance {
   id: string;

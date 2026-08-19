@@ -5,9 +5,8 @@ import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
 import { DragControls } from "./interaction/dragControls";
 import { PaletteUI } from "./ui/paletteUI";
+import { PartInfoModal } from "./ui/partInfoModal";
 import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
-import { DurabilityPanel } from "./ui/durabilityPanel";
-import { TimeScaleSlider } from "./ui/timeScaleSlider";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
 import { ServerSyncPanel } from "./ui/serverSyncPanel";
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
@@ -15,13 +14,23 @@ import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <div id="sidebar">
-    <div id="palette"></div>
-    <p id="power-hint">손잡이 기어는 놓으면 자동으로 돌아갑니다 — 다른 기어를 가까이 끌어오면 맞물릴 위치로 자동 스냅됩니다. 이미 맞물린 기어들은 하나를 끌면 같이 움직입니다 — <b>Alt</b>+드래그로 하나만 따로 떼어 옮길 수 있습니다.</p>
-    <div id="save-load"></div>
-    <div id="server-sync"></div>
-    <label>시간배율 <div id="time-scale"></div></label>
-    <div id="diagnostics"></div>
-    <div id="durability-panel" hidden></div>
+    <section class="panel">
+      <h2>부품 담기</h2>
+      <div id="palette"></div>
+      <p id="power-hint">손잡이 기어·배터리·콘센트는 놓으면 자동으로 돌아갑니다. 다른 기어를 가까이 끌어오면 맞물리는 위치로 자동으로 붙습니다. 이미 붙어 있는 기어들은 하나를 끌면 같이 움직여요 — <b>Alt</b>+드래그로 하나만 떼어낼 수 있습니다.</p>
+    </section>
+    <section class="panel">
+      <h2>내 컴퓨터에 저장</h2>
+      <div id="save-load"></div>
+    </section>
+    <section class="panel">
+      <h2>온라인에 공유</h2>
+      <div id="server-sync"></div>
+    </section>
+    <section class="panel">
+      <h2>확인할 것</h2>
+      <div id="diagnostics"></div>
+    </section>
   </div>
   <div id="viewport"><canvas id="scene-canvas"></canvas></div>
 `;
@@ -30,7 +39,7 @@ const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
 const ctx = createScene(canvas);
 const sceneSync = new SceneSync(ctx);
 const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => sceneSync.focusOn(id));
-const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-panel")!);
+const partInfoModal = new PartInfoModal(document.body);
 
 let gears: GearInstance[] = [];
 try {
@@ -39,7 +48,12 @@ try {
   console.error("Failed to load saved layout from localStorage; starting with an empty layout.", err);
   gears = [];
 }
-let timeScale = 1;
+
+// Durability/wear and its time-scale control are disabled for now (kept in the sim
+// core, just never advanced) — a fixed 0 keeps every gear at full health indefinitely,
+// so the current experience is "place gears, watch them mesh and spin," nothing wearing
+// out yet. Re-enabling later is exactly "wire a slider back to this constant."
+const WEAR_TIME_SCALE = 0;
 
 function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
@@ -53,13 +67,13 @@ function addGear(type: GearType, position: [number, number, number]): void {
 const SPAWN_GRID_PITCH = 24;
 const SPAWN_GRID_COLUMNS = 5;
 new PaletteUI(document.querySelector("#palette")!, (type) => {
-  const column = gears.length % SPAWN_GRID_COLUMNS;
-  const row = Math.floor(gears.length / SPAWN_GRID_COLUMNS);
-  const center = (SPAWN_GRID_COLUMNS - 1) / 2;
-  addGear(type, [(column - center) * SPAWN_GRID_PITCH, 0, (row - center) * SPAWN_GRID_PITCH]);
+  partInfoModal.show(type, () => {
+    const column = gears.length % SPAWN_GRID_COLUMNS;
+    const row = Math.floor(gears.length / SPAWN_GRID_COLUMNS);
+    const center = (SPAWN_GRID_COLUMNS - 1) / 2;
+    addGear(type, [(column - center) * SPAWN_GRID_PITCH, 0, (row - center) * SPAWN_GRID_PITCH]);
+  });
 });
-
-new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
 
 new SaveLoadPanel(document.querySelector("#save-load")!, {
   save: () => saveToLocalStorage(gears),
@@ -101,11 +115,6 @@ new DragControls({
     gear.position = position;
     if (rotation !== undefined) gear.rotation = rotation; // tooth-interlocking snap
   },
-  onSelect: (id) => {
-    const gear = id ? gears.find((g) => g.id === id) : undefined;
-    if (gear) durabilityPanel.show(gear);
-    else durabilityPanel.hide();
-  },
   onPreview: (partnerId) => sceneSync.setPreviewHighlight(partnerId),
 });
 
@@ -121,7 +130,7 @@ function animate(): void {
   const dt = Math.min(0.1, (now - lastTime) / 1000);
   lastTime = now;
 
-  const result = tick(gears, dt, timeScale);
+  const result = tick(gears, dt, WEAR_TIME_SCALE);
   gears = result.gears;
   sceneSync.sync(gears, result.diagnostics);
   diagnosticsPanel.render(result.diagnostics);

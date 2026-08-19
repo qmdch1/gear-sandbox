@@ -17,4 +17,14 @@ export const GEAR_DEFS: Record<GearType, GearTypeDef> = {
   // a gear's shaft rather than mesh via teeth, and don't wear themselves.
   gauge:   { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
   fan:     { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  // Alternate power sources -- mechanically identical to "crank" (mesh like a spur gear,
+  // auto-spin the moment they're placed), just a different real-world picture of "where
+  // the energy comes from" for teaching purposes.
+  battery: { durabilityMax: 200, baseWearPerSecond: 0.5, loadWearMultiplier: 1.2 },
+  outlet:  { durabilityMax: 200, baseWearPerSecond: 0.5, loadWearMultiplier: 1.2 },
 };
+
+/** Gears that drive the rest of the train the moment they're placed (their
+ *  `angularVelocity` is preset, not computed by `propagateRotation`) -- "crank" plus its
+ *  battery/outlet reskins, all three otherwise identical parallel-family gears. */
+export const POWER_SOURCE_TYPES = new Set<GearType>(["crank", "battery", "outlet"]);

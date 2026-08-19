@@ -1,5 +1,5 @@
 import type { GearInstance, GearType } from "./types";
-import { GEAR_DEFS } from "./gearDefs";
+import { GEAR_DEFS, POWER_SOURCE_TYPES } from "./gearDefs";
 
 /** Bevel/worm gears mesh with a partner only on a *perpendicular* axis (see meshing.ts),
  *  so they need a different default axis than the rest of the parallel-shaft family. */
@@ -30,6 +30,6 @@ export function createGear(type: GearType, position: [number, number, number]): 
     durabilityCurrent: def.durabilityMax,
     broken: false,
     rotation: 0,
-    angularVelocity: type === "crank" ? 1 : 0,
+    angularVelocity: POWER_SOURCE_TYPES.has(type) ? 1 : 0,
   };
 }

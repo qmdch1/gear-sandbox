@@ -73,6 +73,36 @@ function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
   return mergeGeometries([base, handle]);
 }
 
+/** A power source shaped like a battery: the base gear (identical mesh rules to a
+ *  crank) plus a squat cylinder with a small "+" terminal bump — a different picture
+ *  of "where the energy comes from" for teaching, mechanically the same part. */
+function batteryGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const base = extrudedGearGeometry(teeth, module);
+  const pitchRadius = (module * teeth) / 2;
+  const body = new THREE.CylinderGeometry(module * 0.55, module * 0.55, module * 1.2, 16);
+  body.rotateX(Math.PI / 2);
+  body.translate(pitchRadius * 0.75, 0, GEAR_THICKNESS / 2 + module * 0.6);
+  const terminal = new THREE.CylinderGeometry(module * 0.2, module * 0.2, module * 0.3, 12);
+  terminal.rotateX(Math.PI / 2);
+  terminal.translate(pitchRadius * 0.75, 0, GEAR_THICKNESS / 2 + module * 1.35);
+  return mergeGeometries([base, body, terminal]);
+}
+
+/** A power source shaped like a wall outlet: the base gear plus a flat plate with two
+ *  raised prong slots — another "where the energy comes from" picture for the same
+ *  crank-equivalent part. */
+function outletGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const base = extrudedGearGeometry(teeth, module);
+  const pitchRadius = (module * teeth) / 2;
+  const plate = new THREE.BoxGeometry(module * 1.4, module * 1.8, module * 0.3);
+  plate.translate(pitchRadius * 0.75, 0, GEAR_THICKNESS / 2 + module * 0.15);
+  const slotA = new THREE.BoxGeometry(module * 0.15, module * 0.5, module * 0.15);
+  slotA.translate(pitchRadius * 0.75 - module * 0.3, module * 0.35, GEAR_THICKNESS / 2 + module * 0.3);
+  const slotB = new THREE.BoxGeometry(module * 0.15, module * 0.5, module * 0.15);
+  slotB.translate(pitchRadius * 0.75 + module * 0.3, module * 0.35, GEAR_THICKNESS / 2 + module * 0.3);
+  return mergeGeometries([base, plate, slotA, slotB]);
+}
+
 /** A flat, circular Shape extruded along Z, centered on its own thickness — the shared
  *  builder behind the flywheel and gauge dial (both are "solid disc with a hole,"
  *  differing only in radii and what else gets merged onto them). `ExtrudeGeometry`
@@ -172,5 +202,9 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return gaugeGeometry(module);
     case "fan":
       return fanGeometry(module);
+    case "battery":
+      return batteryGeometry(teeth, module);
+    case "outlet":
+      return outletGeometry(teeth, module);
   }
 }
