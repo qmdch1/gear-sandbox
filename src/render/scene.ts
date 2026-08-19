@@ -9,15 +9,6 @@ export interface SceneContext {
   groundPlane: THREE.Mesh;
 }
 
-// Mock renderer for environments without WebGL (e.g., jsdom)
-class MockWebGLRenderer {
-  domElement: HTMLCanvasElement;
-  constructor(public canvas: HTMLCanvasElement) {
-    this.domElement = canvas;
-  }
-  setSize() {}
-}
-
 export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1a1d22);
@@ -26,14 +17,8 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   camera.position.set(30, 30, 30);
   camera.lookAt(0, 0, 0);
 
-  let renderer: any;
-  try {
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    renderer.setSize(canvas.clientWidth || 1, canvas.clientHeight || 1);
-  } catch {
-    // Fallback for environments without WebGL (e.g., jsdom)
-    renderer = new MockWebGLRenderer(canvas);
-  }
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setSize(canvas.clientWidth || 1, canvas.clientHeight || 1);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
