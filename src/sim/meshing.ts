@@ -6,6 +6,10 @@ const PERP_DOT_THRESHOLD = 0.1;       // |axis dot| below this => perpendicular 
 const COUPLING_DISTANCE_TOLERANCE = 0.05;
 
 const PARALLEL_FAMILY = new Set<GearInstance["type"]>(["spur", "helical", "crank"]);
+// Accessories that never mesh via teeth — they only ever attach by sitting coincident
+// on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge or a
+// fan is functionally the same attach rule, just a different indicator/output device).
+const COUPLING_ONLY_TYPES = new Set<GearInstance["type"]>(["load", "gauge", "fan"]);
 
 function dist(a: [number, number, number], b: [number, number, number]): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -21,8 +25,8 @@ function pitchRadius(g: GearInstance): number {
 
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
-  if (a.type === "load" || b.type === "load") {
-    if (a.type === "load" && b.type === "load") return null; // two load objects never couple
+  if (COUPLING_ONLY_TYPES.has(a.type) || COUPLING_ONLY_TYPES.has(b.type)) {
+    if (COUPLING_ONLY_TYPES.has(a.type) && COUPLING_ONLY_TYPES.has(b.type)) return null; // two accessories never couple to each other
     if (dist(a.position, b.position) > COUPLING_DISTANCE_TOLERANCE) return null;
     if (Math.abs(dot(a.axis, b.axis)) < PARALLEL_DOT_THRESHOLD) return null;
     return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
@@ -74,8 +78,8 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
  *  rules as a separate function rather than refactoring `evaluatePair` to share it —
  *  `evaluatePair` is exhaustively tested already, and this keeps that logic unrisked. */
 export function idealConnectionDistance(a: GearInstance, b: GearInstance): number | null {
-  if (a.type === "load" || b.type === "load") {
-    if (a.type === "load" && b.type === "load") return null;
+  if (COUPLING_ONLY_TYPES.has(a.type) || COUPLING_ONLY_TYPES.has(b.type)) {
+    if (COUPLING_ONLY_TYPES.has(a.type) && COUPLING_ONLY_TYPES.has(b.type)) return null;
     if (Math.abs(dot(a.axis, b.axis)) < PARALLEL_DOT_THRESHOLD) return null;
     return 0;
   }
@@ -168,8 +172,9 @@ export function meshPhaseRotation(
 }
 
 /** True when two gears geometrically overlap (closer than a valid mesh distance allows,
- *  and NOT already a legitimate connection -- a load or worm coupling is intentionally
- *  coincident with its host gear, so a valid `evaluatePair` result is never an overlap). */
+ *  and NOT already a legitimate connection -- a coupling-only accessory (load/gauge/fan)
+ *  or worm shaft coupling is intentionally coincident with its host gear, so a valid
+ *  `evaluatePair` result is never an overlap). */
 export function isOverlapping(a: GearInstance, b: GearInstance): boolean {
   if (evaluatePair(a, b)) return false;
   const centerDistance = dist(a.position, b.position);

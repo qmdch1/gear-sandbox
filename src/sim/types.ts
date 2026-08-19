@@ -1,12 +1,12 @@
-export type GearType = "spur" | "helical" | "crank" | "bevel" | "worm" | "load";
+export type GearType = "spur" | "helical" | "crank" | "bevel" | "worm" | "load" | "gauge" | "fan";
 
 export interface GearInstance {
   id: string;
   type: GearType;
   position: [number, number, number];
   axis: [number, number, number]; // normalized rotation axis direction
-  teeth: number;       // thread-starts for "worm"; 0 for "load"
-  module: number;      // tooth size, used for meshing distance checks; ignored for "load"
+  teeth: number;       // thread-starts for "worm"; 0 for "load"/"gauge"/"fan" (no teeth to mesh)
+  module: number;      // tooth size, used for meshing distance checks; ignored for "load"/"gauge"/"fan"
   durabilityMax: number;
   durabilityCurrent: number;
   broken: boolean;

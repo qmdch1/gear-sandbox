@@ -13,4 +13,8 @@ export const GEAR_DEFS: Record<GearType, GearTypeDef> = {
   bevel:   { durabilityMax: 120, baseWearPerSecond: 1.2, loadWearMultiplier: 1.5 },
   worm:    { durabilityMax: 80,  baseWearPerSecond: 1.5, loadWearMultiplier: 1.8 },
   load:    { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  // Indicator/output accessories, not drivetrain parts -- like `load`, they couple onto
+  // a gear's shaft rather than mesh via teeth, and don't wear themselves.
+  gauge:   { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  fan:     { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
 };

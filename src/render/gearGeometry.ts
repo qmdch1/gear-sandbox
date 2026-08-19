@@ -73,21 +73,52 @@ function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
   return mergeGeometries([base, handle]);
 }
 
-/** A flat ring (annulus) extruded into a flywheel-with-a-hole, rather than a solid disc. */
-function loadGeometry(module: number): THREE.BufferGeometry {
-  const outerRadius = module * 2;
-  const innerRadius = module * 0.7;
+/** A flat, circular Shape extruded along Z, centered on its own thickness — the shared
+ *  builder behind the flywheel and gauge dial (both are "solid disc with a hole,"
+ *  differing only in radii and what else gets merged onto them). `ExtrudeGeometry`
+ *  already extrudes along +Z from a shape defined in the XY plane, which is exactly
+ *  the thickness axis `gearMesh.ts` expects (no `rotateX` needed here, unlike the
+ *  Y-aligned primitives like `CylinderGeometry`/`ConeGeometry` below). */
+function discWithHole(outerRadius: number, innerRadius: number, thickness: number): THREE.BufferGeometry {
   const shape = new THREE.Shape(circlePoints(outerRadius));
   shape.holes.push(boreHole(innerRadius));
-  const thickness = GEAR_THICKNESS * 2;
-  const geometry = new THREE.ExtrudeGeometry(shape, {
-    ...BEVEL_OPTIONS,
-    depth: thickness,
-    curveSegments: 24,
-  });
+  const geometry = new THREE.ExtrudeGeometry(shape, { ...BEVEL_OPTIONS, depth: thickness, curveSegments: 24 });
   geometry.translate(0, 0, -thickness / 2); // center on its local origin, like the other gear geometries
-  geometry.rotateX(Math.PI / 2);
   return geometry;
+}
+
+/** A flywheel: a ring (annulus) rather than a solid disc, so it visibly has a hole. */
+function loadGeometry(module: number): THREE.BufferGeometry {
+  return discWithHole(module * 2, module * 0.7, GEAR_THICKNESS * 2);
+}
+
+/** An RPM dial: a disc face + a needle merged on top, both rigid so the needle visibly
+ *  sweeps around as the coupled shaft spins — an at-a-glance "how fast is this turning"
+ *  readout for a teaching sandbox, without needing a numeric HUD overlay. */
+function gaugeGeometry(module: number): THREE.BufferGeometry {
+  const dialRadius = module * 2;
+  const dial = discWithHole(dialRadius, module * 0.3, GEAR_THICKNESS);
+  const needle = new THREE.BoxGeometry(dialRadius * 1.7, module * 0.15, GEAR_THICKNESS * 1.5);
+  needle.translate(dialRadius * 0.35, 0, 0);
+  return mergeGeometries([dial, needle]);
+}
+
+/** A small hub with a few blade paddles, radiating outward — a fan/propeller, giving
+ *  rotation a second, very legible "output device" beyond the flywheel's plain color
+ *  change (kids can watch it visibly spin like a real fan). */
+function fanGeometry(module: number): THREE.BufferGeometry {
+  const hubRadius = module * 0.6;
+  const hub = discWithHole(hubRadius, hubRadius * 0.3, GEAR_THICKNESS);
+  const bladeCount = 4;
+  const bladeLength = module * 2.2;
+  const parts = [hub];
+  for (let i = 0; i < bladeCount; i++) {
+    const blade = new THREE.BoxGeometry(bladeLength, module * 0.7, GEAR_THICKNESS * 0.6);
+    blade.translate(bladeLength / 2 + hubRadius * 0.7, 0, 0);
+    blade.rotateZ((i / bladeCount) * Math.PI * 2);
+    parts.push(blade);
+  }
+  return mergeGeometries(parts);
 }
 
 function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
@@ -137,5 +168,9 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
     }
     case "load":
       return loadGeometry(module);
+    case "gauge":
+      return gaugeGeometry(module);
+    case "fan":
+      return fanGeometry(module);
   }
 }

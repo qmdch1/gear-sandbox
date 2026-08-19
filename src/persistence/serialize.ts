@@ -2,7 +2,7 @@ import type { GearInstance, GearType } from "../sim/types";
 
 const SCHEMA_VERSION = 1;
 
-const GEAR_TYPES = new Set<GearType>(["spur", "helical", "crank", "bevel", "worm", "load"]);
+const GEAR_TYPES = new Set<GearType>(["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan"]);
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);

@@ -97,6 +97,28 @@ describe("evaluatePair", () => {
     const load = makeGear({ id: "l", type: "load", teeth: 0, position: [5, 0, 0] });
     expect(evaluatePair(gear, load)).toBeNull();
   });
+
+  it("couples a gauge (RPM indicator) the same way a load object does", () => {
+    const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
+    const gauge = makeGear({ id: "gg", type: "gauge", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+    const edge = evaluatePair(gear, gauge);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("couples a fan the same way a load object does", () => {
+    const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
+    const fan = makeGear({ id: "f", type: "fan", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+    const edge = evaluatePair(gear, fan);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("does not couple two accessory objects (gauge, fan, load) to each other", () => {
+    const gauge = makeGear({ id: "gg", type: "gauge", teeth: 0, position: [0, 0, 0] });
+    const fan = makeGear({ id: "f", type: "fan", teeth: 0, position: [0, 0, 0] });
+    expect(evaluatePair(gauge, fan)).toBeNull();
+  });
 });
 
 describe("isOverlapping", () => {

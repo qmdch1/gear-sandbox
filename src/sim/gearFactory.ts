@@ -10,7 +10,7 @@ export function defaultAxisForType(type: GearType): [number, number, number] {
 }
 
 export function defaultTeethForType(type: GearType): number {
-  if (type === "load") return 0;
+  if (type === "load" || type === "gauge" || type === "fan") return 0; // couple, don't mesh
   if (type === "worm") return 2; // thread-starts: keep low for a real reduction ratio
   return 20;
 }
