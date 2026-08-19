@@ -22,6 +22,12 @@ export class PartInfoModal {
     const box = document.createElement("div");
     box.className = "part-info-box";
 
+    // Everything except the action buttons scrolls internally if it's taller than the
+    // viewport (a long description + photo shouldn't be able to push "배치하기"/"취소"
+    // off-screen with no way to reach them) -- the buttons stay a fixed footer below.
+    const content = document.createElement("div");
+    content.className = "part-info-content";
+
     this.titleEl = document.createElement("h3");
     this.iconEl = document.createElement("div");
     this.iconEl.className = "part-info-icon";
@@ -35,6 +41,8 @@ export class PartInfoModal {
     purposeHeading.textContent = "어디에, 왜 쓰나요?";
     this.purposeEl = document.createElement("p");
     this.purposeEl.className = "part-info-purpose";
+
+    content.append(this.titleEl, this.iconEl, this.photoEl, this.descriptionEl, purposeHeading, this.purposeEl);
 
     const buttons = document.createElement("div");
     buttons.className = "part-info-buttons";
@@ -51,7 +59,7 @@ export class PartInfoModal {
     cancelBtn.addEventListener("click", () => this.hide());
     buttons.append(this.confirmBtn, cancelBtn);
 
-    box.append(this.titleEl, this.iconEl, this.photoEl, this.descriptionEl, purposeHeading, this.purposeEl, buttons);
+    box.append(content, buttons);
     this.overlay.appendChild(box);
     root.appendChild(this.overlay);
 
