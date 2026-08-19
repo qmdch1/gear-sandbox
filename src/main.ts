@@ -1,3 +1,109 @@
-// src/main.ts
+import type { GearInstance, GearType } from "./sim/types";
+import { GEAR_DEFS } from "./sim/gearDefs";
+import { tick } from "./sim/simulation";
+import { createScene } from "./render/scene";
+import { SceneSync } from "./render/sceneSync";
+import { DragControls } from "./interaction/dragControls";
+import { PaletteUI } from "./ui/paletteUI";
+import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
+import { DurabilityPanel } from "./ui/durabilityPanel";
+import { TimeScaleSlider } from "./ui/timeScaleSlider";
+import { SaveLoadPanel } from "./ui/saveLoadPanel";
+import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
+
 const app = document.querySelector<HTMLDivElement>("#app")!;
-app.innerHTML = `<canvas id="scene-canvas"></canvas>`;
+app.innerHTML = `
+  <div id="sidebar">
+    <div id="palette"></div>
+    <div id="save-load"></div>
+    <label>시간배율 <div id="time-scale"></div></label>
+    <div id="diagnostics"></div>
+    <div id="durability-panel" hidden></div>
+  </div>
+  <div id="viewport"><canvas id="scene-canvas"></canvas></div>
+`;
+
+const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
+const ctx = createScene(canvas);
+const sceneSync = new SceneSync(ctx);
+const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => sceneSync.focusOn(id));
+const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-panel")!);
+
+let gears: GearInstance[] = loadFromLocalStorage() ?? [];
+let timeScale = 1;
+let nextId = 0;
+
+function addGear(type: GearType, position: [number, number, number]): void {
+  const def = GEAR_DEFS[type];
+  gears.push({
+    id: `gear-${nextId++}`,
+    type,
+    position,
+    axis: [0, 1, 0],
+    teeth: type === "load" ? 0 : 20,
+    module: 1,
+    durabilityMax: def.durabilityMax,
+    durabilityCurrent: def.durabilityMax,
+    broken: false,
+    rotation: 0,
+    angularVelocity: type === "crank" ? 1 : 0,
+  });
+}
+
+new PaletteUI(document.querySelector("#palette")!, (type) => addGear(type, [0, 0, 0]));
+
+new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
+
+new SaveLoadPanel(document.querySelector("#save-load")!, {
+  save: () => saveToLocalStorage(gears),
+  load: () => {
+    const loaded = loadFromLocalStorage();
+    if (loaded) gears = loaded;
+  },
+  exportFile: () => {
+    const blob = exportToFile(gears);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "gear-layout.json";
+    a.click();
+    URL.revokeObjectURL(url);
+  },
+  importFile: async (file) => {
+    gears = await importFromFile(file);
+  },
+});
+
+new DragControls({
+  ctx,
+  getGears: () => gears,
+  onMove: (id, position) => {
+    const gear = gears.find((g) => g.id === id);
+    if (gear) gear.position = position;
+  },
+});
+
+canvas.addEventListener("click", () => {
+  // Durability detail on click is wired via the drag controls' hit-testing in a
+  // follow-up pass once the raycaster's last-hit id is exposed; for now the
+  // diagnostics panel's focus-on-click covers the primary "inspect a gear" need.
+});
+
+let lastTime = performance.now();
+function animate(): void {
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - lastTime) / 1000);
+  lastTime = now;
+
+  const result = tick(gears, dt, timeScale);
+  gears = result.gears;
+  sceneSync.sync(gears, result.diagnostics);
+  diagnosticsPanel.render(result.diagnostics);
+
+  ctx.controls.update();
+  ctx.renderer.render(ctx.scene, ctx.camera);
+  requestAnimationFrame(animate);
+}
+requestAnimationFrame(animate);
+
+void durabilityPanel; // wired up for the click-to-inspect follow-up noted above
