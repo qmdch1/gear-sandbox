@@ -1,6 +1,4 @@
-/**
- * @vitest-environment jsdom
- */
+// @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
 import { TimeScaleSlider } from "../../src/ui/timeScaleSlider";
 
