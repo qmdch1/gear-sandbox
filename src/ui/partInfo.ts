@@ -9,6 +9,10 @@ export interface PartInfo {
   /** Inner markup for a `<svg viewBox="0 0 100 100">` — simple line-art, no external
    *  image asset (consistent with the rest of the app's procedural-only visuals). */
   icon: string;
+  /** Public-folder path to a real reference photo of the part (PD/CC0 licensed —
+   *  see docs/superpowers/specs/part-photos-report.md), shown alongside the icon in
+   *  the part-info modal. Undefined when no suitably licensed photo was found. */
+  image?: string;
 }
 
 export const PART_INFO: Record<GearType, PartInfo> = {
@@ -25,6 +29,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
         <line x1="25" y1="25" x2="32" y2="32"/><line x1="75" y1="75" x2="68" y2="68"/>
         <line x1="75" y1="25" x2="68" y2="32"/><line x1="25" y1="75" x2="32" y2="68"/>
       </g>`,
+    image: "/parts/spur.jpg",
   },
   helical: {
     label: "헬리컬 기어",
@@ -36,6 +41,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <g stroke="currentColor" stroke-width="3">
         <line x1="30" y1="70" x2="45" y2="30"/><line x1="45" y1="75" x2="60" y2="35"/><line x1="60" y1="78" x2="75" y2="38"/>
       </g>`,
+    image: "/parts/helical.jpg",
   },
   crank: {
     label: "손잡이 기어",
@@ -46,6 +52,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <circle cx="42" cy="50" r="7" fill="none" stroke="currentColor" stroke-width="3"/>
       <line x1="60" y1="50" x2="85" y2="50" stroke="currentColor" stroke-width="5"/>
       <circle cx="88" cy="50" r="7" fill="currentColor"/>`,
+    image: "/parts/crank.jpg",
   },
   bevel: {
     label: "베벨 기어",
@@ -55,6 +62,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
     icon: `<polygon points="20,80 80,80 60,20 40,20" fill="none" stroke="currentColor" stroke-width="5"/>
       <line x1="30" y1="80" x2="30" y2="90" stroke="currentColor" stroke-width="4"/>
       <line x1="70" y1="80" x2="70" y2="90" stroke="currentColor" stroke-width="4"/>`,
+    image: "/parts/bevel.jpg",
   },
   worm: {
     label: "웜 기어",
@@ -66,6 +74,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <g stroke="currentColor" stroke-width="3">
         <line x1="24" y1="48" x2="76" y2="38"/><line x1="24" y1="58" x2="76" y2="48"/><line x1="24" y1="38" x2="60" y2="32"/>
       </g>`,
+    image: "/parts/worm.jpg",
   },
   load: {
     label: "부하(플라이휠)",
@@ -74,6 +83,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       "실제 기계에서 '기어가 최종적으로 돌려야 하는 무게(부하)'를 표현합니다 — 세탁기 드럼, 선풍기 날개, 자동차 바퀴처럼 부하가 클수록 기어가 더 빨리 닳는다는 걸 눈으로 보여줍니다.",
     icon: `<circle cx="50" cy="50" r="32" fill="none" stroke="currentColor" stroke-width="10"/>
       <circle cx="50" cy="50" r="10" fill="none" stroke="currentColor" stroke-width="4"/>`,
+    image: "/parts/load.jpg",
   },
   gauge: {
     label: "회전계(게이지)",
@@ -86,6 +96,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <g stroke="currentColor" stroke-width="3">
         <line x1="50" y1="20" x2="50" y2="26"/><line x1="80" y1="50" x2="74" y2="50"/><line x1="20" y1="50" x2="26" y2="50"/>
       </g>`,
+    image: "/parts/gauge.jpg",
   },
   battery: {
     label: "배터리",
@@ -97,6 +108,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <rect x="66" y="38" width="20" height="24" rx="3" fill="none" stroke="currentColor" stroke-width="4"/>
       <line x1="76" y1="30" x2="76" y2="38" stroke="currentColor" stroke-width="4"/>
       <line x1="72" y1="34" x2="80" y2="34" stroke="currentColor" stroke-width="3"/>`,
+    image: "/parts/battery.jpg",
   },
   outlet: {
     label: "콘센트",
@@ -108,6 +120,7 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <rect x="64" y="34" width="26" height="32" rx="4" fill="none" stroke="currentColor" stroke-width="4"/>
       <line x1="74" y1="44" x2="74" y2="52" stroke="currentColor" stroke-width="3"/>
       <line x1="82" y1="44" x2="82" y2="52" stroke="currentColor" stroke-width="3"/>`,
+    image: "/parts/outlet.jpg",
   },
   fan: {
     label: "팬(프로펠러)",
@@ -119,5 +132,6 @@ export const PART_INFO: Record<GearType, PartInfo> = {
         <ellipse cx="50" cy="25" rx="8" ry="18"/><ellipse cx="75" cy="50" rx="18" ry="8"/>
         <ellipse cx="50" cy="75" rx="8" ry="18"/><ellipse cx="25" cy="50" rx="18" ry="8"/>
       </g>`,
+    image: "/parts/fan.jpg",
   },
 };

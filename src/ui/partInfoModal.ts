@@ -8,6 +8,7 @@ export class PartInfoModal {
   private overlay: HTMLDivElement;
   private titleEl: HTMLHeadingElement;
   private iconEl: HTMLDivElement;
+  private photoEl: HTMLImageElement;
   private descriptionEl: HTMLParagraphElement;
   private purposeEl: HTMLParagraphElement;
   private confirmBtn: HTMLButtonElement;
@@ -24,6 +25,10 @@ export class PartInfoModal {
     this.titleEl = document.createElement("h3");
     this.iconEl = document.createElement("div");
     this.iconEl.className = "part-info-icon";
+    this.photoEl = document.createElement("img");
+    this.photoEl.className = "part-info-photo";
+    this.photoEl.alt = "";
+    this.photoEl.hidden = true;
     this.descriptionEl = document.createElement("p");
 
     const purposeHeading = document.createElement("strong");
@@ -46,7 +51,7 @@ export class PartInfoModal {
     cancelBtn.addEventListener("click", () => this.hide());
     buttons.append(this.confirmBtn, cancelBtn);
 
-    box.append(this.titleEl, this.iconEl, this.descriptionEl, purposeHeading, this.purposeEl, buttons);
+    box.append(this.titleEl, this.iconEl, this.photoEl, this.descriptionEl, purposeHeading, this.purposeEl, buttons);
     this.overlay.appendChild(box);
     root.appendChild(this.overlay);
 
@@ -62,6 +67,8 @@ export class PartInfoModal {
     const info = PART_INFO[type];
     this.titleEl.textContent = info.label;
     this.iconEl.innerHTML = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">${info.icon}</svg>`;
+    this.photoEl.hidden = !info.image;
+    this.photoEl.src = info.image ?? "";
     this.descriptionEl.textContent = info.description;
     this.purposeEl.textContent = info.purpose;
     this.onConfirm = onConfirm;
