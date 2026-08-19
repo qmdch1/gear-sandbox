@@ -9,6 +9,7 @@ import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
 import { DurabilityPanel } from "./ui/durabilityPanel";
 import { TimeScaleSlider } from "./ui/timeScaleSlider";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
+import { ServerSyncPanel } from "./ui/serverSyncPanel";
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
@@ -16,6 +17,7 @@ app.innerHTML = `
   <div id="sidebar">
     <div id="palette"></div>
     <div id="save-load"></div>
+    <div id="server-sync"></div>
     <label>시간배율 <div id="time-scale"></div></label>
     <div id="diagnostics"></div>
     <div id="durability-panel" hidden></div>
@@ -71,6 +73,13 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
   },
   importFile: async (file) => {
     gears = await importFromFile(file);
+  },
+});
+
+new ServerSyncPanel(document.querySelector("#server-sync")!, {
+  getGears: () => gears,
+  applyLoadedGears: (loaded) => {
+    gears = loaded;
   },
 });
 
