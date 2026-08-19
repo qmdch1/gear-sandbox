@@ -1,0 +1,59 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("three", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("three")>();
+  class MockWebGLRenderer {
+    domElement: HTMLCanvasElement;
+    constructor() {
+      this.domElement = document.createElement("canvas");
+    }
+    setSize() {}
+    render() {}
+  }
+  return {
+    ...actual,
+    WebGLRenderer: MockWebGLRenderer,
+  };
+});
+
+import { computeSyncActions, SceneSync } from "../../src/render/sceneSync";
+import { createScene } from "../../src/render/scene";
+import type { GearInstance } from "../../src/sim/types";
+
+function makeGear(overrides: Partial<GearInstance>): GearInstance {
+  return {
+    id: "g", type: "spur", position: [0, 0, 0], axis: [0, 1, 0],
+    teeth: 20, module: 1, durabilityMax: 100, durabilityCurrent: 100,
+    broken: false, rotation: 0, angularVelocity: 0, ...overrides,
+  };
+}
+
+describe("computeSyncActions", () => {
+  it("adds new gears and removes stale ones", () => {
+    const existing = new Set(["a", "stale"]);
+    const gears = [makeGear({ id: "a" }), makeGear({ id: "new" })];
+    const { toAdd, toRemoveIds } = computeSyncActions(existing, gears);
+    expect(toAdd.map((g) => g.id)).toEqual(["new"]);
+    expect(toRemoveIds).toEqual(["stale"]);
+  });
+});
+
+describe("SceneSync", () => {
+  it("adds one mesh per gear to the scene", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    const gears = [makeGear({ id: "a" }), makeGear({ id: "b", position: [5, 0, 0] })];
+    sync.sync(gears, { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    const gearMeshes = ctx.scene.children.filter((c) => c.name === "a" || c.name === "b");
+    expect(gearMeshes.length).toBe(2);
+  });
+
+  it("removes a mesh once its gear disappears from the list", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" })], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    sync.sync([], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    expect(ctx.scene.children.some((c) => c.name === "a")).toBe(false);
+  });
+});
