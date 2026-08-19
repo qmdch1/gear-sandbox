@@ -59,6 +59,14 @@ function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
 }
 
+// A brand-new session (nothing in localStorage yet) starts on a completely empty
+// canvas, which gives a first-time user nothing to drag/connect to -- pre-place one
+// power-source gear at the origin (exactly where the default top-down camera looks)
+// so there's always something to build onto right away.
+if (gears.length === 0) {
+  addGear("crank", [0, 0, 0]);
+}
+
 // Default gears (module 1, 20 teeth) need ~20 units of center distance to mesh, so a
 // tight spawn grid made every freshly-placed gear register as "겹침" (overlapping)
 // instead of a real, draggable starting point. 24 units of pitch keeps fresh gears
