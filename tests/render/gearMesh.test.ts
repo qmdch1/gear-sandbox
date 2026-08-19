@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import * as THREE from "three";
 import { describe, it, expect } from "vitest";
 import { colorForDurabilityRatio, GearMeshObject } from "../../src/render/gearMesh";
 import type { GearInstance } from "../../src/sim/types";
