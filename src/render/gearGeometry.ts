@@ -101,10 +101,16 @@ function extrudedGearGeometry(teeth: number, module: number, twistPerUnit = 0): 
   const boreRadius = Math.max(pitchRadius * 0.3, module * 0.6);
   shape.holes.push(boreHole(boreRadius));
 
+  // Without a custom UVGenerator, ExtrudeGeometry's default maps UVs straight from
+  // the shape's raw (unnormalized) local coordinates -- for a ~20-unit-wide gear
+  // face that tiles the brushed-metal texture's radial gradient dozens of times
+  // over, reading as fine noise rather than one coherent brushed-metal disc (see
+  // `radialUVGenerator` below, also used for the gauge dial face).
   const geometry = new THREE.ExtrudeGeometry(shape, {
     ...BEVEL_OPTIONS,
     depth: GEAR_THICKNESS,
     curveSegments: 1,
+    UVGenerator: radialUVGenerator(pitchRadius + module),
   });
   geometry.translate(0, 0, -GEAR_THICKNESS / 2); // center on its own origin, like discWithHole below
   if (twistPerUnit !== 0) {
@@ -178,10 +184,11 @@ function radialUVGenerator(outerRadius: number): DiscUVGenerator {
  *  already extrudes along +Z from a shape defined in the XY plane, which is exactly
  *  the thickness axis `gearMesh.ts` expects (no `rotateX` needed here, unlike the
  *  Y-aligned primitives like `CylinderGeometry`/`ConeGeometry` below). `useRadialUV`
- *  opts into `radialUVGenerator` above (only the gauge dial needs it, for its face
- *  texture -- the flywheel/fan hub use the shared metal texture, whose tiling
- *  doesn't depend on clean per-face UVs the way a printed dial face does). */
-function discWithHole(outerRadius: number, innerRadius: number, thickness: number, useRadialUV = false): THREE.BufferGeometry {
+ *  (on by default) uses `radialUVGenerator` above instead of ExtrudeGeometry's raw,
+ *  unnormalized default UVs -- without it, a texture tiles into fine repeated noise
+ *  across a disc this size rather than reading as one coherent surface, whether
+ *  that's the gauge's printed dial face or the flywheel/fan hub's brushed metal. */
+function discWithHole(outerRadius: number, innerRadius: number, thickness: number, useRadialUV = true): THREE.BufferGeometry {
   const shape = new THREE.Shape(circlePoints(outerRadius));
   shape.holes.push(boreHole(innerRadius));
   const options: THREE.ExtrudeGeometryOptions = { ...BEVEL_OPTIONS, depth: thickness, curveSegments: 24 };
@@ -201,7 +208,7 @@ function loadGeometry(module: number): THREE.BufferGeometry {
  *  readout for a teaching sandbox, without needing a numeric HUD overlay. */
 function gaugeGeometry(module: number): THREE.BufferGeometry {
   const dialRadius = module * 2;
-  const dial = discWithHole(dialRadius, module * 0.3, GEAR_THICKNESS, true);
+  const dial = discWithHole(dialRadius, module * 0.3, GEAR_THICKNESS);
   const needle = new THREE.BoxGeometry(dialRadius * 1.7, module * 0.15, GEAR_THICKNESS * 1.5);
   needle.translate(dialRadius * 0.35, 0, 0);
   return mergeGeometries([dial, needle]);

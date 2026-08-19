@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
+import { hasRealCanvasSupport } from "./metalTexture";
 
 export interface SceneContext {
   scene: THREE.Scene;
@@ -23,6 +25,21 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setSize(canvas.clientWidth || 1, canvas.clientHeight || 1);
+
+  // Metallic materials (metalness > 0, the gears' whole look) need something to
+  // reflect to read as actual metal -- without an environment map they just look
+  // like flat matte color no matter the texture, which is exactly the "just looks
+  // like a red blob, not steel" complaint. A generated studio-room environment
+  // (three's standard PMREM approach, no external HDRI file/download needed) gives
+  // every metallic surface believable highlights and reflections. Skipped under
+  // jsdom (this project's DOM-touching tests) -- there's no real WebGL context
+  // there for PMREMGenerator's render passes to run against (same guard used for
+  // the canvas textures in metalTexture.ts).
+  if (hasRealCanvasSupport()) {
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    scene.environment = pmremGenerator.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmremGenerator.dispose();
+  }
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
