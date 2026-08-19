@@ -2,22 +2,79 @@ import * as THREE from "three";
 import type { GearType } from "../sim/types";
 
 const GEAR_THICKNESS = 0.4;
-const ADDENDUM_FACTOR = 1.25; // tooth tip radius beyond the pitch radius, in modules
+const ADDENDUM_FACTOR = 1.25; // bevel/worm tip radius beyond the pitch radius, in modules (unrelated to the involute profile below)
 const BEVEL_OPTIONS = { bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.06, bevelSegments: 2 };
 
-/** Pure profile math: alternating outer-tooth/inner-root points around the pitch circle. */
+const PRESSURE_ANGLE = (20 * Math.PI) / 180; // standard 20° pressure angle
+const DEDENDUM_FACTOR = 1.25; // root depth below the pitch circle, in modules (standard)
+const FLANK_SEGMENTS = 4; // involute-curve samples per tooth flank
+
+/** A point on the involute of a circle of `baseRadius`, at roll parameter `t` (t=0 is
+ *  where the involute meets the base circle). This is the actual curve every real
+ *  gear tooth's flank is cut to -- not an approximation of it. */
+function involutePoint(baseRadius: number, t: number): THREE.Vector2 {
+  return new THREE.Vector2(
+    baseRadius * (Math.cos(t) + t * Math.sin(t)),
+    baseRadius * (Math.sin(t) - t * Math.cos(t)),
+  );
+}
+
+/** The roll parameter `t` at which the involute of `baseRadius` reaches `radius`
+ *  (radius = baseRadius * sqrt(1 + t^2), inverted). */
+function involuteParamAtRadius(baseRadius: number, radius: number): number {
+  const ratio = radius / baseRadius;
+  return Math.sqrt(Math.max(0, ratio * ratio - 1));
+}
+
+/** A real involute tooth profile -- the exact mathematical curve every manufactured
+ *  gear tooth flank uses (standard 20° pressure angle, 1-module addendum, 1.25-module
+ *  dedendum) -- rather than the flat-sided block shape this used to generate. Each
+ *  tooth is a root point, an involute flank curving out to the addendum (teeth are
+ *  wider at the root and narrow toward the tip, the recognizable real-gear silhouette),
+ *  a short tip, the mirrored flank back down, and a root point on the other side. The
+ *  short straight step from the root circle up to the base circle (where the involute
+ *  begins) approximates the fillet real gears cut there -- a standard simplification
+ *  that doesn't change the tooth's overall silhouette. */
 export function computeSpurProfilePoints(teeth: number, module: number): THREE.Vector2[] {
   const pitchRadius = (module * teeth) / 2;
-  const outerRadius = pitchRadius + module * ADDENDUM_FACTOR;
-  const innerRadius = pitchRadius - module * ADDENDUM_FACTOR * 0.5;
+  const baseRadius = pitchRadius * Math.cos(PRESSURE_ANGLE);
+  const addendumRadius = pitchRadius + module;
+  const dedendumRadius = pitchRadius - module * DEDENDUM_FACTOR;
+
+  const anglePerTooth = (Math.PI * 2) / teeth;
+  const halfToothAngle = anglePerTooth / 4; // quarter of the full tooth-pitch angle
+
+  // Rotates the raw involute (whose t=0 point naturally sits at polar angle 0) so its
+  // pitch-radius crossing lands exactly half a tooth-width from the tooth's centerline.
+  const tPitch = involuteParamAtRadius(baseRadius, pitchRadius);
+  const pitchPoint = involutePoint(baseRadius, tPitch);
+  const pitchAngle = Math.atan2(pitchPoint.y, pitchPoint.x);
+  const rotationOffset = -halfToothAngle - pitchAngle;
+  const tEnd = involuteParamAtRadius(baseRadius, addendumRadius);
+
   const points: THREE.Vector2[] = [];
-  const stepsPerTooth = 4;
-  const totalSteps = teeth * stepsPerTooth;
-  for (let i = 0; i < totalSteps; i++) {
-    const angle = (i / totalSteps) * Math.PI * 2;
-    const withinTooth = i % stepsPerTooth;
-    const radius = withinTooth < 2 ? outerRadius : innerRadius;
-    points.push(new THREE.Vector2(Math.cos(angle) * radius, Math.sin(angle) * radius));
+  for (let tooth = 0; tooth < teeth; tooth++) {
+    const center = tooth * anglePerTooth;
+    const leftBaseAngle = rotationOffset + center; // angle of the involute's t=0 (base circle) point
+
+    points.push(new THREE.Vector2(Math.cos(leftBaseAngle) * dedendumRadius, Math.sin(leftBaseAngle) * dedendumRadius));
+
+    for (let i = 0; i <= FLANK_SEGMENTS; i++) {
+      const t = (tEnd * i) / FLANK_SEGMENTS;
+      const raw = involutePoint(baseRadius, t);
+      const angle = Math.atan2(raw.y, raw.x) + rotationOffset + center;
+      points.push(new THREE.Vector2(Math.cos(angle) * raw.length(), Math.sin(angle) * raw.length()));
+    }
+
+    for (let i = FLANK_SEGMENTS; i >= 0; i--) {
+      const t = (tEnd * i) / FLANK_SEGMENTS;
+      const raw = involutePoint(baseRadius, t);
+      const angle = -(Math.atan2(raw.y, raw.x) + rotationOffset) + center; // mirror of the left flank about `center`
+      points.push(new THREE.Vector2(Math.cos(angle) * raw.length(), Math.sin(angle) * raw.length()));
+    }
+
+    const rightBaseAngle = center - rotationOffset; // mirror of leftBaseAngle about `center`
+    points.push(new THREE.Vector2(Math.cos(rightBaseAngle) * dedendumRadius, Math.sin(rightBaseAngle) * dedendumRadius));
   }
   return points;
 }
