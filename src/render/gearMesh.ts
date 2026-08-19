@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
 import { buildGeometryForType } from "./gearGeometry";
-import { TYPE_HEALTHY_COLORS, createMetalTexture } from "./metalTexture";
+import { TYPE_HEALTHY_COLORS, createMetalTexture, createGaugeDialTexture } from "./metalTexture";
 
 const HEALTHY = new THREE.Color(0x3ddc73);
 const WARNING = new THREE.Color(0xe8c547);
@@ -13,6 +13,9 @@ const BROKEN = new THREE.Color(0x555555);
 // null under environments with no 2D canvas context (e.g. jsdom in tests); MeshStandardMaterial
 // treats `map: null` as "no texture, just use color", so this degrades gracefully there.
 const sharedMetalTexture = createMetalTexture();
+// Same reasoning, but only used for the gauge's dial face -- every other gear type
+// keeps the brushed-metal look above, painting a dial face onto them would be wrong.
+const sharedGaugeDialTexture = createGaugeDialTexture();
 
 /** `healthyColor` above 50% durability (per gear type, see TYPE_HEALTHY_COLORS), fading
  *  through yellow then red as it depletes, regardless of type — durability danger must
@@ -33,11 +36,15 @@ export class GearMeshObject {
 
   constructor(gear: GearInstance) {
     const geometry = buildGeometryForType(gear.type, gear.teeth || 1, gear.module || 1);
+    const isGauge = gear.type === "gauge";
     const material = new THREE.MeshStandardMaterial({
       color: colorForDurabilityRatio(1, TYPE_HEALTHY_COLORS[gear.type]),
-      map: sharedMetalTexture,
-      roughness: 0.55,
-      metalness: 0.6,
+      map: isGauge ? sharedGaugeDialTexture : sharedMetalTexture,
+      // A painted instrument face reads as flat/matte, not shiny metal like the rest
+      // of the drivetrain -- the same MeshStandardMaterial just gets different
+      // roughness/metalness for the gauge instead of a whole second material class.
+      roughness: isGauge ? 0.85 : 0.55,
+      metalness: isGauge ? 0.1 : 0.6,
       // `emissive` is a flat additive term (sceneSync.ts uses it for the "unconnected /
       // no-power / overlapping" warning tint and the drag preview highlight) -- at full
       // strength it washes out the base per-type material color entirely, so every gear

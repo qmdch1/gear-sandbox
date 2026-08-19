@@ -20,7 +20,7 @@ export const TYPE_HEALTHY_COLORS: Record<GearType, THREE.Color> = {
  *  warning as a side effect of the call itself -- checking the return value is too late
  *  to avoid it. jsdom identifies itself in `navigator.userAgent`, so we can skip calling
  *  `getContext` at all in that environment rather than merely handling a null result. */
-function hasRealCanvasSupport(): boolean {
+export function hasRealCanvasSupport(): boolean {
   return typeof navigator !== "undefined" && !navigator.userAgent.includes("jsdom");
 }
 
@@ -62,4 +62,68 @@ export function createMetalTexture(size = 256): THREE.CanvasTexture | null {
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
   return texture;
+}
+
+/** An analog dial face (tick marks, a redline arc, a center hub) for the RPM gauge --
+ *  it used to be a bare disc, which read as "no instrument face at all" rather than
+ *  a gauge. Painted onto the whole canvas (a metallic-gray background, with the dial
+ *  face circle reaching exactly to the canvas edges) so it works with
+ *  `gaugeGeometry`'s radial UV mapping: the dial disc's own outer radius maps to the
+ *  full [0,1] UV square, and the disc's thin rim edge samples a fixed point in one of
+ *  the (off-dial) background corners, picking up the metallic gray rather than the
+ *  dial's ivory face. */
+export function createGaugeDialTexture(size = 256): THREE.CanvasTexture | null {
+  if (!hasRealCanvasSupport()) return null;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const r = size / 2;
+
+  context.fillStyle = "#4a4d52";
+  context.fillRect(0, 0, size, size);
+
+  context.beginPath();
+  context.arc(cx, cy, r, 0, Math.PI * 2);
+  context.fillStyle = "#eee6d2";
+  context.fill();
+
+  const MAJOR_TICKS = 8;
+  for (let i = 0; i < MAJOR_TICKS; i++) {
+    const angle = (i / MAJOR_TICKS) * Math.PI * 2;
+    context.beginPath();
+    context.moveTo(cx + Math.cos(angle) * r * 0.78, cy + Math.sin(angle) * r * 0.78);
+    context.lineTo(cx + Math.cos(angle) * r * 0.92, cy + Math.sin(angle) * r * 0.92);
+    context.strokeStyle = "#2b2b2b";
+    context.lineWidth = size * 0.02;
+    context.stroke();
+  }
+  const MINOR_TICKS = 32;
+  for (let i = 0; i < MINOR_TICKS; i++) {
+    if (i % (MINOR_TICKS / MAJOR_TICKS) === 0) continue; // a major tick is already there
+    const angle = (i / MINOR_TICKS) * Math.PI * 2;
+    context.beginPath();
+    context.moveTo(cx + Math.cos(angle) * r * 0.84, cy + Math.sin(angle) * r * 0.84);
+    context.lineTo(cx + Math.cos(angle) * r * 0.92, cy + Math.sin(angle) * r * 0.92);
+    context.strokeStyle = "#6b6b6b";
+    context.lineWidth = size * 0.008;
+    context.stroke();
+  }
+
+  context.beginPath();
+  context.arc(cx, cy, r * 0.92, -Math.PI * 0.75, -Math.PI * 0.55);
+  context.strokeStyle = "#c0392b";
+  context.lineWidth = size * 0.03;
+  context.stroke();
+
+  context.beginPath();
+  context.arc(cx, cy, r * 0.1, 0, Math.PI * 2);
+  context.fillStyle = "#2b2b2b";
+  context.fill();
+
+  return new THREE.CanvasTexture(canvas);
 }

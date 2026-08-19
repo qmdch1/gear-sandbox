@@ -141,16 +141,52 @@ function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
   return mergeGeometries([base, handle]);
 }
 
+/** The subset of three.js's `ExtrudeGeometry` UVGenerator interface this needs --
+ *  typed by hand rather than pulled from three's own (unexported) internal type. */
+interface DiscUVGenerator {
+  generateTopUV(geometry: THREE.ExtrudeGeometry, vertices: number[], a: number, b: number, c: number): THREE.Vector2[];
+  generateBottomUV(geometry: THREE.ExtrudeGeometry, vertices: number[], a: number, b: number, c: number): THREE.Vector2[];
+  generateSideWallUV(geometry: THREE.ExtrudeGeometry, vertices: number[], a: number, b: number, c: number, d: number): THREE.Vector2[];
+}
+
+/** Normalizes a disc's own local (x, y) shape coordinates to a [0,1] UV square
+ *  centered on the disc, so a texture painted as a circular face (see
+ *  `createGaugeDialTexture`) lands correctly on the disc's front/back caps: the
+ *  disc's own outer radius maps exactly to the UV square's edges. The rim (side
+ *  wall) samples a single fixed point instead of stretching the face texture around
+ *  the thin edge -- picked in a corner of the UV square, outside the inscribed
+ *  circle, which is exactly the "background" area of a texture like
+ *  `createGaugeDialTexture` that fills the dial face right up to the edges. */
+function radialUVGenerator(outerRadius: number): DiscUVGenerator {
+  const toUV = (x: number, y: number) => new THREE.Vector2(x / (2 * outerRadius) + 0.5, y / (2 * outerRadius) + 0.5);
+  const faceUV = (vertices: number[], a: number, b: number, c: number) => [
+    toUV(vertices[a * 3], vertices[a * 3 + 1]),
+    toUV(vertices[b * 3], vertices[b * 3 + 1]),
+    toUV(vertices[c * 3], vertices[c * 3 + 1]),
+  ];
+  const corner = () => new THREE.Vector2(0.03, 0.03);
+  return {
+    generateTopUV: (_geometry, vertices, a, b, c) => faceUV(vertices, a, b, c),
+    generateBottomUV: (_geometry, vertices, a, b, c) => faceUV(vertices, a, b, c),
+    generateSideWallUV: () => [corner(), corner(), corner(), corner()],
+  };
+}
+
 /** A flat, circular Shape extruded along Z, centered on its own thickness — the shared
  *  builder behind the flywheel and gauge dial (both are "solid disc with a hole,"
  *  differing only in radii and what else gets merged onto them). `ExtrudeGeometry`
  *  already extrudes along +Z from a shape defined in the XY plane, which is exactly
  *  the thickness axis `gearMesh.ts` expects (no `rotateX` needed here, unlike the
- *  Y-aligned primitives like `CylinderGeometry`/`ConeGeometry` below). */
-function discWithHole(outerRadius: number, innerRadius: number, thickness: number): THREE.BufferGeometry {
+ *  Y-aligned primitives like `CylinderGeometry`/`ConeGeometry` below). `useRadialUV`
+ *  opts into `radialUVGenerator` above (only the gauge dial needs it, for its face
+ *  texture -- the flywheel/fan hub use the shared metal texture, whose tiling
+ *  doesn't depend on clean per-face UVs the way a printed dial face does). */
+function discWithHole(outerRadius: number, innerRadius: number, thickness: number, useRadialUV = false): THREE.BufferGeometry {
   const shape = new THREE.Shape(circlePoints(outerRadius));
   shape.holes.push(boreHole(innerRadius));
-  const geometry = new THREE.ExtrudeGeometry(shape, { ...BEVEL_OPTIONS, depth: thickness, curveSegments: 24 });
+  const options: THREE.ExtrudeGeometryOptions = { ...BEVEL_OPTIONS, depth: thickness, curveSegments: 24 };
+  if (useRadialUV) options.UVGenerator = radialUVGenerator(outerRadius);
+  const geometry = new THREE.ExtrudeGeometry(shape, options);
   geometry.translate(0, 0, -thickness / 2); // center on its local origin, like the other gear geometries
   return geometry;
 }
@@ -165,7 +201,7 @@ function loadGeometry(module: number): THREE.BufferGeometry {
  *  readout for a teaching sandbox, without needing a numeric HUD overlay. */
 function gaugeGeometry(module: number): THREE.BufferGeometry {
   const dialRadius = module * 2;
-  const dial = discWithHole(dialRadius, module * 0.3, GEAR_THICKNESS);
+  const dial = discWithHole(dialRadius, module * 0.3, GEAR_THICKNESS, true);
   const needle = new THREE.BoxGeometry(dialRadius * 1.7, module * 0.15, GEAR_THICKNESS * 1.5);
   needle.translate(dialRadius * 0.35, 0, 0);
   return mergeGeometries([dial, needle]);
