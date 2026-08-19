@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
-import { evaluatePair, idealConnectionDistance, meshPhaseRotation } from "../sim/meshing";
+import { evaluatePair, idealConnectionDistance, meshPhaseAlignment } from "../sim/meshing";
 import { buildEdges, connectedComponentIds } from "../sim/graph";
 import type { SceneContext } from "../render/scene";
 
@@ -30,19 +30,22 @@ const SNAP_SLACK = 6; // units of drop-point slack tolerated around the ideal me
 export interface SnapTarget {
   position: [number, number, number];
   partnerId: string;
-  /** The dragged gear's rotation should be set to this so its tooth interlocks into
-   *  the partner's gap, rather than the two tooth profiles clashing. Undefined when
-   *  phase-alignment doesn't apply (see `meshPhaseRotation`). */
+  /** The dragged gear's rotation should be set to this so its tooth sits centered in
+   *  the partner's gap, rather than the two tooth profiles clashing (or meshing at
+   *  some arbitrary, off-center point). Undefined when phase-alignment doesn't apply
+   *  (see `meshPhaseAlignment`). */
   rotation?: number;
 }
 
 /** Hand-positioning a gear at the exact center distance a mesh/coupling requires is
  *  impractical (default gears need ~20 units, to the tenth of a unit, along the right
- *  axis). Finds the nearest gear `dragged` COULD connect to (by type/axis, regardless of
- *  its current distance) and, if the raw drop point is within `SNAP_SLACK` of the ideal
- *  ring around that partner, returns the position (and, where it applies, the tooth-
- *  interlocking rotation) `dragged` should snap to so the two actually validly connect
- *  — preserving the drop point's direction from the partner. */
+ *  axis) -- and even at the right distance, the exact angle around the partner matters
+ *  too, or the mesh "works" (no clash) but lands off-center in the gap rather than
+ *  tooth-middle-to-gap-middle. Finds the nearest gear `dragged` COULD connect to (by
+ *  type/axis, regardless of its current distance) and, if the raw drop point is within
+ *  `SNAP_SLACK` of the ideal ring around that partner, returns the position (angle
+ *  corrected to the nearest tooth-pitch detent where phase-alignment applies) and
+ *  rotation `dragged` should snap to so the two actually, properly mesh. */
 export function findSnapTarget(
   dragged: GearInstance,
   rawPosition: [number, number, number],
@@ -61,18 +64,25 @@ export function findSnapTarget(
     const slack = Math.abs(rawDistance - idealDistance);
     if (slack > SNAP_SLACK || slack >= bestSlack) continue;
 
-    const position: [number, number, number] =
-      idealDistance === 0 || rawDistance < 1e-6
-        ? [candidate.position[0], rawPosition[1], candidate.position[2]]
-        : [
-            candidate.position[0] + dx * (idealDistance / rawDistance),
-            rawPosition[1],
-            candidate.position[2] + dz * (idealDistance / rawDistance),
-          ];
+    let position: [number, number, number];
+    let rotation: number | undefined;
+    if (idealDistance === 0 || rawDistance < 1e-6) {
+      position = [candidate.position[0], rawPosition[1], candidate.position[2]];
+    } else {
+      const rawWorldAngleTowardPartner = Math.atan2(-dz, -dx); // dragged -> partner
+      const alignment = meshPhaseAlignment(dragged, rawWorldAngleTowardPartner, candidate);
+      const angleTowardPartner = alignment ? alignment.worldAngleTowardPartner : rawWorldAngleTowardPartner;
+      const angleFromPartner = angleTowardPartner + Math.PI; // partner -> dragged, for placement
+      position = [
+        candidate.position[0] + idealDistance * Math.cos(angleFromPartner),
+        rawPosition[1],
+        candidate.position[2] + idealDistance * Math.sin(angleFromPartner),
+      ];
+      rotation = alignment?.rotation;
+    }
 
     bestSlack = slack;
-    const rotation = meshPhaseRotation(dragged, position, candidate);
-    best = rotation === null ? { position, partnerId: candidate.id } : { position, partnerId: candidate.id, rotation };
+    best = rotation === undefined ? { position, partnerId: candidate.id } : { position, partnerId: candidate.id, rotation };
   }
   return best;
 }

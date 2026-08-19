@@ -1,10 +1,10 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
-import { evaluatePair, isOverlapping, idealConnectionDistance, meshPhaseRotation } from "../../src/sim/meshing";
+import { evaluatePair, isOverlapping, idealConnectionDistance, meshPhaseAlignment } from "../../src/sim/meshing";
 import type { GearInstance } from "../../src/sim/types";
 
 /** Independent reimplementation of the tooth phase check, used only to verify
- *  `meshPhaseRotation`'s output actually produces anti-phase alignment -- not a
+ *  `meshPhaseAlignment`'s output actually produces centered alignment -- not a
  *  copy of the source function. */
 function toothPhase(teeth: number, rotation: number, worldAngle: number): number {
   const localAngle = -worldAngle - rotation;
@@ -176,33 +176,46 @@ describe("idealConnectionDistance", () => {
   });
 });
 
-describe("meshPhaseRotation", () => {
-  it("produces a rotation that puts the dragged gear exactly anti-phase with the partner at the contact point", () => {
+describe("meshPhaseAlignment", () => {
+  it("corrects the angle so the dragged gear's tooth-center lands exactly on the partner's gap-center", () => {
+    // Regression: offsetting purely from whatever phase the partner's raw contact
+    // angle happened to land on ("anti-phase") avoids a material clash, but can still
+    // mesh off-center within the gap -- this asserts the actual centers line up.
     const partner = makeGear({ id: "partner", teeth: 20, module: 1, position: [0, 0, 0], rotation: 0.37 });
-    const draggedPosition: [number, number, number] = [15, 0, 0]; // teeth 10 + teeth 20, module 1 -> ideal 15
-    const dragged = makeGear({ id: "dragged", teeth: 10, module: 1, position: draggedPosition });
+    const dragged = makeGear({ id: "dragged", teeth: 10, module: 1, position: [0, 0, 0] });
+    const rawWorldAngleTowardPartner = 1.0; // an arbitrary raw drag angle, not aligned to any detent
 
-    const rotation = meshPhaseRotation(dragged, draggedPosition, partner);
-    expect(rotation).not.toBeNull();
+    const alignment = meshPhaseAlignment(dragged, rawWorldAngleTowardPartner, partner);
+    expect(alignment).not.toBeNull();
 
-    const worldAngleTowardPartner = Math.atan2(0 - 0, 0 - 15); // atan2(dz, dx) from dragged to partner
-    const partnerPhaseAtContact = toothPhase(partner.teeth, partner.rotation, worldAngleTowardPartner + Math.PI);
-    const draggedPhaseAtContact = toothPhase(dragged.teeth, rotation!, worldAngleTowardPartner);
+    const partnerPhaseAtContact = toothPhase(partner.teeth, partner.rotation, alignment!.worldAngleTowardPartner + Math.PI);
+    const draggedPhaseAtContact = toothPhase(dragged.teeth, alignment!.rotation, alignment!.worldAngleTowardPartner);
 
-    const rawDelta = draggedPhaseAtContact - partnerPhaseAtContact;
-    const phaseDelta = ((rawDelta % 1) + 1) % 1; // wrap into [0, 1)
-    expect(phaseDelta).toBeCloseTo(0.5, 5);
+    expect(partnerPhaseAtContact).toBeCloseTo(0.75, 5); // gap-center
+    expect(draggedPhaseAtContact).toBeCloseTo(0.25, 5); // tooth-center
+  });
+
+  it("snaps to the nearest valid detent to the raw angle, not an arbitrary one further around the gear", () => {
+    const partner = makeGear({ id: "partner", teeth: 4, module: 1, position: [0, 0, 0], rotation: 0 }); // pitch = 90°
+    const dragged = makeGear({ id: "dragged", teeth: 4, module: 1, position: [0, 0, 0] });
+    const rawWorldAngleTowardPartner = 0.1; // close to 0
+
+    const alignment = meshPhaseAlignment(dragged, rawWorldAngleTowardPartner, partner);
+    expect(alignment).not.toBeNull();
+    const pitch = (Math.PI * 2) / partner.teeth;
+    const angleDiff = Math.abs(alignment!.worldAngleTowardPartner - rawWorldAngleTowardPartner);
+    expect(angleDiff).toBeLessThanOrEqual(pitch / 2 + 1e-9);
   });
 
   it("returns null for a pair that includes a type with no tooth profile (e.g. load)", () => {
     const gear = makeGear({ id: "g", position: [0, 0, 0] });
     const load = makeGear({ id: "l", type: "load", teeth: 0, position: [0, 0, 0] });
-    expect(meshPhaseRotation(gear, [0, 0, 0], load)).toBeNull();
+    expect(meshPhaseAlignment(gear, 0, load)).toBeNull();
   });
 
   it("returns null when either gear isn't on the world +Y axis (e.g. a bevel pair)", () => {
     const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, position: [0, 0, 0] });
     const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 20, position: [20, 0, 0] });
-    expect(meshPhaseRotation(a, [0, 0, 0], b)).toBeNull();
+    expect(meshPhaseAlignment(a, 0, b)).toBeNull();
   });
 });

@@ -27,15 +27,25 @@ describe("findNearestCompatiblePartner", () => {
 });
 
 describe("findSnapTarget", () => {
-  it("snaps a dragged gear onto the valid meshing ring around a nearby compatible partner", () => {
+  it("snaps a dragged gear onto the valid meshing ring, angle-corrected to the nearest phase-centered detent", () => {
     // dragged (teeth 10) + partner (teeth 20), module 1 -> ideal distance 15.
-    // Drop point is 12 units out (within the 6-unit slack), straight along +X.
+    // Drop point is 12 units out (within the 6-unit slack), roughly along +X -- the
+    // angle itself gets nudged to the nearest tooth-pitch detent (see
+    // meshing.test.ts's meshPhaseAlignment tests for the centering guarantee itself),
+    // so this only checks the distance stayed correct and the nudge was small.
     const dragged = makeGear({ id: "dragged", teeth: 10, module: 1, position: [12, 0, 0] });
     const partner = makeGear({ id: "partner", teeth: 20, module: 1, position: [0, 0, 0] });
     const snap = findSnapTarget(dragged, [12, 0, 0], [dragged, partner]);
     expect(snap?.partnerId).toBe("partner");
-    expect(snap?.position[0]).toBeCloseTo(15);
-    expect(snap?.position[2]).toBeCloseTo(0);
+    expect(snap?.rotation).not.toBeUndefined();
+
+    const distance = Math.hypot(snap!.position[0], snap!.position[2]);
+    expect(distance).toBeCloseTo(15);
+
+    const rawAngle = Math.atan2(0 - 0, 12 - 0); // raw drop point's angle from the partner
+    const snappedAngle = Math.atan2(snap!.position[2], snap!.position[0]);
+    const pitch = (Math.PI * 2) / partner.teeth;
+    expect(Math.abs(snappedAngle - rawAngle)).toBeLessThanOrEqual(pitch / 2 + 1e-9);
   });
 
   it("does not snap when the drop point is far outside the slack tolerance", () => {
