@@ -2297,9 +2297,14 @@ npm install -D @types/express @types/cors @types/better-sqlite3 supertest @types
 - [ ] **Step 2: Write `server/db.ts`**
 
 ```ts
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import Database from "better-sqlite3";
 
 export function openDb(path: string): Database.Database {
+  if (path !== ":memory:") {
+    mkdirSync(dirname(path), { recursive: true });
+  }
   const db = new Database(path);
   db.pragma("journal_mode = WAL");
   db.exec(`
@@ -2317,6 +2322,7 @@ export function openDb(path: string): Database.Database {
 ```
 
 > `user_id` is written but never read yet (spec §11) — every row gets `NULL` until account support lands later; no auth middleware belongs in this task.
+> `server/data/` is `.gitignore`d and never created by anything else, so `openDb` must create its parent directory itself (skipped for the special `:memory:` path used by tests) — otherwise the real boot script (`server/index.ts`) throws "Cannot open database because the directory does not exist" on every fresh checkout.
 
 - [ ] **Step 3: Write `server/app.ts`**
 
