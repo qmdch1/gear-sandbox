@@ -73,5 +73,5 @@ export function isOverlapping(a: GearInstance, b: GearInstance): boolean {
   if (evaluatePair(a, b)) return false;
   const centerDistance = dist(a.position, b.position);
   const expected = pitchRadius(a) + pitchRadius(b);
-  return centerDistance > 0.001 && centerDistance < expected * (1 - MESH_TOLERANCE);
+  return centerDistance < expected * (1 - MESH_TOLERANCE);
 }

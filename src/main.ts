@@ -1,5 +1,5 @@
 import type { GearInstance, GearType } from "./sim/types";
-import { GEAR_DEFS } from "./sim/gearDefs";
+import { createGear } from "./sim/gearFactory";
 import { tick } from "./sim/simulation";
 import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
@@ -31,28 +31,22 @@ const sceneSync = new SceneSync(ctx);
 const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => sceneSync.focusOn(id));
 const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-panel")!);
 
-let gears: GearInstance[] = loadFromLocalStorage() ?? [];
+let gears: GearInstance[] = [];
+try {
+  gears = loadFromLocalStorage() ?? [];
+} catch (err) {
+  console.error("Failed to load saved layout from localStorage; starting with an empty layout.", err);
+  gears = [];
+}
 let timeScale = 1;
-let nextId = 0;
 
 function addGear(type: GearType, position: [number, number, number]): void {
-  const def = GEAR_DEFS[type];
-  gears.push({
-    id: `gear-${nextId++}`,
-    type,
-    position,
-    axis: [0, 1, 0],
-    teeth: type === "load" ? 0 : 20,
-    module: 1,
-    durabilityMax: def.durabilityMax,
-    durabilityCurrent: def.durabilityMax,
-    broken: false,
-    rotation: 0,
-    angularVelocity: type === "crank" ? 1 : 0,
-  });
+  gears.push(createGear(type, position));
 }
 
-new PaletteUI(document.querySelector("#palette")!, (type) => addGear(type, [0, 0, 0]));
+new PaletteUI(document.querySelector("#palette")!, (type) =>
+  addGear(type, [(gears.length % 5) * 3, 0, Math.floor(gears.length / 5) * 3]),
+);
 
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
 
@@ -72,7 +66,11 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
     URL.revokeObjectURL(url);
   },
   importFile: async (file) => {
-    gears = await importFromFile(file);
+    try {
+      gears = await importFromFile(file);
+    } catch (err) {
+      console.error("Failed to import gear layout file", err);
+    }
   },
 });
 
@@ -90,12 +88,18 @@ new DragControls({
     const gear = gears.find((g) => g.id === id);
     if (gear) gear.position = position;
   },
+  onSelect: (id) => {
+    const gear = id ? gears.find((g) => g.id === id) : undefined;
+    if (gear) durabilityPanel.show(gear);
+    else durabilityPanel.hide();
+  },
+  onPreview: (partnerId) => sceneSync.setPreviewHighlight(partnerId),
 });
 
-canvas.addEventListener("click", () => {
-  // Durability detail on click is wired via the drag controls' hit-testing in a
-  // follow-up pass once the raycaster's last-hit id is exposed; for now the
-  // diagnostics panel's focus-on-click covers the primary "inspect a gear" need.
+window.addEventListener("resize", () => {
+  ctx.camera.aspect = canvas.clientWidth / canvas.clientHeight;
+  ctx.camera.updateProjectionMatrix();
+  ctx.renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 });
 
 let lastTime = performance.now();
@@ -114,5 +118,3 @@ function animate(): void {
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
-
-void durabilityPanel; // wired up for the click-to-inspect follow-up noted above

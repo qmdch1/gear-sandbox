@@ -108,4 +108,13 @@ describe("isOverlapping", () => {
     const load = makeGear({ id: "l", type: "load", teeth: 0, position: [0, 0, 0] });
     expect(isOverlapping(gear, load)).toBe(false);
   });
+
+  it("flags two distinct, coincident (both at the origin) spur gears as overlapping", () => {
+    // Regression: the old `centerDistance > 0.001` floor made two gears placed at
+    // the exact same spot (e.g. double-clicking the palette) fail to register as
+    // overlapping, even though they geometrically fully overlap.
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 20, module: 1, position: [0, 0, 0] });
+    expect(isOverlapping(a, b)).toBe(true);
+  });
 });
