@@ -16,15 +16,11 @@ describe("defaultAxisForType", () => {
 });
 
 describe("toggledAxis", () => {
-  it("flips a bevel/worm gear between horizontal (+X) and vertical (+Y)", () => {
-    expect(toggledAxis("bevel", [1, 0, 0])).toEqual([0, 1, 0]);
-    expect(toggledAxis("bevel", [0, 1, 0])).toEqual([1, 0, 0]);
-    expect(toggledAxis("worm", [1, 0, 0])).toEqual([0, 1, 0]);
-  });
-
-  it("does nothing for a type outside the parallel-shaft family's fixed +Y axis", () => {
-    expect(toggledAxis("spur", [0, 1, 0])).toEqual([0, 1, 0]);
-    expect(toggledAxis("crank", [0, 1, 0])).toEqual([0, 1, 0]);
+  it("flips any axis between horizontal (+X) and vertical (+Y), regardless of type", () => {
+    // Universal since the "모든 부품들을 가로 세로 변경되게 해줘" request -- toggledAxis
+    // no longer takes a type argument at all, it just flips whatever axis it's given.
+    expect(toggledAxis([1, 0, 0])).toEqual([0, 1, 0]);
+    expect(toggledAxis([0, 1, 0])).toEqual([1, 0, 0]);
   });
 });
 
@@ -35,6 +31,11 @@ describe("defaultTeethForType", () => {
 
   it("gives load gears zero teeth", () => {
     expect(defaultTeethForType("load")).toBe(0);
+  });
+
+  it("gives shaft and beam (rod types) zero teeth", () => {
+    expect(defaultTeethForType("shaft")).toBe(0);
+    expect(defaultTeethForType("beam")).toBe(0);
   });
 
   it("gives spur/helical/crank gears 20 teeth", () => {
@@ -64,6 +65,12 @@ describe("createGear", () => {
     const shaft = createGear("shaft", [5, 0, 0]);
     expect(shaft.position2).toBeDefined();
     expect(shaft.position2).not.toEqual(shaft.position);
+  });
+
+  it("gives a beam a second end too, same as shaft (both are two-endpoint rod types)", () => {
+    const beam = createGear("beam", [5, 0, 0]);
+    expect(beam.position2).toBeDefined();
+    expect(beam.position2).not.toEqual(beam.position);
   });
 
   it("leaves position2 undefined for every other type", () => {

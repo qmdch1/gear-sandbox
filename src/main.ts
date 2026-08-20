@@ -16,7 +16,14 @@ app.innerHTML = `
     <section class="panel">
       <h2>부품 담기</h2>
       <div id="palette"></div>
-      <p id="power-hint">동력원 기어는 놓으면 자동으로 돌아갑니다. 다른 기어를 가까이 끌어오면 맞물리는 위치로 자동으로 붙습니다. 이미 붙어 있는 기어들은 하나를 끌면 같이 움직여요 — <b>Alt</b>+드래그로 하나만 떼어낼 수 있습니다. <b>Shift</b>+드래그로 위아래 높이를 조절할 수 있습니다(베벨 기어처럼 높이를 맞춰야 할 때 사용). 베벨·웜 기어는 클릭해서 고른 뒤 <b>V</b> 키를 누르면 가로/세로 축 방향을 바꿀 수 있습니다. 동력전달축은 평소엔 통째로 움직이고, <b>Ctrl</b>+드래그하면 반대쪽 끝만 따로 옮길 수 있습니다.</p>
+      <ul id="power-hint">
+        <li>자동 연결: 다른 부품 가까이 끌어오기</li>
+        <li>같이 움직이기: 연결된 부품 하나 끌기</li>
+        <li>부품 떼기: <b>Alt</b>+드래그</li>
+        <li>높이 조절: <b>Shift</b>+드래그</li>
+        <li>가로/세로 전환: 부품 클릭 후 <b>V</b></li>
+        <li>빔·축 반대쪽 끝 옮기기: <b>Ctrl</b>+드래그</li>
+      </ul>
     </section>
     <section class="panel">
       <h2>저장</h2>
@@ -89,7 +96,7 @@ function spawnGridPosition(index: number): [number, number, number] {
 // left everything else undiscoverable unless you dug through the palette -- one of
 // every type instead, spiraling out from the origin (crank first, so the one
 // power-source gear still lands dead center where the default camera looks).
-const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft"];
+const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam"];
 
 // No user accounts, so there's exactly one saved layout on the server (see
 // serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh
@@ -139,10 +146,11 @@ new DragControls({
   onMove: (id, position, rotation) => {
     const gear = gears.find((g) => g.id === id);
     if (!gear) return;
-    // A shaft's far end isn't part of the normal position-delta system anything
-    // else uses, so a plain drag has to carry position2 along by the same delta
-    // itself, or the rod would stretch/warp instead of moving as a rigid whole.
-    if (gear.type === "shaft" && gear.position2) {
+    // A rod's (shaft or beam) far end isn't part of the normal position-delta
+    // system anything else uses, so a plain drag has to carry position2 along
+    // by the same delta itself, or the rod would stretch/warp instead of
+    // moving as a rigid whole.
+    if (gear.position2) {
       const delta: [number, number, number] = [
         position[0] - gear.position[0],
         position[1] - gear.position[1],
@@ -163,14 +171,15 @@ new DragControls({
   },
 });
 
-// Click a bevel/worm gear, then press V to flip it between lying flat (its default
-// horizontal axis) and standing upright (vertical) -- see gearFactory.ts's
-// `toggledAxis`. No-op for every other type or when nothing's selected.
+// Click any gear, then press V to flip it between lying flat (horizontal axis)
+// and standing upright (vertical) -- see gearFactory.ts's `toggledAxis`. A no-op
+// for "shaft"/"beam" (rods, whose orientation comes from position/position2
+// instead of `axis`) or when nothing's selected.
 window.addEventListener("keydown", (event) => {
   if (event.key.toLowerCase() !== "v" || !selectedGearId) return;
   const gear = gears.find((g) => g.id === selectedGearId);
   if (!gear) return;
-  gear.axis = toggledAxis(gear.type, gear.axis);
+  gear.axis = toggledAxis(gear.axis);
 });
 
 window.addEventListener("resize", () => {

@@ -22,6 +22,9 @@ export const GEAR_DEFS: Record<GearType, GearTypeDef> = {
   // coupling-only accessories above), so it wears somewhat like a plain shaft --
   // no teeth to shear, so lighter wear than a gear that's actually meshing.
   shaft:   { durabilityMax: 150, baseWearPerSecond: 0.4, loadWearMultiplier: 1.2 },
+  // A purely structural joint -- never spins, never carries torque (see
+  // meshing.ts's "structural" edge kind), so there's nothing to wear it out.
+  beam:    { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
 };
 
 /** Gears that drive the rest of the train the moment they're placed (their

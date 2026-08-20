@@ -13,6 +13,12 @@ export function propagateRotation(gears: GearInstance[], edges: MeshEdge[]): Rot
   const adjacency = new Map<string, MeshEdge[]>();
   for (const g of gears) adjacency.set(g.id, []);
   for (const e of edges) {
+    // A "structural" edge (beam-to-beam or beam-to-anything joint) is a rigid,
+    // non-rotating connection -- it groups parts together for dragging
+    // (graph.ts's connectedComponentIds, which sees ALL edges unfiltered), but
+    // it must never carry rotation the way a real mesh/coupling does, so it's
+    // excluded from this adjacency entirely.
+    if (e.kind === "structural") continue;
     if (e.oneWay !== "bToA") adjacency.get(e.a)!.push(e);
     if (e.oneWay !== "aToB") adjacency.get(e.b)!.push(e);
   }

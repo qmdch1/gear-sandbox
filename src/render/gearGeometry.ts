@@ -384,6 +384,19 @@ function shaftGeometry(module: number): THREE.BufferGeometry {
   return geometry;
 }
 
+/** A structural beam -- same unit-length-along-Z, stretch-via-scale.z convention
+ *  as `shaftGeometry` (they share the rendering path in gearMesh.ts), but built
+ *  from a square bar (BoxGeometry) instead of a round rod so it reads at a
+ *  glance as "rigid frame member," not "spinning shaft" -- a real chassis rail
+ *  is a square/rectangular tube, not a round shaft. BoxGeometry's own depth
+ *  (3rd argument) already runs along Z by default, so unlike `shaftGeometry`
+ *  (a Y-axis cylinder that needs a rotateX to align its length to Z), no
+ *  rotation is needed here. */
+function beamGeometry(module: number): THREE.BufferGeometry {
+  const side = module * 0.7;
+  return new THREE.BoxGeometry(side, side, 1);
+}
+
 function mergeGeometries(parts: Array<THREE.BufferGeometry | ColoredPart>): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   // Carries `uv`/`color` along with position/normal so a texture map or per-part tint
@@ -437,5 +450,7 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return wheelGeometry(module);
     case "shaft":
       return shaftGeometry(module);
+    case "beam":
+      return beamGeometry(module);
   }
 }

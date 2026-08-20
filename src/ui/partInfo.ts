@@ -134,4 +134,13 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <circle cx="78" cy="78" r="10" fill="none" stroke="currentColor" stroke-width="5"/>
       <line x1="29" y1="29" x2="71" y2="71" stroke="currentColor" stroke-width="7"/>`,
   },
+  beam: {
+    label: "구조용 빔",
+    description: "회전 없이 두 부품을 강체로 고정하는 뼈대 부재입니다. 양쪽 끝을 각각 다른 부품(다른 빔도 가능)의 위치에 겹치게 놓으면 그 지점에서 단단히 고정됩니다 — 동력전달축과 달리 회전을 전혀 전달하지 않고, 빔끼리는 끝을 맞대어 계속 이어붙일 수 있습니다.",
+    purpose:
+      "자동차 섀시(뼈대)나 기계 프레임처럼, 회전할 필요 없이 그냥 단단히 모양을 잡아주기만 하면 되는 구조물을 만들 때 씁니다. 여러 개를 이어 붙이면 사각형 뼈대, 삼각형 트러스처럼 원하는 형태의 골격을 조립할 수 있습니다.",
+    icon: `<rect x="15" y="42" width="70" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="5"/>
+      <line x1="15" y1="42" x2="15" y2="58" stroke="currentColor" stroke-width="3"/>
+      <line x1="85" y1="42" x2="85" y2="58" stroke="currentColor" stroke-width="3"/>`,
+  },
 };

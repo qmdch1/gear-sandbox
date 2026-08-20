@@ -123,6 +123,27 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("b")).toBeCloseTo(-4); // -(20/10) * 2
   });
 
+  it("does NOT propagate rotation across a structural beam joint, unlike a shaft", () => {
+    // A beam is a purely rigid, non-rotating structural joint (see meshing.ts's
+    // "structural" edge kind / beamJoinsAt) -- it should group with its neighbor
+    // for dragging (graph.ts, untouched here) but never relay rotation, unlike a
+    // shaft (tested above), which explicitly does.
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [1, 0, 0], teeth: 20, module: 1,
+      position: [0, 0, 0], angularVelocity: 2,
+    });
+    const beam = makeGear({
+      id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0],
+    });
+    const wheel = makeGear({
+      id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1, position: [30, 0, 0],
+    });
+    const gears = [crank, beam, wheel];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("beam")).toBe(0);
+    expect(angularVelocities.get("wheel")).toBe(0);
+  });
+
   it("stops propagation at a broken gear", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),

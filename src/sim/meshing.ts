@@ -59,6 +59,33 @@ function pitchRadius(g: GearInstance): number {
   return (g.module * g.teeth) / 2;
 }
 
+/** All the points a gear could join another part at -- one for most types, two
+ *  (`position` and `position2`) for a rod (shaft/beam). Used by `beamJoinsAt` to
+ *  check every endpoint-pair for coincidence, since unlike a shaft (which only
+ *  ever couples an END onto a host gear's single shaft point), a beam can join
+ *  ANY of its endpoints to ANY of another beam's endpoints. */
+function endpointsOf(g: GearInstance): Array<[number, number, number]> {
+  return g.position2 ? [g.position, g.position2] : [g.position];
+}
+
+/** A "beam" is a purely structural rod -- unlike "shaft," it carries no rotation
+ *  at all (see rotation.ts, which skips "structural" edges entirely), so there's
+ *  no axis-alignment requirement to check: it's just a rigid strut that locks
+ *  together whatever its endpoints happen to touch, exactly like bolting two
+ *  real beams together at a shared joint. This also means beams CAN chain
+ *  end-to-end to build up a frame (unlike shaft-to-shaft, which stays
+ *  disallowed above) -- a real chassis is built from many beams joined at
+ *  shared nodes, not just one continuous rod. */
+function beamJoinsAt(a: GearInstance, b: GearInstance): boolean {
+  if (a.type !== "beam" && b.type !== "beam") return false;
+  for (const pa of endpointsOf(a)) {
+    for (const pb of endpointsOf(b)) {
+      if (dist(pa, pb) <= COUPLING_DISTANCE_TOLERANCE) return true;
+    }
+  }
+  return false;
+}
+
 /** A "shaft" is a rigid rod with TWO ends (`position` and `position2`), each
  *  independently able to couple onto a different host gear's own shaft -- unlike
  *  every other coupling-only type, which has just one point. Returns its
@@ -93,6 +120,13 @@ function shaftCouplingEnd(shaft: GearInstance, host: GearInstance): "position" |
 
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
+  // Checked before every other rule (including shaft) since a beam's join
+  // condition is the simplest of all (bare coincidence, no axis check) and is
+  // never in conflict with them -- a beam only ever matches this branch.
+  if (beamJoinsAt(a, b)) {
+    return { a: a.id, b: b.id, kind: "structural", ratio: 1, oneWay: "none" };
+  }
+
   if (a.type === "shaft" || b.type === "shaft") {
     if (a.type === "shaft" && b.type === "shaft") return null; // no shaft-to-shaft chaining (yet)
     const shaft = a.type === "shaft" ? a : b;
@@ -171,6 +205,10 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
  *  rules as a separate function rather than refactoring `evaluatePair` to share it —
  *  `evaluatePair` is exhaustively tested already, and this keeps that logic unrisked. */
 export function idealConnectionDistance(a: GearInstance, b: GearInstance): number | null {
+  if (a.type === "beam" || b.type === "beam") {
+    return 0; // bare coincidence, no axis requirement -- see beamJoinsAt/evaluatePair
+  }
+
   if (a.type === "shaft" || b.type === "shaft") {
     if (a.type === "shaft" && b.type === "shaft") return null;
     const shaft = a.type === "shaft" ? a : b;

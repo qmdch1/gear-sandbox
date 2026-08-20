@@ -236,6 +236,40 @@ describe("evaluatePair", () => {
     const fan = makeGear({ id: "f", type: "fan", teeth: 0, position: [0, 0, 0] });
     expect(evaluatePair(gauge, fan)).toBeNull();
   });
+
+  it("joins a beam's endpoint structurally to a coincident host gear, regardless of axis", () => {
+    // Unlike a shaft, a beam has no rotation to carry at all -- so there's no axis
+    // to align, just bare coincidence, like bolting a frame rail onto a hub.
+    const beam = makeGear({ id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
+    const host = makeGear({ id: "host", axis: [0, 1, 0], position: [0, 0, 0] });
+    const edge = evaluatePair(beam, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("structural");
+  });
+
+  it("joins a beam's FAR endpoint structurally too", () => {
+    const beam = makeGear({ id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
+    const host = makeGear({ id: "host", position: [12, 0, 0] });
+    const edge = evaluatePair(beam, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("structural");
+  });
+
+  it("DOES let two beams join end-to-end (unlike shaft-to-shaft, which stays disallowed)", () => {
+    // A real chassis is built from many beams bolted together at shared nodes, not
+    // one continuous rod -- so beam-to-beam chaining is deliberately allowed.
+    const beamA = makeGear({ id: "ba", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
+    const beamB = makeGear({ id: "bb", type: "beam", teeth: 0, position: [12, 0, 0], position2: [24, 0, 0] });
+    const edge = evaluatePair(beamA, beamB);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("structural");
+  });
+
+  it("does not join a beam to a gear that isn't coincident with either of its endpoints", () => {
+    const beam = makeGear({ id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
+    const host = makeGear({ id: "host", position: [999, 0, 0] });
+    expect(evaluatePair(beam, host)).toBeNull();
+  });
 });
 
 describe("isOverlapping", () => {
@@ -320,6 +354,12 @@ describe("idealConnectionDistance", () => {
     const bevel = makeGear({ id: "bevel", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
     const helical = makeGear({ id: "helical", type: "helical", axis: [0, 1, 0], teeth: 20, module: 1, position: [999, 0, 0] });
     expect(idealConnectionDistance(bevel, helical)).toBeNull();
+  });
+
+  it("returns 0 (coincident, no axis requirement) for any beam-involved pair", () => {
+    const beam = makeGear({ id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], position: [999, 0, 0] }); // distance/axis shouldn't matter
+    expect(idealConnectionDistance(beam, host)).toBe(0);
   });
 });
 

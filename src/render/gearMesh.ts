@@ -66,11 +66,13 @@ export class GearMeshObject {
   update(gear: GearInstance): void {
     this.mesh.rotation.set(0, 0, 0);
     this.mesh.scale.set(1, 1, 1);
-    if (gear.type === "shaft" && gear.position2) {
+    if (gear.position2) {
       // Unlike every other type (a fixed shape at one point + a fixed axis), a
-      // shaft's position/orientation/LENGTH are all derived fresh from its two
-      // endpoints every update -- gearGeometry.ts's shaftGeometry is a unit-length
-      // rod, stretched via scale.z rather than rebuilding geometry every frame.
+      // rod (shaft OR beam -- the only two types that ever carry a position2)
+      // has its position/orientation/LENGTH all derived fresh from its two
+      // endpoints every update -- gearGeometry.ts's shaftGeometry/beamGeometry
+      // are unit-length, stretched via scale.z rather than rebuilding geometry
+      // every frame.
       const start = new THREE.Vector3(...gear.position);
       const end = new THREE.Vector3(...gear.position2);
       this.mesh.position.copy(start).add(end).multiplyScalar(0.5);

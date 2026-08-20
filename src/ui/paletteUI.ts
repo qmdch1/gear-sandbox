@@ -39,6 +39,16 @@ const CATEGORIES: Category[] = [
       <circle cx="74" cy="74" r="12" fill="none" stroke="currentColor" stroke-width="6"/>
       <line x1="34" y1="34" x2="66" y2="66" stroke="currentColor" stroke-width="8"/>`,
   },
+  {
+    // Deliberately a separate category from "동력 전달" -- a beam carries no
+    // rotation at all (see meshing.ts's "structural" edge kind), it's a purely
+    // rigid frame member, not a drivetrain part.
+    label: "구조",
+    types: ["beam"],
+    icon: `<rect x="15" y="42" width="70" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="6"/>
+      <line x1="15" y1="42" x2="15" y2="58" stroke="currentColor" stroke-width="4"/>
+      <line x1="85" y1="42" x2="85" y2="58" stroke="currentColor" stroke-width="4"/>`,
+  },
 ];
 
 function buildPartButton(type: GearType, onPick: (type: GearType) => void): HTMLButtonElement {

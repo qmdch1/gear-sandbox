@@ -203,8 +203,9 @@ export class DragControls {
         return;
       }
 
-      // Ctrl+drag on a shaft: move just its far end (position2), not the whole rod.
-      if (event.ctrlKey && anchor?.type === "shaft" && anchor.position2) {
+      // Ctrl+drag on a rod (shaft or beam -- the only two types with a position2):
+      // move just its far end (position2), not the whole rod.
+      if (event.ctrlKey && anchor?.position2) {
         this.farEndDrag = { id: hitId };
         ctx.controls.enabled = false;
         this.options.onSelect?.(hitId);

@@ -33,7 +33,7 @@ describe("computeSpurProfilePoints", () => {
 
 describe("buildGeometryForType", () => {
   it("builds a non-empty geometry for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam"] as const;
     for (const t of types) {
       const geometry = buildGeometryForType(t, 20, 1);
       expect(geometry.attributes.position.count).toBeGreaterThan(0);
@@ -105,5 +105,27 @@ describe("buildGeometryForType", () => {
     }
     expect(maxZ - minZ).toBeCloseTo(1, 5); // unit length, spanning -0.5..0.5
     expect(maxRadial).toBeCloseTo(module * 0.4, 5);
+  });
+
+  it("builds the beam as a unit-length square bar (not a round rod like shaft)", () => {
+    const module = 1;
+    const geometry = buildGeometryForType("beam", 0, module);
+    const position = geometry.attributes.position;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    let maxX = 0;
+    let maxY = 0;
+    for (let i = 0; i < position.count; i++) {
+      minZ = Math.min(minZ, position.getZ(i));
+      maxZ = Math.max(maxZ, position.getZ(i));
+      maxX = Math.max(maxX, Math.abs(position.getX(i)));
+      maxY = Math.max(maxY, Math.abs(position.getY(i)));
+    }
+    expect(maxZ - minZ).toBeCloseTo(1, 5); // unit length along Z, same stretch-via-scale.z convention as shaft
+    // A square cross-section (BoxGeometry), unlike shaft's round cylinder -- the
+    // corner is at (side/2, side/2), so its radial extent exceeds a round rod's
+    // constant radius, making it visually distinguishable.
+    expect(maxX).toBeCloseTo(module * 0.35, 5); // side = module*0.7, half-width = 0.35
+    expect(maxY).toBeCloseTo(module * 0.35, 5);
   });
 });

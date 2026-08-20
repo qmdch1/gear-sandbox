@@ -20,6 +20,7 @@ export const TYPE_HEALTHY_COLORS: Record<GearType, THREE.Color> = {
   fan: new THREE.Color(0xcdd0d4), // bright chrome
   wheel: new THREE.Color(0xb0764a), // weathered wood/iron cart-wheel tone (its tire is a separate, always-dark vertex tint -- see gearGeometry.ts)
   shaft: new THREE.Color(0x8f939c), // plain steel rod -- a cooler, slightly darker steel than the spur gear's tone, distinct at a glance
+  beam: new THREE.Color(0x5a5f66), // matte structural-steel gray, darker than the shaft's rod tone -- reads as "framing member," not "shiny drivetrain part"
 };
 
 /** jsdom (used by this project's DOM-touching tests) implements `getContext` but has no
