@@ -31,9 +31,10 @@ function bevelMeshCompatible(a: GearInstance["type"], b: GearInstance["type"]): 
 }
 
 // Accessories that never mesh via teeth — they only ever attach by sitting coincident
-// on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge or a
-// fan is functionally the same attach rule, just a different indicator/output device).
-const COUPLING_ONLY_TYPES = new Set<GearInstance["type"]>(["load", "gauge", "fan"]);
+// on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge, a
+// fan, or a wheel is functionally the same attach rule, just a different
+// indicator/output device).
+const COUPLING_ONLY_TYPES = new Set<GearInstance["type"]>(["load", "gauge", "fan", "wheel"]);
 
 // A helical gear only meshes (via teeth) with another helical gear -- a plain (0°-
 // helix) power source like a crank can't properly mesh into it either, same as any

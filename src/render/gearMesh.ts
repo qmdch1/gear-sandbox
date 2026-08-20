@@ -40,6 +40,11 @@ export class GearMeshObject {
     const material = new THREE.MeshStandardMaterial({
       color: colorForDurabilityRatio(1, TYPE_HEALTHY_COLORS[gear.type]),
       map: isGauge ? sharedGaugeDialTexture : sharedMetalTexture,
+      // Per-vertex tint (see gearGeometry.ts's mergeGeometries) multiplies with the
+      // color/map above -- every existing part's vertices default to white (a no-op),
+      // only the wheel's tire passes a real color, so this is a no-visual-change
+      // default for everything else.
+      vertexColors: true,
       // A painted instrument face reads as flat/matte, not shiny metal like the rest
       // of the drivetrain -- the same MeshStandardMaterial just gets different
       // roughness/metalness for the gauge instead of a whole second material class.

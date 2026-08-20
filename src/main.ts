@@ -89,7 +89,7 @@ function spawnGridPosition(index: number): [number, number, number] {
 // left everything else undiscoverable unless you dug through the palette -- one of
 // every type instead, spiraling out from the origin (crank first, so the one
 // power-source gear still lands dead center where the default camera looks).
-const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan"];
+const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel"];
 
 // No user accounts, so there's exactly one saved layout on the server (see
 // serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh

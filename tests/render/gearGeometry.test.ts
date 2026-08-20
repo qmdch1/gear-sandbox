@@ -33,7 +33,7 @@ describe("computeSpurProfilePoints", () => {
 
 describe("buildGeometryForType", () => {
   it("builds a non-empty geometry for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel"] as const;
     for (const t of types) {
       const geometry = buildGeometryForType(t, 20, 1);
       expect(geometry.attributes.position.count).toBeGreaterThan(0);
@@ -72,5 +72,22 @@ describe("buildGeometryForType", () => {
       maxRadialExtent = Math.max(maxRadialExtent, radial);
     }
     expect(maxRadialExtent).toBeGreaterThan(rootRadius + 1e-6);
+  });
+
+  it("gives the wheel a dark rubber-tire tint distinct from its metal hub/spokes/rim", () => {
+    // Regression: mergeGeometries used to have no per-part color at all -- every
+    // sub-part rendered in the same single material tint.
+    const geometry = buildGeometryForType("wheel", 0, 1);
+    const color = geometry.attributes.color;
+    expect(color).toBeDefined();
+    let hasWhite = false;
+    let hasDark = false;
+    for (let i = 0; i < color.count; i++) {
+      const r = color.getX(i);
+      if (r > 0.9) hasWhite = true; // hub/spokes/rim: default (no-op) tint
+      if (r < 0.2) hasDark = true; // the tire: explicit dark rubber tint
+    }
+    expect(hasWhite).toBe(true);
+    expect(hasDark).toBe(true);
   });
 });

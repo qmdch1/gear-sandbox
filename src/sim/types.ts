@@ -6,15 +6,16 @@ export type GearType =
   | "worm"
   | "load"
   | "gauge"
-  | "fan";
+  | "fan"
+  | "wheel";
 
 export interface GearInstance {
   id: string;
   type: GearType;
   position: [number, number, number];
   axis: [number, number, number]; // normalized rotation axis direction
-  teeth: number;       // thread-starts for "worm"; 0 for "load"/"gauge"/"fan" (no teeth to mesh)
-  module: number;      // tooth size, used for meshing distance checks; ignored for "load"/"gauge"/"fan"
+  teeth: number;       // thread-starts for "worm"; 0 for "load"/"gauge"/"fan"/"wheel" (no teeth to mesh)
+  module: number;      // tooth size, used for meshing distance checks; ignored for "load"/"gauge"/"fan"/"wheel"
   durabilityMax: number;
   durabilityCurrent: number;
   broken: boolean;

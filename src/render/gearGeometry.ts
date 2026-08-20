@@ -322,15 +322,68 @@ function wormGeometry(module: number): THREE.BufferGeometry {
   return mergeGeometries([core, thread]);
 }
 
-function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
+/** A sub-part passed to `mergeGeometries` with its own per-vertex tint -- multiplies
+ *  with the shared material's own `color`/durability tint (see gearMesh.ts's
+ *  `vertexColors: true`), so e.g. a wheel's rubber tire can render dark regardless
+ *  of whatever metal tone the rest of the part is. Omitting `color` (or passing a
+ *  bare `BufferGeometry`) defaults to white, a no-op multiplier -- every existing
+ *  caller before the wheel needed no changes. */
+interface ColoredPart {
+  geometry: THREE.BufferGeometry;
+  color: THREE.Color;
+}
+
+const WHITE = new THREE.Color(0xffffff);
+
+const TIRE_COLOR = new THREE.Color(0x1c1c1e); // dark rubber, regardless of the wheel's own metal tint
+
+/** A cart/wagon-style wheel: a hub, spokes radiating out to a rim, and a rounded
+ *  "tire" (a `TorusGeometry` wrapped around the rim, tinted dark rubber-black via
+ *  `mergeGeometries`'s per-part vertex color) -- another coupling-only output
+ *  device like the flywheel/fan/gauge, just a more immediately recognizable one
+ *  (a rolling wheel, rather than an abstract disc or paddle blades). */
+function wheelGeometry(module: number): THREE.BufferGeometry {
+  const hubRadius = module * 0.7;
+  const boreRadius = hubRadius * 0.4;
+  const rimRadius = module * 3.2;
+  const spokeCount = 6;
+  const spokeThickness = module * 0.3;
+  const rimBandWidth = module * 0.5;
+  const thickness = GEAR_THICKNESS * 1.1;
+
+  const hub = discWithHole(hubRadius, boreRadius, thickness * 1.3);
+  const rim = discWithHole(rimRadius, rimRadius - rimBandWidth, thickness);
+
+  const parts: Array<THREE.BufferGeometry | ColoredPart> = [hub, rim];
+  for (let i = 0; i < spokeCount; i++) {
+    const spokeLength = rimRadius - rimBandWidth / 2 - hubRadius;
+    const spoke = new THREE.BoxGeometry(spokeLength, spokeThickness, thickness * 0.6);
+    spoke.translate(hubRadius + spokeLength / 2, 0, 0);
+    spoke.rotateZ((i / spokeCount) * Math.PI * 2);
+    parts.push(spoke);
+  }
+
+  // The tire: a torus centered on the rim's own radius, its tube cross-section
+  // giving the classic rounded tire silhouette a flat band never would.
+  const tire = new THREE.TorusGeometry(rimRadius - rimBandWidth * 0.1, rimBandWidth * 0.65, 12, 32);
+  parts.push({ geometry: tire, color: TIRE_COLOR });
+
+  return mergeGeometries(parts);
+}
+
+function mergeGeometries(parts: Array<THREE.BufferGeometry | ColoredPart>): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
-  // Carries `uv` along with position/normal so a texture map doesn't silently vanish
-  // on merged geometries (the crank's handle).
+  // Carries `uv`/`color` along with position/normal so a texture map or per-part tint
+  // doesn't silently vanish on merged geometries (the crank's handle, the wheel's tire).
   const merged = new THREE.BufferGeometry();
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
-  for (const geo of geometries) {
+  const colors: number[] = [];
+  for (const part of parts) {
+    const isColored = !(part instanceof THREE.BufferGeometry);
+    const geo = isColored ? (part as ColoredPart).geometry : (part as THREE.BufferGeometry);
+    const color = isColored ? (part as ColoredPart).color : WHITE;
     const g = geo.index ? geo.toNonIndexed() : geo;
     const pos = g.attributes.position;
     const norm = g.attributes.normal;
@@ -339,11 +392,13 @@ function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeomet
       positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
       normals.push(norm.getX(i), norm.getY(i), norm.getZ(i));
       uvs.push(uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0);
+      colors.push(color.r, color.g, color.b);
     }
   }
   merged.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   merged.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
   merged.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
+  merged.setAttribute("color", new THREE.Float32BufferAttribute(colors, 3));
   return merged;
 }
 
@@ -365,5 +420,7 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return gaugeGeometry(module);
     case "fan":
       return fanGeometry(module);
+    case "wheel":
+      return wheelGeometry(module);
   }
 }

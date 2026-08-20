@@ -10,7 +10,7 @@ export function defaultAxisForType(type: GearType): [number, number, number] {
 }
 
 export function defaultTeethForType(type: GearType): number {
-  if (type === "load" || type === "gauge" || type === "fan") return 0; // couple, don't mesh
+  if (type === "load" || type === "gauge" || type === "fan" || type === "wheel") return 0; // couple, don't mesh
   if (type === "worm") return 1; // single-start: the standard, simplest worm -- one full
   // crank turn advances the wheel by exactly one tooth, the clearest reduction ratio to teach
   return 20; // standard, safely above the ~17-tooth undercut threshold for 20° pressure-angle gears

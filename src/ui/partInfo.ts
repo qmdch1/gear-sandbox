@@ -111,4 +111,18 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       </g>`,
     image: "/parts/fan.jpg",
   },
+  wheel: {
+    label: "바퀴(수레바퀴)",
+    description: "스포크와 타이어가 달린 바퀴입니다. 다른 기어의 축 위치에 겹치게 놓으면 결합되어 그 속도로 함께 돕니다 — 마모에는 영향 없음.",
+    purpose:
+      "자동차·수레·자전거처럼, 기어트레인을 거쳐 나온 회전이 실제로 '땅 위를 굴러가는 움직임'으로 바뀌는 마지막 출력 장치입니다. 팬이 회전을 바람으로 보여준다면, 바퀴는 회전을 이동으로 보여준다고 생각하면 됩니다.",
+    icon: `<circle cx="50" cy="50" r="34" fill="none" stroke="currentColor" stroke-width="7"/>
+      <circle cx="50" cy="50" r="8" fill="none" stroke="currentColor" stroke-width="4"/>
+      <g stroke="currentColor" stroke-width="4">
+        <line x1="50" y1="20" x2="50" y2="38"/><line x1="50" y1="62" x2="50" y2="80"/>
+        <line x1="20" y1="50" x2="38" y2="50"/><line x1="62" y1="50" x2="80" y2="50"/>
+        <line x1="27" y1="27" x2="39" y2="39"/><line x1="61" y1="61" x2="73" y2="73"/>
+        <line x1="73" y1="27" x2="61" y2="39"/><line x1="39" y1="61" x2="27" y2="73"/>
+      </g>`,
+  },
 };

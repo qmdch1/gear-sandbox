@@ -3,7 +3,7 @@ import type { GearInstance, GearType } from "../sim/types";
 const SCHEMA_VERSION = 1;
 
 const GEAR_TYPES = new Set<GearType>([
-  "spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan",
+  "spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel",
 ]);
 
 // "battery"/"outlet" used to be separate power-source types, mechanically identical to

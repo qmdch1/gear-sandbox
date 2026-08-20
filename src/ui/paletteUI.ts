@@ -28,7 +28,7 @@ const CATEGORIES: Category[] = [
   },
   {
     label: "부착 장치",
-    types: ["load", "gauge", "fan"],
+    types: ["load", "gauge", "fan", "wheel"],
     icon: `<polygon points="50,12 76,28 76,62 50,78 24,62 24,28" fill="none" stroke="currentColor" stroke-width="6"/>
       <circle cx="50" cy="45" r="13" fill="none" stroke="currentColor" stroke-width="5"/>`,
   },

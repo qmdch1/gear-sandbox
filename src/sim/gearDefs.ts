@@ -17,6 +17,7 @@ export const GEAR_DEFS: Record<GearType, GearTypeDef> = {
   // a gear's shaft rather than mesh via teeth, and don't wear themselves.
   gauge:   { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
   fan:     { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  wheel:   { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
 };
 
 /** Gears that drive the rest of the train the moment they're placed (their
