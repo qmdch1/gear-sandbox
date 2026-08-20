@@ -126,6 +126,18 @@ describe("evaluatePair", () => {
     expect(edge!.oneWay).toBe("none");
   });
 
+  it("couples a worm onto a coincident crank even at their DEFAULT (mismatched) axes", () => {
+    // Regression: a worm defaults to the +X axis and a crank defaults to +Y --
+    // requiring the powering gear's axis to match the worm's own (as this used to)
+    // meant a worm could never actually be powered through the normal "just drop a
+    // crank on it" flow, since nothing in the UI can reorient either one's axis.
+    const crank = makeGear({ id: "crank", type: "crank", axis: [0, 1, 0], position: [0, 0, 0] });
+    const worm = makeGear({ id: "worm", type: "worm", axis: [1, 0, 0], teeth: 1, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(crank, worm);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
   it("does not let two worms couple to each other", () => {
     const wormA = makeGear({ id: "wa", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
     const wormB = makeGear({ id: "wb", type: "worm", teeth: 2, module: 1, position: [0, 0, 0] });
@@ -349,6 +361,37 @@ describe("meshPhaseAlignment", () => {
   it("returns null for a bevel/helical pair -- they don't mesh at all, so there's no phase to align", () => {
     const partner = makeGear({ id: "partner", type: "helical", teeth: 20, module: 1, position: [0, 0, 0] });
     const dragged = makeGear({ id: "dragged", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    expect(meshPhaseAlignment(dragged, 1.0, partner)).toBeNull();
+  });
+
+  it("centers a stationary wheel's gap on a dragged worm, leaving the worm's own rotation untouched", () => {
+    // A worm's thread is one continuous helix, not discrete teeth -- unlike bevel,
+    // there's no rotational phase of the worm's OWN that could clash, so only the
+    // wheel side needs centering.
+    const partner = makeGear({ id: "partner", type: "spur", teeth: 20, module: 1, position: [0, 0, 0], rotation: 0.6 });
+    const dragged = makeGear({ id: "dragged", type: "worm", axis: [1, 0, 0], teeth: 1, module: 1, position: [0, 0, 0], rotation: 1.9 });
+
+    const alignment = meshPhaseAlignment(dragged, 1.0, partner);
+    expect(alignment).not.toBeNull();
+    expect(alignment!.rotation).toBe(dragged.rotation); // untouched
+
+    const partnerPhaseAtContact = toothPhase(partner.teeth, partner.rotation, alignment!.worldAngleTowardPartner + Math.PI);
+    expect(partnerPhaseAtContact).toBeCloseTo(0.5, 5); // gap-center
+  });
+
+  it("sets a dragged spur gear's tooth-center to face a stationary worm partner", () => {
+    const partner = makeGear({ id: "partner", type: "worm", axis: [1, 0, 0], teeth: 1, module: 1, position: [0, 0, 0], rotation: 0.4 });
+    const dragged = makeGear({ id: "dragged", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
+
+    const alignment = meshPhaseAlignment(dragged, 1.3, partner);
+    expect(alignment).not.toBeNull();
+    expect(alignment!.worldAngleTowardPartner).toBeCloseTo(1.3, 10); // no detent to round to against the worm's continuous thread
+    expect(alignment!.rotation).toBeCloseTo(-1.3, 10);
+  });
+
+  it("returns null for a worm/profile-type pair at different heights (not solved for yet)", () => {
+    const partner = makeGear({ id: "partner", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] });
+    const dragged = makeGear({ id: "dragged", type: "worm", axis: [1, 0, 0], teeth: 1, module: 1, position: [0, 5, 0] });
     expect(meshPhaseAlignment(dragged, 1.0, partner)).toBeNull();
   });
 });

@@ -68,16 +68,20 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
     return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
   }
 
-  // A worm's driving shaft attaches directly (coincident position, same axis) to
-  // whatever powers it -- in this simplified model a worm has no separate "input
-  // tooth mesh," so without this it could never receive rotation at all (its only
-  // other rule, below, is a ONE-WAY mesh *out* toward its wheel). This coupling
-  // check is geometrically distinguishable from that mesh check (coincident vs.
-  // pitch-radius-apart), so there's no ambiguity between the two for the same pair.
+  // A worm's driving shaft attaches directly (coincident position) to whatever
+  // powers it -- in this simplified model a worm has no separate "input tooth
+  // mesh," so without this it could never receive rotation at all (its only other
+  // rule, below, is a ONE-WAY mesh *out* toward its wheel). Deliberately NOT
+  // requiring the powering gear's axis to match the worm's own (a worm defaults to
+  // the +X axis, every parallel-family power source defaults to +Y, and nothing in
+  // the UI can reorient either one -- requiring axis alignment here made a worm
+  // impossible to ever power at all). This coupling check is geometrically
+  // distinguishable from the mesh check below anyway (coincident vs.
+  // pitch-radius-apart), so dropping the axis requirement creates no ambiguity.
   if (a.type === "worm" || b.type === "worm") {
     const bothWorm = a.type === "worm" && b.type === "worm";
     const coincident = dist(a.position, b.position) <= COUPLING_DISTANCE_TOLERANCE;
-    if (!bothWorm && coincident && Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD) {
+    if (!bothWorm && coincident) {
       return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
     }
     // Not a coincident shaft coupling -- fall through to the perpendicular
@@ -135,8 +139,8 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
 
   if (a.type === "worm" || b.type === "worm") {
     const bothWorm = a.type === "worm" && b.type === "worm";
-    if (!bothWorm && Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD) {
-      return 0; // coincident shaft coupling
+    if (!bothWorm) {
+      return 0; // coincident shaft coupling -- see evaluatePair's matching check for why axis alignment isn't required here
     }
     // Not eligible for shaft coupling -- fall through to the mesh check below,
     // which covers the worm-to-wheel case.
@@ -184,6 +188,22 @@ function isBevelOnWorldXAxis(g: GearInstance): boolean {
   return g.type === "bevel" && isWorldXAxis(g);
 }
 
+function isWormOnWorldXAxis(g: GearInstance): boolean {
+  return g.type === "worm" && isWorldXAxis(g);
+}
+
+/** Shared by every phase-alignable pairing below: the world angle (as seen from
+ *  `partner`) nearest `rawWorldAngleTowardPartner` where `partner` shows an exact
+ *  gap-center (phase 0.5) at the contact point, rounded to the nearest achievable
+ *  detent (valid solutions repeat every tooth pitch). See the module doc comment
+ *  below for the phase convention and derivation this implements. */
+function roundedPartnerGapCenterAngle(partner: GearInstance, rawWorldAngleTowardPartner: number): number {
+  const partnerPitch = TWO_PI / partner.teeth;
+  const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.5;
+  const n = Math.round(continuousN);
+  return -Math.PI - partner.rotation - (0.5 + n) * partnerPitch;
+}
+
 export interface PhaseAlignment {
   /** Corrected angle (dragged -> partner, atan2(dz,dx) convention) that centers the
    *  mesh exactly on the partner's nearest tooth-pitch "detent," instead of whatever
@@ -218,15 +238,10 @@ export function meshPhaseAlignment(
   partner: GearInstance,
 ): PhaseAlignment | null {
   if (PROFILE_TYPES.has(dragged.type) && PROFILE_TYPES.has(partner.type) && isWorldYAxis(dragged) && isWorldYAxis(partner)) {
-    // Snap the angle (as seen from the partner) to the nearest one where the partner
-    // shows an exact gap-center (phase 0.5) at the contact point. Valid solutions
-    // repeat every `partnerPitch`, so solving for the nearest one is a "round to the
-    // nearest grid line" over that fixed step -- picking a random point in the gap (a
-    // valid, non-clashing but off-center mesh) is exactly the bug this fixes.
-    const partnerPitch = TWO_PI / partner.teeth;
-    const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.5;
-    const n = Math.round(continuousN);
-    const worldAngleTowardPartner = -Math.PI - partner.rotation - (0.5 + n) * partnerPitch;
+    // Round to the nearest angle where the partner shows an exact gap-center at the
+    // contact point -- picking a random point in the gap (a valid, non-clashing but
+    // off-center mesh) is exactly the bug this fixes.
+    const worldAngleTowardPartner = roundedPartnerGapCenterAngle(partner, rawWorldAngleTowardPartner);
 
     // With the partner locked to phase 0.5 (gap-center) at this angle by construction,
     // dragged's own tooth-center (phase 0) should face back toward the partner --
@@ -257,10 +272,7 @@ export function meshPhaseAlignment(
     // Partner side: identical rounding to the parallel-pair case above (partner is
     // still a +Y-axis profile type with real involute teeth, so it still needs a
     // proper detent in its own rotation plane).
-    const partnerPitch = TWO_PI / partner.teeth;
-    const continuousN = (-Math.PI - partner.rotation - rawWorldAngleTowardPartner) / partnerPitch - 0.5;
-    const n = Math.round(continuousN);
-    const worldAngleTowardPartner = -Math.PI - partner.rotation - (0.5 + n) * partnerPitch;
+    const worldAngleTowardPartner = roundedPartnerGapCenterAngle(partner, rawWorldAngleTowardPartner);
 
     // Bevel (dragged) side: the contact direction from dragged to partner, projected
     // into dragged's own Y-Z rotation plane, has z ~ sin(worldAngleTowardPartner) and
@@ -278,6 +290,28 @@ export function meshPhaseAlignment(
     // angle to here, so it's used as-is; only dragged's own tooth-center is aligned
     // to face the bevel, which is still a real improvement over leaving dragged's
     // rotation completely untouched (this pairing returned null entirely before).
+    const worldAngleTowardPartner = rawWorldAngleTowardPartner;
+    const rotation = -worldAngleTowardPartner;
+    return { worldAngleTowardPartner, rotation };
+  }
+
+  // A worm meshes on a perpendicular (world +X) axis against its wheel, same as a
+  // bevel does -- but a worm's thread is one continuous helix, not discrete teeth,
+  // so there's no rotational phase of the worm's OWN that could ever clash; any
+  // angle presents a valid engagement point. Only the wheel side (real involute
+  // teeth) needs its usual gap-center detent.
+  const draggedIsWorm = isWormOnWorldXAxis(dragged);
+  const partnerIsWorm = isWormOnWorldXAxis(partner);
+
+  if (draggedIsWorm && SPUR_FAMILY.has(partner.type) && isWorldYAxis(partner) && sameHeight) {
+    const worldAngleTowardPartner = roundedPartnerGapCenterAngle(partner, rawWorldAngleTowardPartner);
+    return { worldAngleTowardPartner, rotation: dragged.rotation }; // worm's own rotation is left untouched
+  }
+
+  if (partnerIsWorm && SPUR_FAMILY.has(dragged.type) && isWorldYAxis(dragged) && sameHeight) {
+    // The worm partner has no discrete phase to round against either -- the raw
+    // angle is fine; still center dragged's own tooth on it for consistency with
+    // every other pairing.
     const worldAngleTowardPartner = rawWorldAngleTowardPartner;
     const rotation = -worldAngleTowardPartner;
     return { worldAngleTowardPartner, rotation };

@@ -79,6 +79,23 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("wheel")).toBeCloseTo(-0.3);  // -(2/20) * 3, one-way from the worm
   });
 
+  it("still drives a worm from a coincident crank at their DEFAULT (mismatched) axes", () => {
+    // Regression: gearFactory.ts's defaultAxisForType gives a crank +Y and a worm
+    // +X -- if a worm ever required the powering gear's axis to match its own, a
+    // freshly-placed crank could never actually power a freshly-placed worm at all.
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [0, 1, 0], teeth: 20, module: 1,
+      position: [0, 0, 0], angularVelocity: 3,
+    });
+    const worm = makeGear({
+      id: "worm", type: "worm", axis: [1, 0, 0], teeth: 1, module: 1,
+      position: [0, 0, 0],
+    });
+    const gears = [crank, worm];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("worm")).toBeCloseTo(3);
+  });
+
   it("drives propagation via the generalized POWER_SOURCE_TYPES check, not a literal 'crank' comparison", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 }),
