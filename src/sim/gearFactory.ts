@@ -9,6 +9,19 @@ export function defaultAxisForType(type: GearType): [number, number, number] {
   return PERPENDICULAR_AXIS_TYPES.has(type) ? [1, 0, 0] : [0, 1, 0];
 }
 
+/** Flips a bevel/worm gear's axis between the two cardinal directions that
+ *  actually mean anything in this sim (world +X and +Y) -- the only way to build
+ *  a bevel-to-bevel pair (which needs one gear on each axis to be perpendicular at
+ *  all -- see meshing.ts's bevel tests) or to stand a horizontal-by-default worm
+ *  upright, since nothing else ever changes a gear's axis after creation. A no-op
+ *  for every other type -- the rest of the parallel-shaft family is always +Y by
+ *  design, and every meshing rule in meshing.ts assumes that. */
+export function toggledAxis(type: GearType, axis: [number, number, number]): [number, number, number] {
+  if (!PERPENDICULAR_AXIS_TYPES.has(type)) return axis;
+  const isX = Math.abs(axis[0]) > 0.5;
+  return isX ? [0, 1, 0] : [1, 0, 0];
+}
+
 export function defaultTeethForType(type: GearType): number {
   if (type === "load" || type === "gauge" || type === "fan" || type === "wheel") return 0; // couple, don't mesh
   if (type === "worm") return 1; // single-start: the standard, simplest worm -- one full

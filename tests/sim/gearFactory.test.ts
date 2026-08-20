@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGear, defaultAxisForType, defaultTeethForType } from "../../src/sim/gearFactory";
+import { createGear, defaultAxisForType, defaultTeethForType, toggledAxis } from "../../src/sim/gearFactory";
 
 describe("defaultAxisForType", () => {
   it("gives bevel and worm gears a perpendicular default axis", () => {
@@ -12,6 +12,19 @@ describe("defaultAxisForType", () => {
     expect(defaultAxisForType("helical")).toEqual([0, 1, 0]);
     expect(defaultAxisForType("crank")).toEqual([0, 1, 0]);
     expect(defaultAxisForType("load")).toEqual([0, 1, 0]);
+  });
+});
+
+describe("toggledAxis", () => {
+  it("flips a bevel/worm gear between horizontal (+X) and vertical (+Y)", () => {
+    expect(toggledAxis("bevel", [1, 0, 0])).toEqual([0, 1, 0]);
+    expect(toggledAxis("bevel", [0, 1, 0])).toEqual([1, 0, 0]);
+    expect(toggledAxis("worm", [1, 0, 0])).toEqual([0, 1, 0]);
+  });
+
+  it("does nothing for a type outside the parallel-shaft family's fixed +Y axis", () => {
+    expect(toggledAxis("spur", [0, 1, 0])).toEqual([0, 1, 0]);
+    expect(toggledAxis("crank", [0, 1, 0])).toEqual([0, 1, 0]);
   });
 });
 

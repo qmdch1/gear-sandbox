@@ -1,5 +1,5 @@
 import type { GearInstance, GearType } from "./sim/types";
-import { createGear } from "./sim/gearFactory";
+import { createGear, toggledAxis } from "./sim/gearFactory";
 import { tick } from "./sim/simulation";
 import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
@@ -16,7 +16,7 @@ app.innerHTML = `
     <section class="panel">
       <h2>부품 담기</h2>
       <div id="palette"></div>
-      <p id="power-hint">동력원 기어는 놓으면 자동으로 돌아갑니다. 다른 기어를 가까이 끌어오면 맞물리는 위치로 자동으로 붙습니다. 이미 붙어 있는 기어들은 하나를 끌면 같이 움직여요 — <b>Alt</b>+드래그로 하나만 떼어낼 수 있습니다. <b>Shift</b>+드래그로 위아래 높이를 조절할 수 있습니다(베벨 기어처럼 높이를 맞춰야 할 때 사용).</p>
+      <p id="power-hint">동력원 기어는 놓으면 자동으로 돌아갑니다. 다른 기어를 가까이 끌어오면 맞물리는 위치로 자동으로 붙습니다. 이미 붙어 있는 기어들은 하나를 끌면 같이 움직여요 — <b>Alt</b>+드래그로 하나만 떼어낼 수 있습니다. <b>Shift</b>+드래그로 위아래 높이를 조절할 수 있습니다(베벨 기어처럼 높이를 맞춰야 할 때 사용). 베벨·웜 기어는 클릭해서 고른 뒤 <b>V</b> 키를 누르면 가로/세로 축 방향을 바꿀 수 있습니다.</p>
     </section>
     <section class="panel">
       <h2>저장</h2>
@@ -131,6 +131,8 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
   },
 });
 
+let selectedGearId: string | null = null;
+
 new DragControls({
   ctx,
   getGears: () => gears,
@@ -141,6 +143,19 @@ new DragControls({
     if (rotation !== undefined) gear.rotation = rotation; // tooth-interlocking snap
   },
   onPreview: (partnerId) => sceneSync.setPreviewHighlight(partnerId),
+  onSelect: (id) => {
+    selectedGearId = id;
+  },
+});
+
+// Click a bevel/worm gear, then press V to flip it between lying flat (its default
+// horizontal axis) and standing upright (vertical) -- see gearFactory.ts's
+// `toggledAxis`. No-op for every other type or when nothing's selected.
+window.addEventListener("keydown", (event) => {
+  if (event.key.toLowerCase() !== "v" || !selectedGearId) return;
+  const gear = gears.find((g) => g.id === selectedGearId);
+  if (!gear) return;
+  gear.axis = toggledAxis(gear.type, gear.axis);
 });
 
 window.addEventListener("resize", () => {
