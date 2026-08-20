@@ -132,6 +132,24 @@ describe("evaluatePair", () => {
     expect(evaluatePair(wormA, wormB)).toBeNull();
   });
 
+  it("couples a crank directly onto a coincident helical gear's shaft, so it can receive power", () => {
+    // A helical gear only meshes with another helical gear (its teeth are angled,
+    // a plain crank's aren't) -- without this coupling it could never spin at all,
+    // since nothing else ever starts spinning on its own.
+    const crank = makeGear({ id: "crank", type: "crank", axis: [0, 1, 0], position: [0, 0, 0] });
+    const helical = makeGear({ id: "helical", type: "helical", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(crank, helical);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+    expect(edge!.oneWay).toBe("none");
+  });
+
+  it("does not couple a crank to a helical gear that isn't coincident with it (that's still a plain tooth-mesh distance, which doesn't work)", () => {
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0] });
+    const helical = makeGear({ id: "helical", type: "helical", teeth: 10, module: 1, position: [15, 0, 0] });
+    expect(evaluatePair(crank, helical)).toBeNull();
+  });
+
   it("couples a load object directly onto a coincident, axis-aligned gear", () => {
     const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
     const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
@@ -210,6 +228,12 @@ describe("idealConnectionDistance", () => {
     const gear = makeGear({ id: "g", position: [0, 0, 0] });
     const load = makeGear({ id: "l", type: "load", teeth: 0, position: [999, 0, 0] });
     expect(idealConnectionDistance(gear, load)).toBe(0);
+  });
+
+  it("returns 0 (coincident) for a crank-onto-helical shaft coupling", () => {
+    const crank = makeGear({ id: "crank", type: "crank", position: [0, 0, 0] });
+    const helical = makeGear({ id: "helical", type: "helical", teeth: 20, module: 1, position: [999, 0, 0] });
+    expect(idealConnectionDistance(crank, helical)).toBe(0);
   });
 
   it("returns null for a spur/helical pair -- they never mesh regardless of distance", () => {

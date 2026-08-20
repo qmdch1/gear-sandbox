@@ -1,4 +1,5 @@
 import type { GearInstance, MeshEdge } from "./types";
+import { POWER_SOURCE_TYPES } from "./gearDefs";
 
 const MESH_TOLERANCE = 0.05;          // 5% tolerance on center-distance match
 const PARALLEL_DOT_THRESHOLD = 0.98;  // |axis dot| above this => parallel axes
@@ -33,6 +34,17 @@ function bevelMeshCompatible(a: GearInstance["type"], b: GearInstance["type"]): 
 // on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge or a
 // fan is functionally the same attach rule, just a different indicator/output device).
 const COUPLING_ONLY_TYPES = new Set<GearInstance["type"]>(["load", "gauge", "fan"]);
+
+// A helical gear only meshes (via teeth) with another helical gear -- a plain (0°-
+// helix) power source like a crank can't properly mesh into it either, same as any
+// other spur-family gear. But that would leave a helical gear with no way to ever
+// receive power at all, since nothing else *starts* spinning. Real machines solve
+// this the same way this sim's worm already does: the power source's shaft couples
+// DIRECTLY onto the helical gear's own shaft (coincident position, same axis) --
+// a rigid coupling, not a tooth mesh, so the tooth-angle mismatch never applies.
+function helicalPowerCoupling(a: GearInstance["type"], b: GearInstance["type"]): boolean {
+  return (a === "helical" && POWER_SOURCE_TYPES.has(b)) || (b === "helical" && POWER_SOURCE_TYPES.has(a));
+}
 
 function dist(a: [number, number, number], b: [number, number, number]): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -69,6 +81,19 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
     }
     // Not a coincident shaft coupling -- fall through to the perpendicular
     // one-way mesh check below, which covers the worm-to-wheel case.
+  }
+
+  // A power source (crank) coupling directly onto a helical gear's own shaft --
+  // see `helicalPowerCoupling` above for why this exists (otherwise a helical gear
+  // could never receive power at all, since it only meshes with other helical gears
+  // and there's no helical-toothed power source).
+  if (helicalPowerCoupling(a.type, b.type)) {
+    const coincident = dist(a.position, b.position) <= COUPLING_DISTANCE_TOLERANCE;
+    if (coincident && Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD) {
+      return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+    }
+    // Not coincident -- fall through; a helical gear can still mesh via teeth with
+    // another helical gear below (sameParallelFamily), just not this power source.
   }
 
   const centerDistance = dist(a.position, b.position);
@@ -114,6 +139,10 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
     }
     // Not eligible for shaft coupling -- fall through to the mesh check below,
     // which covers the worm-to-wheel case.
+  }
+
+  if (helicalPowerCoupling(a.type, b.type) && Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD) {
+    return 0; // coincident shaft coupling -- see evaluatePair's matching check
   }
 
   const axisDot = dot(a.axis, b.axis);
