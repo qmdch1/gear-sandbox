@@ -2,17 +2,22 @@ import * as THREE from "three";
 import type { GearType } from "../sim/types";
 
 /** Per-type base tint at full durability, so gears read as visually distinct materials
- *  (steel, brass, bronze...) even before any wear sets in — durability still fades
- *  through the same yellow -> red -> gray scale on top of this (see gearMesh.ts). */
+ *  even before any wear sets in — durability still fades through the same yellow ->
+ *  red -> gray scale on top of this (see gearMesh.ts). These were originally picked
+ *  just to look distinct from each other (hence a teal-blue helical gear, sky-blue
+ *  fan blades...), not to match anything real -- re-picked instead by eye against
+ *  the real reference photos in public/parts/ (spur/helical/bevel/worm/crank/load/
+ *  gauge/fan.jpg, see docs/superpowers/specs/part-photos-report.md), which is what
+ *  actual versions of these parts look like. */
 export const TYPE_HEALTHY_COLORS: Record<GearType, THREE.Color> = {
-  spur: new THREE.Color(0x6fae8c), // steel-green
-  helical: new THREE.Color(0x4fa3c7), // teal-blue
-  crank: new THREE.Color(0xd4af6a), // brass
-  bevel: new THREE.Color(0xb8b8c0), // silver
-  worm: new THREE.Color(0xb8763f), // bronze
-  load: new THREE.Color(0x5a6472), // dark slate
-  gauge: new THREE.Color(0xd9d2bd), // ivory dial face
-  fan: new THREE.Color(0x5aa9c9), // sky blue blades
+  spur: new THREE.Color(0xb0b0b4), // brushed steel
+  helical: new THREE.Color(0x8a6a4d), // weathered bronze/rust, like a well-used gear train
+  crank: new THREE.Color(0x4a4038), // dark cast-iron handwheel
+  bevel: new THREE.Color(0x45403a), // dark gunmetal / black-oxide finish
+  worm: new THREE.Color(0x3d3d40), // dark charcoal steel
+  load: new THREE.Color(0x565c52), // dark, slightly olive-tinted flywheel
+  gauge: new THREE.Color(0xe4e6ea), // near-white -- lets the dial texture's own dark-navy face and printed colors show through undistorted, rather than tinting them
+  fan: new THREE.Color(0xcdd0d4), // bright chrome
 };
 
 /** jsdom (used by this project's DOM-touching tests) implements `getContext` but has no
@@ -66,12 +71,13 @@ export function createMetalTexture(size = 256): THREE.CanvasTexture | null {
 
 /** An analog dial face (tick marks, a redline arc, a center hub) for the RPM gauge --
  *  it used to be a bare disc, which read as "no instrument face at all" rather than
- *  a gauge. Painted onto the whole canvas (a metallic-gray background, with the dial
- *  face circle reaching exactly to the canvas edges) so it works with
- *  `gaugeGeometry`'s radial UV mapping: the dial disc's own outer radius maps to the
- *  full [0,1] UV square, and the disc's thin rim edge samples a fixed point in one of
- *  the (off-dial) background corners, picking up the metallic gray rather than the
- *  dial's ivory face. */
+ *  a gauge. Dark navy face with light ticks, matching real automotive tachometers
+ *  (see public/parts/gauge.jpg) rather than the flat ivory clock-dial look this had
+ *  before. Painted onto the whole canvas (with the dial face circle reaching exactly
+ *  to the canvas edges) so it works with `gaugeGeometry`'s radial UV mapping: the
+ *  dial disc's own outer radius maps to the full [0,1] UV square, and the disc's
+ *  thin rim edge samples a fixed point in one of the (off-dial) background corners,
+ *  picking up the dark background rather than the dial face itself. */
 export function createGaugeDialTexture(size = 256): THREE.CanvasTexture | null {
   if (!hasRealCanvasSupport()) return null;
   const canvas = document.createElement("canvas");
@@ -84,12 +90,12 @@ export function createGaugeDialTexture(size = 256): THREE.CanvasTexture | null {
   const cy = size / 2;
   const r = size / 2;
 
-  context.fillStyle = "#4a4d52";
+  context.fillStyle = "#12151f";
   context.fillRect(0, 0, size, size);
 
   context.beginPath();
   context.arc(cx, cy, r, 0, Math.PI * 2);
-  context.fillStyle = "#eee6d2";
+  context.fillStyle = "#161a28";
   context.fill();
 
   const MAJOR_TICKS = 8;
@@ -98,7 +104,7 @@ export function createGaugeDialTexture(size = 256): THREE.CanvasTexture | null {
     context.beginPath();
     context.moveTo(cx + Math.cos(angle) * r * 0.78, cy + Math.sin(angle) * r * 0.78);
     context.lineTo(cx + Math.cos(angle) * r * 0.92, cy + Math.sin(angle) * r * 0.92);
-    context.strokeStyle = "#2b2b2b";
+    context.strokeStyle = "#e8ecf5";
     context.lineWidth = size * 0.02;
     context.stroke();
   }
@@ -109,20 +115,20 @@ export function createGaugeDialTexture(size = 256): THREE.CanvasTexture | null {
     context.beginPath();
     context.moveTo(cx + Math.cos(angle) * r * 0.84, cy + Math.sin(angle) * r * 0.84);
     context.lineTo(cx + Math.cos(angle) * r * 0.92, cy + Math.sin(angle) * r * 0.92);
-    context.strokeStyle = "#6b6b6b";
+    context.strokeStyle = "#7d879e";
     context.lineWidth = size * 0.008;
     context.stroke();
   }
 
   context.beginPath();
   context.arc(cx, cy, r * 0.92, -Math.PI * 0.75, -Math.PI * 0.55);
-  context.strokeStyle = "#c0392b";
+  context.strokeStyle = "#e0342a";
   context.lineWidth = size * 0.03;
   context.stroke();
 
   context.beginPath();
   context.arc(cx, cy, r * 0.1, 0, Math.PI * 2);
-  context.fillStyle = "#2b2b2b";
+  context.fillStyle = "#0a0c14";
   context.fill();
 
   return new THREE.CanvasTexture(canvas);
