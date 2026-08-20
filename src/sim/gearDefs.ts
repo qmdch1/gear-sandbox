@@ -25,6 +25,10 @@ export const GEAR_DEFS: Record<GearType, GearTypeDef> = {
   // A purely structural joint -- never spins, never carries torque (see
   // meshing.ts's "structural" edge kind), so there's nothing to wear it out.
   beam:    { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  // A real drivetrain part like shaft (it actually carries torque, at a distance,
+  // between two pulleys), but with friction against its own pulleys that a rigid
+  // shaft coupling doesn't have -- wears a bit faster than shaft as a result.
+  belt:    { durabilityMax: 130, baseWearPerSecond: 0.6, loadWearMultiplier: 1.3 },
 };
 
 /** Gears that drive the rest of the train the moment they're placed (their

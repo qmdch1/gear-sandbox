@@ -270,6 +270,55 @@ describe("evaluatePair", () => {
     const host = makeGear({ id: "host", position: [999, 0, 0] });
     expect(evaluatePair(beam, host)).toBeNull();
   });
+
+  it("couples a belt's near end to a coincident, TOOTHED host, regardless of the host's axis", () => {
+    // Unlike a shaft, a belt has no "own direction" that must line up with the
+    // host's axis -- it just wraps around whatever pulley its end sits on.
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(belt, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("couples a belt's FAR end to a different coincident host too", () => {
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const host = makeGear({ id: "host", teeth: 10, module: 1, position: [30, 0, 0] });
+    const edge = evaluatePair(belt, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("does not couple a belt to a toothless part (e.g. a load, or another rod)", () => {
+    // A belt/chain ratio is meaningless against something with no pitch radius.
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const load = makeGear({ id: "load", type: "load", teeth: 0, position: [0, 0, 0] });
+    expect(evaluatePair(belt, load)).toBeNull();
+  });
+
+  it("does not let two belts join to each other", () => {
+    const beltA = makeGear({ id: "ba", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const beltB = makeGear({ id: "bb", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    expect(evaluatePair(beltA, beltB)).toBeNull();
+  });
+
+  it("sets a host-to-belt edge's ratio to the host's own pitch radius, so propagateRotation can convert to/from a linear belt speed", () => {
+    const host = makeGear({ id: "host", teeth: 20, module: 1, position: [0, 0, 0] }); // pitchRadius = 10
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const edge = evaluatePair(host, belt); // host is "a" here
+    expect(edge).not.toBeNull();
+    expect(edge!.ratio).toBeCloseTo(10);
+  });
+
+  it("inverts the ratio when the belt is passed as \"a\" instead of the host", () => {
+    // Same physical pair, opposite argument order -- ratio is defined as "b's
+    // speed = ratio * a's speed" (see rotation.ts), so it must flip accordingly.
+    const host = makeGear({ id: "host", teeth: 20, module: 1, position: [0, 0, 0] }); // pitchRadius = 10
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const edge = evaluatePair(belt, host); // belt is "a" here
+    expect(edge).not.toBeNull();
+    expect(edge!.ratio).toBeCloseTo(1 / 10);
+  });
 });
 
 describe("isOverlapping", () => {
@@ -360,6 +409,18 @@ describe("idealConnectionDistance", () => {
     const beam = makeGear({ id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
     const host = makeGear({ id: "host", axis: [1, 0, 0], position: [999, 0, 0] }); // distance/axis shouldn't matter
     expect(idealConnectionDistance(beam, host)).toBe(0);
+  });
+
+  it("returns 0 (coincident, no axis requirement) for a belt against a toothed host", () => {
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], teeth: 20, module: 1, position: [999, 0, 0] });
+    expect(idealConnectionDistance(belt, host)).toBe(0);
+  });
+
+  it("returns null for a belt against a toothless part -- no meaningful ratio", () => {
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const load = makeGear({ id: "load", type: "load", teeth: 0, position: [999, 0, 0] });
+    expect(idealConnectionDistance(belt, load)).toBeNull();
   });
 });
 

@@ -22,7 +22,7 @@ app.innerHTML = `
         <li>부품 떼기: <b>Alt</b>+드래그</li>
         <li>높이 조절: <b>Shift</b>+드래그</li>
         <li>가로/세로 전환: 부품 클릭 후 <b>V</b></li>
-        <li>빔·축 반대쪽 끝 옮기기: <b>Ctrl</b>+드래그</li>
+        <li>빔·축·벨트 반대쪽 끝 옮기기: <b>Ctrl</b>+드래그</li>
       </ul>
     </section>
     <section class="panel">
@@ -96,7 +96,7 @@ function spawnGridPosition(index: number): [number, number, number] {
 // left everything else undiscoverable unless you dug through the palette -- one of
 // every type instead, spiraling out from the origin (crank first, so the one
 // power-source gear still lands dead center where the default camera looks).
-const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam"];
+const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt"];
 
 // No user accounts, so there's exactly one saved layout on the server (see
 // serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh

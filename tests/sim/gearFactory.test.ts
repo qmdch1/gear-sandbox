@@ -33,9 +33,10 @@ describe("defaultTeethForType", () => {
     expect(defaultTeethForType("load")).toBe(0);
   });
 
-  it("gives shaft and beam (rod types) zero teeth", () => {
+  it("gives shaft, beam, and belt (rod types) zero teeth", () => {
     expect(defaultTeethForType("shaft")).toBe(0);
     expect(defaultTeethForType("beam")).toBe(0);
+    expect(defaultTeethForType("belt")).toBe(0);
   });
 
   it("gives spur/helical/crank gears 20 teeth", () => {
@@ -71,6 +72,12 @@ describe("createGear", () => {
     const beam = createGear("beam", [5, 0, 0]);
     expect(beam.position2).toBeDefined();
     expect(beam.position2).not.toEqual(beam.position);
+  });
+
+  it("gives a belt a second end too (same two-endpoint rod convention)", () => {
+    const belt = createGear("belt", [5, 0, 0]);
+    expect(belt.position2).toBeDefined();
+    expect(belt.position2).not.toEqual(belt.position);
   });
 
   it("leaves position2 undefined for every other type", () => {

@@ -397,6 +397,19 @@ function beamGeometry(module: number): THREE.BufferGeometry {
   return new THREE.BoxGeometry(side, side, 1);
 }
 
+/** A belt/chain drive -- same unit-length-along-Z, stretch-via-scale.z convention
+ *  as `shaftGeometry`/`beamGeometry`, but a wide, thin flat strap (not a round
+ *  rod or a square bar) so it reads as "belt/chain," distinct from both. This is
+ *  a simplification: a real belt runs along two tangent lines offset by each
+ *  pulley's own radius, not a single strap straight through both hub centers --
+ *  left for a future visual refinement (see ROADMAP.md), same spirit as the
+ *  bevel/worm same-height-only limitation already accepted elsewhere. */
+function beltGeometry(module: number): THREE.BufferGeometry {
+  const width = module * 1.0;
+  const thickness = module * 0.15;
+  return new THREE.BoxGeometry(width, thickness, 1);
+}
+
 function mergeGeometries(parts: Array<THREE.BufferGeometry | ColoredPart>): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   // Carries `uv`/`color` along with position/normal so a texture map or per-part tint
@@ -452,5 +465,7 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return shaftGeometry(module);
     case "beam":
       return beamGeometry(module);
+    case "belt":
+      return beltGeometry(module);
   }
 }

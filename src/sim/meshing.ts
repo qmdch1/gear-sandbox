@@ -118,6 +118,24 @@ function shaftCouplingEnd(shaft: GearInstance, host: GearInstance): "position" |
   return null;
 }
 
+/** Whether `belt`'s two ends couple onto `host` -- unlike `shaftCouplingEnd`, no
+ *  axis-alignment check: a belt/chain doesn't rigidly extend ALONG a host's
+ *  rotation axis the way a shaft coupling does, it just wraps around the
+ *  host's own pulley/sprocket perpendicular to that axis, so its end simply
+ *  needs to sit at the host's shaft position. (A real belt drive does need
+ *  its two pulleys' axes parallel to EACH OTHER, but `evaluatePair` only ever
+ *  sees one host at a time -- see the comment on the belt branch below for why
+ *  that cross-check is left unenforced, same tradeoff as `beamJoinsAt`.) Also
+ *  requires the host to actually have teeth (a nonzero pitch radius) -- a belt
+ *  ratio is meaningless against a toothless accessory like load/gauge/fan/wheel
+ *  or another rod (shaft/beam/belt all default to zero teeth). */
+function beltCouplingEnd(belt: GearInstance, host: GearInstance): "position" | "position2" | null {
+  if (host.teeth <= 0) return null;
+  if (dist(belt.position, host.position) <= COUPLING_DISTANCE_TOLERANCE) return "position";
+  if (belt.position2 && dist(belt.position2, host.position) <= COUPLING_DISTANCE_TOLERANCE) return "position2";
+  return null;
+}
+
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
   // Checked before every other rule (including shaft) since a beam's join
@@ -125,6 +143,29 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   // never in conflict with them -- a beam only ever matches this branch.
   if (beamJoinsAt(a, b)) {
     return { a: a.id, b: b.id, kind: "structural", ratio: 1, oneWay: "none" };
+  }
+
+  // A belt/chain: same-direction power transmission (unlike a tooth mesh, which
+  // reverses direction) between two pulleys at a distance, scaled by their
+  // relative pitch radii (unlike a shaft's rigid 1:1 coupling) -- exactly how a
+  // real bicycle chain or belt drive behaves. Encoded as an ordinary "coupling"
+  // edge (same-direction sign, see rotation.ts) whose ratio is the HOST's own
+  // pitch radius: propagateRotation's existing generic ratio/1-ratio reversal
+  // then correctly converts an angular velocity into a "linear belt speed" units
+  // going one way, and back into the other pulley's own angular velocity coming
+  // back out -- no core rotation.ts changes needed.
+  if (a.type === "belt" || b.type === "belt") {
+    if (a.type === "belt" && b.type === "belt") return null; // no belt-to-belt chaining -- a belt loop connects two pulleys, not another belt
+    const belt = a.type === "belt" ? a : b;
+    const host = a.type === "belt" ? b : a;
+    if (!beltCouplingEnd(belt, host)) return null;
+    // `ratio` is "b's speed = ratio * a's speed" (see rotation.ts) -- so which
+    // way to multiply by the host's pitch radius depends on which of a/b IS the
+    // host here, not just which one it is conceptually: going host->belt
+    // multiplies (angularVelocity * radius = linear speed), going belt->host
+    // divides (linear speed / radius = angularVelocity back out).
+    const ratio = a.type === "belt" ? 1 / pitchRadius(host) : pitchRadius(host);
+    return { a: a.id, b: b.id, kind: "coupling", ratio, oneWay: "none" };
   }
 
   if (a.type === "shaft" || b.type === "shaft") {
@@ -207,6 +248,12 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
 export function idealConnectionDistance(a: GearInstance, b: GearInstance): number | null {
   if (a.type === "beam" || b.type === "beam") {
     return 0; // bare coincidence, no axis requirement -- see beamJoinsAt/evaluatePair
+  }
+
+  if (a.type === "belt" || b.type === "belt") {
+    if (a.type === "belt" && b.type === "belt") return null;
+    const host = a.type === "belt" ? b : a;
+    return host.teeth > 0 ? 0 : null; // bare coincidence -- see beltCouplingEnd/evaluatePair
   }
 
   if (a.type === "shaft" || b.type === "shaft") {

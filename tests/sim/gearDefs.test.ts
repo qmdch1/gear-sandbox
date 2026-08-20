@@ -3,7 +3,7 @@ import { GEAR_DEFS } from "../../src/sim/gearDefs";
 
 describe("GEAR_DEFS", () => {
   it("has an entry for every gear type with a positive durability", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt"] as const;
     for (const t of types) {
       expect(GEAR_DEFS[t].durabilityMax).toBeGreaterThan(0);
     }

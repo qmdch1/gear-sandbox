@@ -33,7 +33,7 @@ describe("computeSpurProfilePoints", () => {
 
 describe("buildGeometryForType", () => {
   it("builds a non-empty geometry for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt"] as const;
     for (const t of types) {
       const geometry = buildGeometryForType(t, 20, 1);
       expect(geometry.attributes.position.count).toBeGreaterThan(0);
@@ -127,5 +127,26 @@ describe("buildGeometryForType", () => {
     // constant radius, making it visually distinguishable.
     expect(maxX).toBeCloseTo(module * 0.35, 5); // side = module*0.7, half-width = 0.35
     expect(maxY).toBeCloseTo(module * 0.35, 5);
+  });
+
+  it("builds the belt as a unit-length flat, wide strap (distinct from beam's square bar)", () => {
+    const module = 1;
+    const geometry = buildGeometryForType("belt", 0, module);
+    const position = geometry.attributes.position;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    let maxX = 0;
+    let maxY = 0;
+    for (let i = 0; i < position.count; i++) {
+      minZ = Math.min(minZ, position.getZ(i));
+      maxZ = Math.max(maxZ, position.getZ(i));
+      maxX = Math.max(maxX, Math.abs(position.getX(i)));
+      maxY = Math.max(maxY, Math.abs(position.getY(i)));
+    }
+    expect(maxZ - minZ).toBeCloseTo(1, 5); // unit length along Z, same stretch-via-scale.z convention
+    expect(maxX).toBeCloseTo(module * 0.5, 5);   // width = module*1.0, half = 0.5
+    expect(maxY).toBeCloseTo(module * 0.075, 5); // thickness = module*0.15, half = 0.075
+    // Wide and thin -- a strap, not a square bar (beam) or round rod (shaft).
+    expect(maxX).toBeGreaterThan(maxY * 3);
   });
 });

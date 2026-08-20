@@ -143,4 +143,14 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <line x1="15" y1="42" x2="15" y2="58" stroke="currentColor" stroke-width="3"/>
       <line x1="85" y1="42" x2="85" y2="58" stroke="currentColor" stroke-width="3"/>`,
   },
+  belt: {
+    label: "벨트/체인 구동",
+    description: "떨어져 있는 두 기어(풀리·스프로킷)를 이어서 같은 방향으로 함께 돌게 만드는 부품입니다. 양쪽 끝을 각각 이빨이 있는 기어의 축 위치에 겹치게 놓으면 연결됩니다 — 기어 맞물림과 달리 회전 방향이 반대로 뒤집히지 않고, 두 기어의 잇수 비율만큼 속도가 달라집니다.",
+    purpose:
+      "자전거 체인, 자동차 엔진의 타이밍 벨트처럼, 서로 떨어져 있는 두 축을 같은 방향으로 돌려야 할 때 씁니다. 기어를 직접 맞물리면 방향이 반대로 바뀌지만, 벨트나 체인을 쓰면 두 축이 같은 방향으로 돌면서도 멀리 떨어뜨려 배치할 수 있습니다.",
+    icon: `<circle cx="26" cy="50" r="20" fill="none" stroke="currentColor" stroke-width="6"/>
+      <circle cx="74" cy="50" r="12" fill="none" stroke="currentColor" stroke-width="6"/>
+      <line x1="26" y1="30" x2="74" y2="38" stroke="currentColor" stroke-width="5"/>
+      <line x1="26" y1="70" x2="74" y2="62" stroke="currentColor" stroke-width="5"/>`,
+  },
 };

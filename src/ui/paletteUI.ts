@@ -34,7 +34,7 @@ const CATEGORIES: Category[] = [
   },
   {
     label: "동력 전달",
-    types: ["shaft"],
+    types: ["shaft", "belt"],
     icon: `<circle cx="26" cy="26" r="12" fill="none" stroke="currentColor" stroke-width="6"/>
       <circle cx="74" cy="74" r="12" fill="none" stroke="currentColor" stroke-width="6"/>
       <line x1="34" y1="34" x2="66" y2="66" stroke="currentColor" stroke-width="8"/>`,

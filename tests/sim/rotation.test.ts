@@ -144,6 +144,54 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("wheel")).toBe(0);
   });
 
+  it("drives a pulley the SAME direction as the crank via a belt, scaled by relative pitch radius (not tooth ratio flipped)", () => {
+    // Unlike a tooth mesh (opposite direction), a belt/chain keeps both pulleys
+    // spinning the SAME way -- and unlike a shaft (rigid 1:1), the speed scales
+    // by the relative pitch radii, exactly like a real bicycle chain.
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [1, 0, 0], teeth: 20, module: 1, // pitchRadius = 10
+      position: [0, 0, 0], angularVelocity: 2,
+    });
+    const belt = makeGear({
+      id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0],
+    });
+    const pulley = makeGear({
+      id: "pulley", type: "spur", axis: [1, 0, 0], teeth: 10, module: 1, // pitchRadius = 5
+      position: [30, 0, 0],
+    });
+    const gears = [crank, belt, pulley];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    // linear belt speed = crank's angularVelocity * crank's pitchRadius = 2*10 = 20
+    // pulley's angularVelocity = linear speed / pulley's pitchRadius = 20/5 = 4
+    expect(angularVelocities.get("pulley")).toBeCloseTo(4); // same SIGN as the crank (2), not flipped
+    expect(Math.sign(angularVelocities.get("pulley")!)).toBe(Math.sign(crank.angularVelocity));
+  });
+
+  it("drives the belt-pulley pair correctly when the host, not the belt, is the earlier array element", () => {
+    // Regression for the ratio's direction-dependent sign (see meshing.ts's belt
+    // branch, `ratio = a.type === "belt" ? 1/pitchRadius(host) : pitchRadius(host)`)
+    // -- the test above's array order ([crank, belt, pulley]) happens to put the
+    // belt BEFORE the pulley for that pair's evaluatePair(belt, pulley) call; this
+    // one puts both hosts before the belt instead, so both belt edges exercise the
+    // opposite ("host is a") branch, confirming the physics comes out the same
+    // either way `buildEdges`' i<j loop happens to encounter the pair.
+    const pulley = makeGear({
+      id: "pulley", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1, // pitchRadius = 10
+      position: [30, 0, 0],
+    });
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [1, 0, 0], teeth: 10, module: 1, // pitchRadius = 5
+      position: [0, 0, 0], angularVelocity: 3,
+    });
+    const belt = makeGear({
+      id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0],
+    });
+    const gears = [pulley, crank, belt];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    // linear speed = 3*5 = 15; pulley's angularVelocity = 15/10 = 1.5
+    expect(angularVelocities.get("pulley")).toBeCloseTo(1.5);
+  });
+
   it("stops propagation at a broken gear", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),

@@ -25,7 +25,7 @@ export function toggledAxis(axis: [number, number, number]): [number, number, nu
 }
 
 export function defaultTeethForType(type: GearType): number {
-  if (type === "load" || type === "gauge" || type === "fan" || type === "wheel" || type === "shaft" || type === "beam") return 0; // couple/join, don't mesh
+  if (type === "load" || type === "gauge" || type === "fan" || type === "wheel" || type === "shaft" || type === "beam" || type === "belt") return 0; // couple/join, don't mesh
   if (type === "worm") return 1; // single-start: the standard, simplest worm -- one full
   // crank turn advances the wheel by exactly one tooth, the clearest reduction ratio to teach
   return 20; // standard, safely above the ~17-tooth undercut threshold for 20° pressure-angle gears
@@ -35,7 +35,7 @@ export function defaultTeethForType(type: GearType): number {
 // dragging either end toward a real target isn't a huge trek, far enough to visibly
 // read as "a rod connecting two things" rather than a stub.
 const DEFAULT_ROD_LENGTH = 12;
-const ROD_TYPES = new Set<GearType>(["shaft", "beam"]);
+const ROD_TYPES = new Set<GearType>(["shaft", "beam", "belt"]);
 
 /** Builds a brand-new gear instance with a globally unique id (crypto.randomUUID --
  *  no counter to track or reseed across load/import events). */
