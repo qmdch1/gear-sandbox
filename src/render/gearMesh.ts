@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
-import { buildGeometryForType } from "./gearGeometry";
+import { cachedGeometryFor } from "./geometryCache";
 import { TYPE_HEALTHY_COLORS, createMetalTexture, createGaugeDialTexture } from "./metalTexture";
 
 const HEALTHY = new THREE.Color(0x3ddc73);
@@ -35,7 +35,7 @@ export class GearMeshObject {
   readonly mesh: THREE.Mesh;
 
   constructor(gear: GearInstance) {
-    const geometry = buildGeometryForType(gear.type, gear.teeth || 1, gear.module || 1);
+    const geometry = cachedGeometryFor(gear.type, gear.teeth || 1, gear.module || 1);
     const isGauge = gear.type === "gauge";
     const material = new THREE.MeshStandardMaterial({
       color: colorForDurabilityRatio(1, TYPE_HEALTHY_COLORS[gear.type]),
@@ -97,7 +97,11 @@ export class GearMeshObject {
   }
 
   dispose(): void {
-    this.mesh.geometry.dispose();
+    // Deliberately does NOT dispose this.mesh.geometry -- it's a shared,
+    // cached instance (see geometryCache.ts), quite possibly still in active
+    // use by every OTHER gear of the same type/teeth/module. Only the
+    // material is genuinely per-instance (durability color/emissive), so only
+    // it needs disposing when a gear is removed.
     (this.mesh.material as THREE.Material).dispose();
   }
 }

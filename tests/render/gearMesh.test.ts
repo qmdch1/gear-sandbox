@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import * as THREE from "three";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { colorForDurabilityRatio, GearMeshObject } from "../../src/render/gearMesh";
 import type { GearInstance } from "../../src/sim/types";
 
@@ -33,5 +33,27 @@ describe("GearMeshObject", () => {
     const obj = new GearMeshObject(gear);
     const material = obj.mesh.material as THREE.MeshStandardMaterial;
     expect(material.color.r).toBeCloseTo(material.color.g, 1); // gray, not red or green
+  });
+
+  it("shares one cached geometry instance across two gears with identical type/teeth/module", () => {
+    const a = new GearMeshObject(makeGear({ id: "a", type: "spur", teeth: 20, module: 1 }));
+    const b = new GearMeshObject(makeGear({ id: "b", type: "spur", teeth: 20, module: 1 }));
+    expect(a.mesh.geometry).toBe(b.mesh.geometry);
+  });
+
+  it("does not dispose the shared/cached geometry when a mesh is removed -- other gears may still use it", () => {
+    const gear = makeGear({ type: "wheel", teeth: 0, module: 1 });
+    const obj = new GearMeshObject(gear);
+    const disposeSpy = vi.spyOn(obj.mesh.geometry, "dispose");
+    obj.dispose();
+    expect(disposeSpy).not.toHaveBeenCalled();
+  });
+
+  it("still disposes its own (per-instance) material", () => {
+    const gear = makeGear({ type: "spur", teeth: 20, module: 1 });
+    const obj = new GearMeshObject(gear);
+    const disposeSpy = vi.spyOn(obj.mesh.material as THREE.Material, "dispose");
+    obj.dispose();
+    expect(disposeSpy).toHaveBeenCalled();
   });
 });
