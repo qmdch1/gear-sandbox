@@ -125,4 +125,13 @@ export const PART_INFO: Record<GearType, PartInfo> = {
         <line x1="73" y1="27" x2="61" y2="39"/><line x1="39" y1="61" x2="27" y2="73"/>
       </g>`,
   },
+  shaft: {
+    label: "동력전달축(커플링 로드)",
+    description: "다른 두 기어를 멀리서 이어주는 막대입니다. 양쪽 끝을 각각 다른 기어의 축 위치에 겹치게 놓으면 두 기어가 하나처럼 같은 속도·같은 방향으로 돕니다. 이 축 자체는 이가 없어서 어느 기어와도 직접 맞물리지는 않습니다.",
+    purpose:
+      "실제 자동차의 프로펠러 샤프트(추진축)처럼, 서로 떨어져 있는 두 부품 사이에 회전을 그대로 전달할 때 씁니다. 기어는 서로 가까이 붙어 있어야만 맞물릴 수 있지만, 이 축을 쓰면 멀리 떨어진 기어끼리도 연결할 수 있어서 자동차 뼈대처럼 여러 부품을 넓게 펼쳐서 조립할 수 있습니다.",
+    icon: `<circle cx="22" cy="22" r="10" fill="none" stroke="currentColor" stroke-width="5"/>
+      <circle cx="78" cy="78" r="10" fill="none" stroke="currentColor" stroke-width="5"/>
+      <line x1="29" y1="29" x2="71" y2="71" stroke="currentColor" stroke-width="7"/>`,
+  },
 };

@@ -7,15 +7,21 @@ export type GearType =
   | "load"
   | "gauge"
   | "fan"
-  | "wheel";
+  | "wheel"
+  | "shaft";
 
 export interface GearInstance {
   id: string;
   type: GearType;
   position: [number, number, number];
-  axis: [number, number, number]; // normalized rotation axis direction
-  teeth: number;       // thread-starts for "worm"; 0 for "load"/"gauge"/"fan"/"wheel" (no teeth to mesh)
-  module: number;      // tooth size, used for meshing distance checks; ignored for "load"/"gauge"/"fan"/"wheel"
+  // For "shaft" only: its OTHER end (position is the first end) -- a rigid rod
+  // connecting two separate gears' shafts at a distance, rather than a single
+  // point coupling onto one host like load/gauge/fan/wheel do. Every other type
+  // leaves this undefined.
+  position2?: [number, number, number];
+  axis: [number, number, number]; // normalized rotation axis direction; unused for "shaft" (its orientation is derived from position/position2 instead)
+  teeth: number;       // thread-starts for "worm"; 0 for "load"/"gauge"/"fan"/"wheel"/"shaft" (no teeth to mesh)
+  module: number;      // tooth size, used for meshing distance checks; ignored for "load"/"gauge"/"fan"/"wheel"/"shaft"
   durabilityMax: number;
   durabilityCurrent: number;
   broken: boolean;

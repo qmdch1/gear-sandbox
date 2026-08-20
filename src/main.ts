@@ -16,7 +16,7 @@ app.innerHTML = `
     <section class="panel">
       <h2>부품 담기</h2>
       <div id="palette"></div>
-      <p id="power-hint">동력원 기어는 놓으면 자동으로 돌아갑니다. 다른 기어를 가까이 끌어오면 맞물리는 위치로 자동으로 붙습니다. 이미 붙어 있는 기어들은 하나를 끌면 같이 움직여요 — <b>Alt</b>+드래그로 하나만 떼어낼 수 있습니다. <b>Shift</b>+드래그로 위아래 높이를 조절할 수 있습니다(베벨 기어처럼 높이를 맞춰야 할 때 사용). 베벨·웜 기어는 클릭해서 고른 뒤 <b>V</b> 키를 누르면 가로/세로 축 방향을 바꿀 수 있습니다.</p>
+      <p id="power-hint">동력원 기어는 놓으면 자동으로 돌아갑니다. 다른 기어를 가까이 끌어오면 맞물리는 위치로 자동으로 붙습니다. 이미 붙어 있는 기어들은 하나를 끌면 같이 움직여요 — <b>Alt</b>+드래그로 하나만 떼어낼 수 있습니다. <b>Shift</b>+드래그로 위아래 높이를 조절할 수 있습니다(베벨 기어처럼 높이를 맞춰야 할 때 사용). 베벨·웜 기어는 클릭해서 고른 뒤 <b>V</b> 키를 누르면 가로/세로 축 방향을 바꿀 수 있습니다. 동력전달축은 평소엔 통째로 움직이고, <b>Ctrl</b>+드래그하면 반대쪽 끝만 따로 옮길 수 있습니다.</p>
     </section>
     <section class="panel">
       <h2>저장</h2>
@@ -89,7 +89,7 @@ function spawnGridPosition(index: number): [number, number, number] {
 // left everything else undiscoverable unless you dug through the palette -- one of
 // every type instead, spiraling out from the origin (crank first, so the one
 // power-source gear still lands dead center where the default camera looks).
-const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel"];
+const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft"];
 
 // No user accounts, so there's exactly one saved layout on the server (see
 // serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh
@@ -139,8 +139,23 @@ new DragControls({
   onMove: (id, position, rotation) => {
     const gear = gears.find((g) => g.id === id);
     if (!gear) return;
+    // A shaft's far end isn't part of the normal position-delta system anything
+    // else uses, so a plain drag has to carry position2 along by the same delta
+    // itself, or the rod would stretch/warp instead of moving as a rigid whole.
+    if (gear.type === "shaft" && gear.position2) {
+      const delta: [number, number, number] = [
+        position[0] - gear.position[0],
+        position[1] - gear.position[1],
+        position[2] - gear.position[2],
+      ];
+      gear.position2 = [gear.position2[0] + delta[0], gear.position2[1] + delta[1], gear.position2[2] + delta[2]];
+    }
     gear.position = position;
     if (rotation !== undefined) gear.rotation = rotation; // tooth-interlocking snap
+  },
+  onMoveSecondEnd: (id, position2) => {
+    const gear = gears.find((g) => g.id === id);
+    if (gear) gear.position2 = position2;
   },
   onPreview: (partnerId) => sceneSync.setPreviewHighlight(partnerId),
   onSelect: (id) => {

@@ -59,4 +59,14 @@ describe("createGear", () => {
     const bevel = createGear("bevel", [0, 0, 0]);
     expect(bevel.axis).toEqual([1, 0, 0]);
   });
+
+  it("gives a shaft a second end a real (nonzero-length) distance away", () => {
+    const shaft = createGear("shaft", [5, 0, 0]);
+    expect(shaft.position2).toBeDefined();
+    expect(shaft.position2).not.toEqual(shaft.position);
+  });
+
+  it("leaves position2 undefined for every other type", () => {
+    expect(createGear("spur", [0, 0, 0]).position2).toBeUndefined();
+  });
 });

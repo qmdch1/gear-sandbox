@@ -87,6 +87,34 @@ export function findSnapTarget(
   return best;
 }
 
+/** For a "shaft" (a rigid rod with two ends, each independently couplable -- see
+ *  meshing.ts): whether `rawPosition` is a good drop point for ONE end of it, given
+ *  the OTHER end is fixed wherever `fixedOtherEnd` currently is. Mirrors
+ *  `findSnapTarget`'s coincident-coupling case (`idealDistance === 0`) but for a
+ *  gear whose relevant "position" for the coupling check is whichever end is being
+ *  dragged, not always `shaft.position` -- callers pass in whichever end that is. */
+function findShaftEndpointSnap(
+  shaft: GearInstance,
+  otherEndKey: "position" | "position2",
+  rawPosition: [number, number, number],
+  others: GearInstance[],
+): [number, number, number] | null {
+  let best: [number, number, number] | null = null;
+  let bestSlack = Infinity;
+  for (const candidate of others) {
+    if (candidate.id === shaft.id) continue;
+    const probe = { ...shaft, [otherEndKey === "position" ? "position2" : "position"]: rawPosition };
+    if (idealConnectionDistance(probe, candidate) !== 0) continue; // only coincident-style targets matter for an endpoint
+    const dx = rawPosition[0] - candidate.position[0];
+    const dz = rawPosition[2] - candidate.position[2];
+    const slack = Math.hypot(dx, dz);
+    if (slack > SNAP_SLACK || slack >= bestSlack) continue;
+    bestSlack = slack;
+    best = [candidate.position[0], rawPosition[1], candidate.position[2]];
+  }
+  return best;
+}
+
 export interface DragControlsOptions {
   ctx: SceneContext;
   getGears: () => GearInstance[];
@@ -94,6 +122,9 @@ export interface DragControlsOptions {
    *  gear only — group members always move by position delta alone, keeping whatever
    *  relative phase they already had with each other. */
   onMove: (id: string, position: [number, number, number], rotation?: number) => void;
+  /** A shaft's SECOND end (position2) only -- fired instead of `onMove` while
+   *  Ctrl-dragging a shaft's far end (see the class doc comment below). */
+  onMoveSecondEnd?: (id: string, position2: [number, number, number]) => void;
   /** Fired unconditionally on pointerdown with the id of the gear mesh hit, or null if none. */
   onSelect?: (gearId: string | null) => void;
   /** Fired during a drag with the nearest compatible partner's id at the candidate drop point, or null. */
@@ -106,6 +137,9 @@ export interface DragControlsOptions {
  *  question to `findSnapTarget`. Hold Shift instead to drag that one gear's height
  *  (Y) up/down via vertical pointer movement, e.g. to line up a bevel gear with a
  *  partner at a different height -- mutually exclusive with the normal X/Z drag.
+ *  Hold Ctrl while dragging a SHAFT specifically to move just its far end
+ *  (position2) instead of the whole rod -- a normal drag on a shaft translates
+ *  both ends together (rigid body move), same as any other gear/group.
  *  Verified via manual QA (Task 15) — pointer/raycaster behavior is not meaningfully
  *  unit-testable without a real WebGL context. */
 const HEIGHT_DRAG_UNITS_PER_PIXEL = 0.12; // dragging up/down this many screen px moves 1 unit
@@ -123,6 +157,9 @@ export class DragControls {
   // itself tell you a *different* Y) -- driven by vertical screen-pixel movement
   // since drag-start instead.
   private heightDrag: { id: string; startY: number; startClientY: number } | null = null;
+  // Ctrl+drag on a shaft moves just its far end (position2), independent of the
+  // normal whole-rod drag.
+  private farEndDrag: { id: string } | null = null;
 
   constructor(private options: DragControlsOptions) {
     const { domElement } = options.ctx.renderer;
@@ -166,6 +203,14 @@ export class DragControls {
         return;
       }
 
+      // Ctrl+drag on a shaft: move just its far end (position2), not the whole rod.
+      if (event.ctrlKey && anchor?.type === "shaft" && anchor.position2) {
+        this.farEndDrag = { id: hitId };
+        ctx.controls.enabled = false;
+        this.options.onSelect?.(hitId);
+        return;
+      }
+
       this.draggingId = hitId;
       ctx.controls.enabled = false;
 
@@ -192,6 +237,19 @@ export class DragControls {
       // Dragging UP (smaller clientY) raises the gear.
       const newY = Math.max(MIN_HEIGHT, startY + (startClientY - event.clientY) * HEIGHT_DRAG_UNITS_PER_PIXEL);
       this.options.onMove(id, [gear.position[0], newY, gear.position[2]]);
+      return;
+    }
+    if (this.farEndDrag) {
+      const { id } = this.farEndDrag;
+      const gears = this.options.getGears();
+      const shaft = gears.find((g) => g.id === id);
+      if (!shaft || !shaft.position2) return;
+      const point = this.pointerToGroundPoint(event);
+      if (!point) return;
+      const rawPosition2: [number, number, number] = [point.x, shaft.position2[1], point.z];
+      const others = gears.filter((g) => g.id !== id);
+      const snapped = findShaftEndpointSnap(shaft, "position", rawPosition2, others);
+      this.options.onMoveSecondEnd?.(id, snapped ?? rawPosition2);
       return;
     }
     if (!this.draggingId || !this.dragGroupStart || !this.dragAnchorStart) return;
@@ -235,6 +293,7 @@ export class DragControls {
     this.dragGroupStart = null;
     this.dragAnchorStart = null;
     this.heightDrag = null;
+    this.farEndDrag = null;
     this.options.ctx.controls.enabled = true;
     this.options.onPreview?.(null);
   };

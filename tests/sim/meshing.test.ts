@@ -144,6 +144,36 @@ describe("evaluatePair", () => {
     expect(evaluatePair(wormA, wormB)).toBeNull();
   });
 
+  it("couples a shaft's near end to a coincident, axis-aligned host", () => {
+    const shaft = makeGear({ id: "shaft", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], position: [0, 0, 0] }); // rod runs along +X, host's axis is +X too
+    const edge = evaluatePair(shaft, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("couples a shaft's FAR end to a different coincident, axis-aligned host", () => {
+    const shaft = makeGear({ id: "shaft", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], position: [20, 0, 0] });
+    const edge = evaluatePair(shaft, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("does not couple a shaft to a host whose axis isn't parallel to the rod's own direction", () => {
+    // A straight rigid rod can't stand in for a coupling to a shaft pointing a
+    // different way -- same reasoning a real motor-shaft coupling has to line up.
+    const shaft = makeGear({ id: "shaft", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const host = makeGear({ id: "host", axis: [0, 1, 0], position: [0, 0, 0] }); // rod along +X, host axis +Y
+    expect(evaluatePair(shaft, host)).toBeNull();
+  });
+
+  it("does not let two shafts couple to each other", () => {
+    const shaftA = makeGear({ id: "sa", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    expect(evaluatePair(shaftA, shaftB)).toBeNull();
+  });
+
   it("couples a crank directly onto a coincident helical gear's shaft, so it can receive power", () => {
     // A helical gear only meshes with another helical gear (its teeth are angled,
     // a plain crank's aren't) -- without this coupling it could never spin at all,
@@ -254,6 +284,18 @@ describe("idealConnectionDistance", () => {
     const crank = makeGear({ id: "crank", type: "crank", position: [0, 0, 0] });
     const helical = makeGear({ id: "helical", type: "helical", teeth: 20, module: 1, position: [999, 0, 0] });
     expect(idealConnectionDistance(crank, helical)).toBe(0);
+  });
+
+  it("returns 0 (coincident) for a shaft/host pair with the rod parallel to the host's axis", () => {
+    const shaft = makeGear({ id: "shaft", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], position: [999, 0, 0] }); // distance shouldn't matter
+    expect(idealConnectionDistance(shaft, host)).toBe(0);
+  });
+
+  it("returns null for a shaft/host pair whose axis isn't parallel to the rod", () => {
+    const shaft = makeGear({ id: "shaft", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const host = makeGear({ id: "host", axis: [0, 1, 0], position: [999, 0, 0] });
+    expect(idealConnectionDistance(shaft, host)).toBeNull();
   });
 
   it("returns null for a spur/helical pair -- they never mesh regardless of distance", () => {

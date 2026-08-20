@@ -32,6 +32,13 @@ const CATEGORIES: Category[] = [
     icon: `<polygon points="50,12 76,28 76,62 50,78 24,62 24,28" fill="none" stroke="currentColor" stroke-width="6"/>
       <circle cx="50" cy="45" r="13" fill="none" stroke="currentColor" stroke-width="5"/>`,
   },
+  {
+    label: "동력 전달",
+    types: ["shaft"],
+    icon: `<circle cx="26" cy="26" r="12" fill="none" stroke="currentColor" stroke-width="6"/>
+      <circle cx="74" cy="74" r="12" fill="none" stroke="currentColor" stroke-width="6"/>
+      <line x1="34" y1="34" x2="66" y2="66" stroke="currentColor" stroke-width="8"/>`,
+  },
 ];
 
 function buildPartButton(type: GearType, onPick: (type: GearType) => void): HTMLButtonElement {

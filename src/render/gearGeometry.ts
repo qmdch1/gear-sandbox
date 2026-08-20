@@ -371,6 +371,19 @@ function wheelGeometry(module: number): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+/** A rigid coupling rod connecting two OTHER gears at a distance -- unlike every
+ *  other type, its real-world length/orientation isn't fixed at construction time
+ *  (it depends on where its two endpoints currently are, which can move), so this
+ *  builds a unit-length (spanning local z = -0.5..0.5) rod; gearMesh.ts stretches
+ *  it via `scale.z` to the actual current span between its endpoints every update,
+ *  rather than rebuilding geometry every frame. */
+function shaftGeometry(module: number): THREE.BufferGeometry {
+  const radius = module * 0.4;
+  const geometry = new THREE.CylinderGeometry(radius, radius, 1, 16);
+  geometry.rotateX(Math.PI / 2);
+  return geometry;
+}
+
 function mergeGeometries(parts: Array<THREE.BufferGeometry | ColoredPart>): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   // Carries `uv`/`color` along with position/normal so a texture map or per-part tint
@@ -422,5 +435,7 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return fanGeometry(module);
     case "wheel":
       return wheelGeometry(module);
+    case "shaft":
+      return shaftGeometry(module);
   }
 }

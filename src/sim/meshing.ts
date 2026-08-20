@@ -59,8 +59,48 @@ function pitchRadius(g: GearInstance): number {
   return (g.module * g.teeth) / 2;
 }
 
+/** A "shaft" is a rigid rod with TWO ends (`position` and `position2`), each
+ *  independently able to couple onto a different host gear's own shaft -- unlike
+ *  every other coupling-only type, which has just one point. Returns its
+ *  normalized end-to-end direction, or `null` if it has no valid (nonzero-length)
+ *  second end yet. */
+function shaftDirection(shaft: GearInstance): [number, number, number] | null {
+  if (!shaft.position2) return null;
+  const d: [number, number, number] = [
+    shaft.position2[0] - shaft.position[0],
+    shaft.position2[1] - shaft.position[1],
+    shaft.position2[2] - shaft.position[2],
+  ];
+  const len = Math.hypot(d[0], d[1], d[2]);
+  if (len < 1e-6) return null;
+  return [d[0] / len, d[1] / len, d[2] / len];
+}
+
+/** Whether `shaft`'s two ends couple onto `host` (one end coincident with it,
+ *  same reasoning as `evaluatePair`'s other coincident couplings), and if so,
+ *  which end. A straight rigid rod can only really stand in for a real coupling
+ *  if its own length runs along the same line as the host's rotation axis at
+ *  that end (like a real motor-shaft coupling, just longer) -- so this also
+ *  requires the shaft's overall direction to be parallel to the host's axis,
+ *  not just "close enough in position." */
+function shaftCouplingEnd(shaft: GearInstance, host: GearInstance): "position" | "position2" | null {
+  const direction = shaftDirection(shaft);
+  if (!direction || Math.abs(dot(direction, host.axis)) < PARALLEL_DOT_THRESHOLD) return null;
+  if (dist(shaft.position, host.position) <= COUPLING_DISTANCE_TOLERANCE) return "position";
+  if (shaft.position2 && dist(shaft.position2, host.position) <= COUPLING_DISTANCE_TOLERANCE) return "position2";
+  return null;
+}
+
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
+  if (a.type === "shaft" || b.type === "shaft") {
+    if (a.type === "shaft" && b.type === "shaft") return null; // no shaft-to-shaft chaining (yet)
+    const shaft = a.type === "shaft" ? a : b;
+    const host = a.type === "shaft" ? b : a;
+    if (!shaftCouplingEnd(shaft, host)) return null;
+    return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+  }
+
   if (COUPLING_ONLY_TYPES.has(a.type) || COUPLING_ONLY_TYPES.has(b.type)) {
     if (COUPLING_ONLY_TYPES.has(a.type) && COUPLING_ONLY_TYPES.has(b.type)) return null; // two accessories never couple to each other
     if (dist(a.position, b.position) > COUPLING_DISTANCE_TOLERANCE) return null;
@@ -131,6 +171,15 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
  *  rules as a separate function rather than refactoring `evaluatePair` to share it —
  *  `evaluatePair` is exhaustively tested already, and this keeps that logic unrisked. */
 export function idealConnectionDistance(a: GearInstance, b: GearInstance): number | null {
+  if (a.type === "shaft" || b.type === "shaft") {
+    if (a.type === "shaft" && b.type === "shaft") return null;
+    const shaft = a.type === "shaft" ? a : b;
+    const host = a.type === "shaft" ? b : a;
+    const direction = shaftDirection(shaft);
+    if (!direction || Math.abs(dot(direction, host.axis)) < PARALLEL_DOT_THRESHOLD) return null;
+    return 0; // coincident shaft-end coupling -- see evaluatePair's matching check
+  }
+
   if (COUPLING_ONLY_TYPES.has(a.type) || COUPLING_ONLY_TYPES.has(b.type)) {
     if (COUPLING_ONLY_TYPES.has(a.type) && COUPLING_ONLY_TYPES.has(b.type)) return null;
     if (Math.abs(dot(a.axis, b.axis)) < PARALLEL_DOT_THRESHOLD) return null;

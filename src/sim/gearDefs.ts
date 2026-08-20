@@ -18,6 +18,10 @@ export const GEAR_DEFS: Record<GearType, GearTypeDef> = {
   gauge:   { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
   fan:     { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
   wheel:   { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  // A drivetrain part (it actually carries torque between two gears, unlike the
+  // coupling-only accessories above), so it wears somewhat like a plain shaft --
+  // no teeth to shear, so lighter wear than a gear that's actually meshing.
+  shaft:   { durabilityMax: 150, baseWearPerSecond: 0.4, loadWearMultiplier: 1.2 },
 };
 
 /** Gears that drive the rest of the train the moment they're placed (their

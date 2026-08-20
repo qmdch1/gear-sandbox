@@ -96,6 +96,24 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("worm")).toBeCloseTo(3);
   });
 
+  it("bridges two gears' rotation through a shaft connecting them at a distance", () => {
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [1, 0, 0], teeth: 20, module: 1,
+      position: [0, 0, 0], angularVelocity: 2,
+    });
+    const shaft = makeGear({
+      id: "shaft", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0],
+    });
+    const wheel = makeGear({
+      id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1, position: [30, 0, 0],
+    });
+    const gears = [crank, shaft, wheel];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    // Both ends of the rigid rod (ratio 1, same direction) end up at the crank's speed.
+    expect(angularVelocities.get("shaft")).toBeCloseTo(2);
+    expect(angularVelocities.get("wheel")).toBeCloseTo(2);
+  });
+
   it("drives propagation via the generalized POWER_SOURCE_TYPES check, not a literal 'crank' comparison", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 }),

@@ -23,11 +23,16 @@ export function toggledAxis(type: GearType, axis: [number, number, number]): [nu
 }
 
 export function defaultTeethForType(type: GearType): number {
-  if (type === "load" || type === "gauge" || type === "fan" || type === "wheel") return 0; // couple, don't mesh
+  if (type === "load" || type === "gauge" || type === "fan" || type === "wheel" || type === "shaft") return 0; // couple, don't mesh
   if (type === "worm") return 1; // single-start: the standard, simplest worm -- one full
   // crank turn advances the wheel by exactly one tooth, the clearest reduction ratio to teach
   return 20; // standard, safely above the ~17-tooth undercut threshold for 20° pressure-angle gears
 }
+
+// A shaft's two ends spawn this far apart along +X by default -- close enough that
+// dragging either end toward a real target isn't a huge trek, far enough to visibly
+// read as "a rod connecting two things" rather than a stub.
+const DEFAULT_SHAFT_LENGTH = 12;
 
 /** Builds a brand-new gear instance with a globally unique id (crypto.randomUUID --
  *  no counter to track or reseed across load/import events). */
@@ -37,6 +42,7 @@ export function createGear(type: GearType, position: [number, number, number]): 
     id: crypto.randomUUID(),
     type,
     position,
+    position2: type === "shaft" ? [position[0] + DEFAULT_SHAFT_LENGTH, position[1], position[2]] : undefined,
     axis: defaultAxisForType(type),
     teeth: defaultTeethForType(type),
     module: 1,

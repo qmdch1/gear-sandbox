@@ -19,6 +19,7 @@ export const TYPE_HEALTHY_COLORS: Record<GearType, THREE.Color> = {
   gauge: new THREE.Color(0xe4e6ea), // near-white -- lets the dial texture's own dark-navy face and printed colors show through undistorted, rather than tinting them
   fan: new THREE.Color(0xcdd0d4), // bright chrome
   wheel: new THREE.Color(0xb0764a), // weathered wood/iron cart-wheel tone (its tire is a separate, always-dark vertex tint -- see gearGeometry.ts)
+  shaft: new THREE.Color(0x8f939c), // plain steel rod -- a cooler, slightly darker steel than the spur gear's tone, distinct at a glance
 };
 
 /** jsdom (used by this project's DOM-touching tests) implements `getContext` but has no

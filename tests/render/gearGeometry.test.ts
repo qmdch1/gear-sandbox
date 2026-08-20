@@ -33,7 +33,7 @@ describe("computeSpurProfilePoints", () => {
 
 describe("buildGeometryForType", () => {
   it("builds a non-empty geometry for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel"] as const;
+    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft"] as const;
     for (const t of types) {
       const geometry = buildGeometryForType(t, 20, 1);
       expect(geometry.attributes.position.count).toBeGreaterThan(0);
@@ -89,5 +89,21 @@ describe("buildGeometryForType", () => {
     }
     expect(hasWhite).toBe(true);
     expect(hasDark).toBe(true);
+  });
+
+  it("builds the shaft as a unit-length rod (gearMesh.ts stretches it via scale.z)", () => {
+    const module = 1;
+    const geometry = buildGeometryForType("shaft", 0, module);
+    const position = geometry.attributes.position;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    let maxRadial = 0;
+    for (let i = 0; i < position.count; i++) {
+      minZ = Math.min(minZ, position.getZ(i));
+      maxZ = Math.max(maxZ, position.getZ(i));
+      maxRadial = Math.max(maxRadial, Math.hypot(position.getX(i), position.getY(i)));
+    }
+    expect(maxZ - minZ).toBeCloseTo(1, 5); // unit length, spanning -0.5..0.5
+    expect(maxRadial).toBeCloseTo(module * 0.4, 5);
   });
 });
