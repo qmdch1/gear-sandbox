@@ -169,6 +169,7 @@ new DragControls({
   onSelect: (id) => {
     selectedGearId = id;
   },
+  resolveHitId: (object, instanceId) => sceneSync.resolveHitId(object, instanceId),
 });
 
 // Click any gear, then press V to flip it between lying flat (horizontal axis)

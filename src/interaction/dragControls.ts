@@ -129,6 +129,12 @@ export interface DragControlsOptions {
   onSelect?: (gearId: string | null) => void;
   /** Fired during a drag with the nearest compatible partner's id at the candidate drop point, or null. */
   onPreview?: (partnerId: string | null) => void;
+  /** Resolves a raycaster hit's object (+ instanceId, when the hit landed on an
+   *  InstancedMesh representing many gears at once -- see sceneSync.ts) back to
+   *  the specific gear id it represents. A plain, non-instanced mesh (a belt)
+   *  has no instanceId; implementations should fall back to the object's own
+   *  `.name` in that case, matching every mesh's `.name = gear.id` convention. */
+  resolveHitId: (object: THREE.Object3D, instanceId: number | undefined) => string | null;
 }
 
 /** Thin pointer-event wiring: raycast onto the ground plane, drag the picked gear's
@@ -189,7 +195,8 @@ export class DragControls {
     );
     this.raycaster.setFromCamera(ndc, ctx.camera);
     const hits = this.raycaster.intersectObjects(ctx.scene.children.filter((c) => c.name));
-    const hitId = hits.length > 0 ? hits[0].object.name : null;
+    const hit = hits[0];
+    const hitId = hit ? this.options.resolveHitId(hit.object, hit.instanceId) : null;
     if (hitId) {
       const gears = this.options.getGears();
       const anchor = gears.find((g) => g.id === hitId);

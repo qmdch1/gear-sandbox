@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import * as THREE from "three";
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("three", async (importOriginal) => {
@@ -29,6 +30,8 @@ function makeGear(overrides: Partial<GearInstance>): GearInstance {
   };
 }
 
+const NO_PROBLEMS = { unconnectedIds: [], noPowerIds: [], overlapPairs: [] };
+
 describe("computeSyncActions", () => {
   it("adds new gears and removes stale ones", () => {
     const existing = new Set(["a", "stale"]);
@@ -40,20 +43,119 @@ describe("computeSyncActions", () => {
 });
 
 describe("SceneSync", () => {
-  it("adds one mesh per gear to the scene", () => {
+  it("collapses two gears sharing type/teeth/module into ONE InstancedMesh, not two separate meshes", () => {
+    // The whole point of instancing -- see sceneSync.ts's isInstanced doc comment.
     const ctx = createScene(document.createElement("canvas"));
     const sync = new SceneSync(ctx);
     const gears = [makeGear({ id: "a" }), makeGear({ id: "b", position: [5, 0, 0] })];
-    sync.sync(gears, { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
-    const gearMeshes = ctx.scene.children.filter((c) => c.name === "a" || c.name === "b");
-    expect(gearMeshes.length).toBe(2);
+    sync.sync(gears, NO_PROBLEMS);
+    const instancedMeshes = ctx.scene.children.filter((c) => c instanceof THREE.InstancedMesh);
+    expect(instancedMeshes.length).toBe(1);
+    expect((instancedMeshes[0] as THREE.InstancedMesh).count).toBe(2);
   });
 
-  it("removes a mesh once its gear disappears from the list", () => {
+  it("resolves a raycast-style (mesh, instanceId) hit back to the specific gear id occupying that slot", () => {
     const ctx = createScene(document.createElement("canvas"));
     const sync = new SceneSync(ctx);
-    sync.sync([makeGear({ id: "a" })], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
-    sync.sync([], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
-    expect(ctx.scene.children.some((c) => c.name === "a")).toBe(false);
+    const gears = [makeGear({ id: "a" }), makeGear({ id: "b", position: [5, 0, 0] })];
+    sync.sync(gears, NO_PROBLEMS);
+    const instancedMesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    // Both instance ids (0 and 1) must resolve to ONE of the two real gear ids,
+    // and between them, to BOTH -- not the same id twice, not something else.
+    const resolved = new Set([sync.resolveHitId(instancedMesh, 0), sync.resolveHitId(instancedMesh, 1)]);
+    expect(resolved).toEqual(new Set(["a", "b"]));
+  });
+
+  it("uses a SEPARATE InstancedMesh group for a different type/teeth/module combination", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    const gears = [
+      makeGear({ id: "a", type: "spur", teeth: 20 }),
+      makeGear({ id: "b", type: "helical", teeth: 20 }),
+      makeGear({ id: "c", type: "spur", teeth: 10 }),
+    ];
+    sync.sync(gears, NO_PROBLEMS);
+    const instancedMeshes = ctx.scene.children.filter((c) => c instanceof THREE.InstancedMesh);
+    expect(instancedMeshes.length).toBe(3); // spur/20, helical/20, spur/10 -- all distinct
+  });
+
+  it("removes an instanced gear's slot when it disappears from the list, without touching its group-mates", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" }), makeGear({ id: "b", position: [5, 0, 0] })], NO_PROBLEMS);
+    sync.sync([makeGear({ id: "b", position: [5, 0, 0] })], NO_PROBLEMS);
+    const instancedMesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    expect(instancedMesh.count).toBe(1);
+    expect(sync.resolveHitId(instancedMesh, 0)).toBe("b");
+  });
+
+  it("detaches an InstancedMesh group entirely once its last gear is removed", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" })], NO_PROBLEMS);
+    sync.sync([], NO_PROBLEMS);
+    expect(ctx.scene.children.some((c) => c instanceof THREE.InstancedMesh)).toBe(false);
+  });
+
+  it("still renders a belt as its own individual, named mesh -- never instanced", () => {
+    // Belts have bespoke, per-instance geometry (see gearGeometry.ts's
+    // beltTangentGeometry) -- they must keep the pre-instancing per-mesh path.
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    const belt = makeGear({ id: "belt-1", type: "belt", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
+    sync.sync([belt], NO_PROBLEMS);
+    expect(ctx.scene.children.some((c) => c.name === "belt-1")).toBe(true);
+    expect(ctx.scene.children.some((c) => c instanceof THREE.InstancedMesh)).toBe(false);
+  });
+
+  it("removes a belt's individual mesh once its gear disappears from the list", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "belt-1", type: "belt", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] })], NO_PROBLEMS);
+    sync.sync([], NO_PROBLEMS);
+    expect(ctx.scene.children.some((c) => c.name === "belt-1")).toBe(false);
+  });
+
+  it("resolves a plain (non-instanced) hit via the object's own name, for a belt", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "belt-1", type: "belt", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] })], NO_PROBLEMS);
+    const beltMesh = ctx.scene.children.find((c) => c.name === "belt-1")!;
+    expect(sync.resolveHitId(beltMesh, undefined)).toBe("belt-1");
+  });
+
+  it("grows an InstancedMesh's capacity to fit more instances than it started with", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    const gears = Array.from({ length: 20 }, (_, i) => makeGear({ id: `g${i}`, position: [i * 20, 0, 0] }));
+    sync.sync(gears, NO_PROBLEMS);
+    const instancedMesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    expect(instancedMesh.count).toBe(20);
+    // Every gear must still resolve correctly after growing -- a naive resize
+    // that didn't carry existing instance data across would leave stale/blank slots.
+    const resolvedIds = new Set(Array.from({ length: 20 }, (_, i) => sync.resolveHitId(instancedMesh, i)));
+    expect(resolvedIds).toEqual(new Set(gears.map((g) => g.id)));
+  });
+
+  it("focuses the camera on a gear's own position", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a", position: [7, 0, 9] })], NO_PROBLEMS);
+    sync.focusOn("a");
+    const [x, y, z] = ctx.controls.target.toArray();
+    expect(x).toBeCloseTo(7);
+    expect(y).toBeCloseTo(0);
+    expect(z).toBeCloseTo(9);
+  });
+
+  it("focuses the camera on a rod's MIDPOINT, matching where it's actually rendered", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "shaft-1", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] })], NO_PROBLEMS);
+    sync.focusOn("shaft-1");
+    const [x, y, z] = ctx.controls.target.toArray();
+    expect(x).toBeCloseTo(10);
+    expect(y).toBeCloseTo(0);
+    expect(z).toBeCloseTo(0);
   });
 });

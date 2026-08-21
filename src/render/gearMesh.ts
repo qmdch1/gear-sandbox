@@ -13,10 +13,12 @@ const BROKEN = new THREE.Color(0x555555);
 // be wasteful, and the pattern doesn't need to vary between gears to read as "metal".
 // null under environments with no 2D canvas context (e.g. jsdom in tests); MeshStandardMaterial
 // treats `map: null` as "no texture, just use color", so this degrades gracefully there.
-const sharedMetalTexture = createMetalTexture();
+// Exported so sceneSync.ts's instanced (non-belt) materials can reuse the SAME
+// texture objects rather than generating a second, redundant canvas.
+export const sharedMetalTexture = createMetalTexture();
 // Same reasoning, but only used for the gauge's dial face -- every other gear type
 // keeps the brushed-metal look above, painting a dial face onto them would be wrong.
-const sharedGaugeDialTexture = createGaugeDialTexture();
+export const sharedGaugeDialTexture = createGaugeDialTexture();
 
 /** `healthyColor` above 50% durability (per gear type, see TYPE_HEALTHY_COLORS), fading
  *  through yellow then red as it depletes, regardless of type — durability danger must
