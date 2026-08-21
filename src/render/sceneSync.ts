@@ -108,6 +108,21 @@ export class SceneSync {
     return group;
   }
 
+  /** Removes `id` from the group keyed by `groupKey`, tearing the group down
+   *  entirely once it's empty (an unused type/teeth/module combination
+   *  shouldn't keep sitting in the scene graph forever). Shared by both a
+   *  gear actually disappearing (sync()'s toRemoveIds) and a gear resizing
+   *  into a different group (see the module-change check below). */
+  private removeFromGroup(id: string, groupKey: string): void {
+    const group = this.groups.get(groupKey);
+    if (!group) return;
+    group.remove(id);
+    if (group.size === 0) {
+      group.dispose();
+      this.groups.delete(groupKey);
+    }
+  }
+
   sync(gears: GearInstance[], diagnostics: SimDiagnostics): void {
     const { toAdd, toRemoveIds } = computeSyncActions(new Set(this.latestGears.keys()), gears);
 
@@ -119,14 +134,7 @@ export class SceneSync {
         this.objects.delete(id);
       } else {
         const groupKey = this.gearGroupKey.get(id);
-        const group = groupKey ? this.groups.get(groupKey) : undefined;
-        if (group) {
-          group.remove(id);
-          if (group.size === 0) {
-            group.dispose();
-            this.groups.delete(groupKey!);
-          }
-        }
+        if (groupKey) this.removeFromGroup(id, groupKey);
         this.gearGroupKey.delete(id);
       }
       this.latestGears.delete(id);
@@ -142,6 +150,22 @@ export class SceneSync {
         this.objects.set(gear.id, obj);
         this.ctx.scene.add(obj.mesh);
       }
+    }
+
+    // A gear's own module (and, in principle, teeth) can change after it was
+    // first added -- see the size slider in main.ts -- which changes which
+    // (type, teeth, module) group it belongs in. Detect that and move it
+    // across, exactly like a fresh add, rather than leaving it rendering at
+    // its OLD size inside a group it no longer geometrically matches.
+    for (const gear of gears) {
+      if (!isInstanced(gear.type)) continue;
+      const oldKey = this.gearGroupKey.get(gear.id);
+      const newKey = this.groupKeyFor(gear);
+      if (oldKey === undefined || oldKey === newKey) continue;
+      this.removeFromGroup(gear.id, oldKey);
+      const group = this.groupFor(gear);
+      group.add(gear.id, computeInstanceMatrix(gear), colorForDurabilityRatio(1, TYPE_HEALTHY_COLORS[gear.type]));
+      this.gearGroupKey.set(gear.id, newKey);
     }
 
     // "unconnected" is deliberately NOT in here -- it just means a part hasn't

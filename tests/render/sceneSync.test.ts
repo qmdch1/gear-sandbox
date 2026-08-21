@@ -137,6 +137,51 @@ describe("SceneSync", () => {
     expect(resolvedIds).toEqual(new Set(gears.map((g) => g.id)));
   });
 
+  it("moves a gear into a different InstancedMesh group once its module changes (the size slider)", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a", module: 1 })], NO_PROBLEMS);
+    const originalMesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    expect(sync.resolveHitId(originalMesh, 0)).toBe("a");
+
+    sync.sync([makeGear({ id: "a", module: 2 })], NO_PROBLEMS); // resized
+    const instancedMeshes = ctx.scene.children.filter((c) => c instanceof THREE.InstancedMesh);
+    // The old (module=1) group had exactly one gear, which just left it -- it
+    // should be torn down entirely rather than left behind, empty, forever.
+    expect(instancedMeshes.length).toBe(1);
+    const newMesh = instancedMeshes[0] as THREE.InstancedMesh;
+    expect(sync.resolveHitId(newMesh, 0)).toBe("a");
+  });
+
+  it("keeps a resized gear's OTHER group-mates (same new module) intact, not duplicated or lost", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync(
+      [makeGear({ id: "a", module: 1 }), makeGear({ id: "b", module: 2, position: [5, 0, 0] })],
+      NO_PROBLEMS,
+    );
+    sync.sync(
+      [makeGear({ id: "a", module: 2 }), makeGear({ id: "b", module: 2, position: [5, 0, 0] })],
+      NO_PROBLEMS,
+    );
+    const instancedMeshes = ctx.scene.children.filter((c) => c instanceof THREE.InstancedMesh);
+    expect(instancedMeshes.length).toBe(1); // both now module=2 -- one shared group
+    const mesh = instancedMeshes[0] as THREE.InstancedMesh;
+    expect(mesh.count).toBe(2);
+    const resolved = new Set([sync.resolveHitId(mesh, 0), sync.resolveHitId(mesh, 1)]);
+    expect(resolved).toEqual(new Set(["a", "b"]));
+  });
+
+  it("does not move a gear that hasn't actually resized, on every ordinary sync() call", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a", module: 1 })], NO_PROBLEMS);
+    const meshBefore = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    sync.sync([makeGear({ id: "a", module: 1 })], NO_PROBLEMS); // same module again
+    const meshAfter = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    expect(meshAfter).toBe(meshBefore); // same group instance, never torn down/rebuilt
+  });
+
   it("does NOT tint an unconnected gear's color -- unconnected is not a problem", () => {
     // Regression: "미연결" (unconnected) used to be treated as a "problem" and
     // got the red warning tint -- but a freshly-placed, not-yet-hooked-up part

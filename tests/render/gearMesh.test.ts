@@ -65,6 +65,18 @@ describe("GearMeshObject", () => {
     expect(obj.mesh.geometry).toBe(other.mesh.geometry);
   });
 
+  it("refreshes a disconnected belt's geometry when its module changes (the size slider)", () => {
+    // Regression: the disconnected-default branch used to only re-fetch cached
+    // geometry when transitioning AWAY from a bespoke tangent shape -- a belt
+    // that stayed disconnected the whole time never picked up a module change.
+    const gear = makeGear({ type: "belt", teeth: 0, module: 1, position: [0, 0, 0], position2: [30, 0, 0] });
+    const obj = new GearMeshObject(gear);
+    const atModule1 = obj.mesh.geometry;
+    obj.update({ ...gear, module: 2 });
+    const atModule2 = obj.mesh.geometry;
+    expect(atModule2).not.toBe(atModule1);
+  });
+
   it("swaps in a bespoke tangent geometry once a belt is connected on at least one end", () => {
     const gear = makeGear({
       type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0],

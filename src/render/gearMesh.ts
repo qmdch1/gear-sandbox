@@ -130,9 +130,12 @@ export class GearMeshObject {
     if (r1 <= 0 && r2 <= 0) {
       if (this.ownsGeometry) {
         this.mesh.geometry.dispose();
-        this.mesh.geometry = cachedGeometryFor(gear.type, gear.teeth || 1, gear.module || 1);
         this.ownsGeometry = false;
       }
+      // Always re-fetch (not just when transitioning away from a bespoke
+      // tangent shape) so a disconnected belt's module change (see the size
+      // slider in main.ts) is reflected too -- a cheap cache lookup either way.
+      this.mesh.geometry = cachedGeometryFor(gear.type, gear.teeth || 1, gear.module || 1);
       return false;
     }
     const p1 = new THREE.Vector3(...gear.position);

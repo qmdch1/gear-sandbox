@@ -8,6 +8,7 @@ import { PaletteUI } from "./ui/paletteUI";
 import { PartInfoModal } from "./ui/partInfoModal";
 import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
 import { computeGearLabels } from "./ui/gearLabels";
+import { SizeControlPanel } from "./ui/sizeControlPanel";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
 import { fetchServerLayout, saveServerLayout } from "./persistence/serverClient";
 
@@ -27,6 +28,10 @@ app.innerHTML = `
       </ul>
     </section>
     <section class="panel">
+      <h2>크기 조절</h2>
+      <div id="size-control"></div>
+    </section>
+    <section class="panel">
       <h2>저장</h2>
       <div id="save-load"></div>
     </section>
@@ -44,6 +49,10 @@ const sceneSync = new SceneSync(ctx);
 const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => {
   sceneSync.focusOn(id);
   sceneSync.flash(id);
+});
+const sizeControlPanel = new SizeControlPanel(document.querySelector("#size-control")!, (module) => {
+  const gear = gears.find((g) => g.id === selectedGearId);
+  if (gear) gear.module = module;
 });
 const partInfoModal = new PartInfoModal(document.body);
 
@@ -203,6 +212,7 @@ function animate(): void {
   gears = result.gears;
   sceneSync.sync(gears, result.diagnostics);
   diagnosticsPanel.render(result.diagnostics, computeGearLabels(gears));
+  sizeControlPanel.render(gears.find((g) => g.id === selectedGearId) ?? null);
 
   ctx.controls.update();
   ctx.renderer.render(ctx.scene, ctx.camera);
