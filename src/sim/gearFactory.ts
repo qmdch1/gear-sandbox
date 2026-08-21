@@ -37,6 +37,13 @@ export function defaultTeethForType(type: GearType): number {
 const DEFAULT_ROD_LENGTH = 12;
 const ROD_TYPES = new Set<GearType>(["shaft", "beam", "belt"]);
 
+// Every geometry function scales uniformly off `module` -- this is just the
+// starting size for a freshly-placed part (still freely adjustable afterward
+// via the size slider, see resize.ts), picked smaller than the old fixed 1 so
+// a default gear train reads as more true-to-scale next to the starter kit's
+// other parts.
+const DEFAULT_MODULE = 0.5;
+
 /** Builds a brand-new gear instance with a globally unique id (crypto.randomUUID --
  *  no counter to track or reseed across load/import events). */
 export function createGear(type: GearType, position: [number, number, number]): GearInstance {
@@ -48,7 +55,7 @@ export function createGear(type: GearType, position: [number, number, number]): 
     position2: ROD_TYPES.has(type) ? [position[0] + DEFAULT_ROD_LENGTH, position[1], position[2]] : undefined,
     axis: defaultAxisForType(type),
     teeth: defaultTeethForType(type),
-    module: 1,
+    module: DEFAULT_MODULE,
     durabilityMax: def.durabilityMax,
     durabilityCurrent: def.durabilityMax,
     broken: false,

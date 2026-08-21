@@ -1,6 +1,7 @@
 import type { GearInstance, GearType } from "./sim/types";
 import { createGear, toggledAxis } from "./sim/gearFactory";
 import { tick } from "./sim/simulation";
+import { resizeConnectedMeshGroup } from "./sim/resize";
 import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
 import { DragControls } from "./interaction/dragControls";
@@ -51,8 +52,11 @@ const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnosti
   sceneSync.flash(id);
 });
 const sizeControlPanel = new SizeControlPanel(document.querySelector("#size-control")!, (module) => {
-  const gear = gears.find((g) => g.id === selectedGearId);
-  if (gear) gear.module = module;
+  // Resizing propagates the SAME module out through everything actually
+  // tooth-meshed to the selected gear (a mismatched module can't mesh at
+  // all, same as real gears with different tooth pitch), repositioning each
+  // affected gear to the new correct meshing distance -- see resize.ts.
+  if (selectedGearId) resizeConnectedMeshGroup(selectedGearId, module, gears);
 });
 const partInfoModal = new PartInfoModal(document.body);
 
@@ -68,10 +72,11 @@ function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
 }
 
-// Default gears (module 1, 20 teeth) need ~20 units of center distance to mesh, so a
-// tight spawn grid made every freshly-placed gear register as "겹침" (overlapping)
-// instead of a real, draggable starting point. 24 units of pitch keeps fresh gears
-// apart by default while staying in easy drag/snap range of each other.
+// Default gears (module 0.5, 20 teeth) need ~10 units of center distance to
+// mesh, so a tight spawn grid made every freshly-placed gear register as
+// "겹침" (overlapping) instead of a real, draggable starting point. 24 units
+// of pitch keeps fresh gears comfortably apart by default while staying in
+// easy drag/snap range of each other.
 const SPAWN_GRID_PITCH = 24;
 
 /** Square-spiral grid cell for the Nth spawned gear: index 0 is the origin (so the

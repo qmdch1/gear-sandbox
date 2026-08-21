@@ -54,6 +54,11 @@ describe("createGear", () => {
     expect(a.id.length).toBeGreaterThan(0);
   });
 
+  it("gives a freshly-placed gear a 0.5 default module", () => {
+    const spur = createGear("spur", [0, 0, 0]);
+    expect(spur.module).toBe(0.5);
+  });
+
   it("produces a bevel gear that can mesh with a default-axis partner out of the box", () => {
     // Regression for the "bevel/worm can never mesh" bug: a freshly created bevel
     // gear (perpendicular default axis) must be able to form a valid mesh edge
