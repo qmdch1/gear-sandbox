@@ -17,6 +17,14 @@ const PREVIEW_HIGHLIGHT = new THREE.Color(0x2ecc71);
 // clearly, visibly a warning either way.
 const HIGHLIGHT_BLEND = 0.5;
 
+// A bright, distinct-from-everything-else color for briefly flashing a gear that
+// was just jumped to (see flash()) -- e.g. clicking it in the diagnostics list --
+// so it's unmistakable at a glance among a whole scene of parts, not just
+// wherever the camera happens to be centered.
+const FLASH_COLOR = new THREE.Color(0xffee58);
+const FLASH_DURATION_MS = 1400;
+const FLASH_BLINKS = 3; // how many times it pulses over that duration
+
 /** Pure diff: which gears need a new mesh, which stale meshes need removing. */
 export function computeSyncActions(
   existingIds: Set<string>,
@@ -61,8 +69,28 @@ export class SceneSync {
   private nonGaugeMaterial = buildSharedMaterial(false);
   private gaugeMaterial = buildSharedMaterial(true);
   private previewId: string | null = null;
+  private flashId: string | null = null;
+  private flashStartedAt: number | null = null;
 
   constructor(private ctx: SceneContext) {}
+
+  /** How strongly `id`'s flash (see flash()) should show right now, from 0 (no
+   *  flash, or a different gear entirely) to 1 (brightest point of a pulse) --
+   *  a blink pattern (sin wave) inside an overall fade-out envelope, so it
+   *  reads as "flashing, then settling down" rather than a single hard blink
+   *  or a flat glow for the whole duration. Clears itself once finished. */
+  private flashBlend(id: string): number {
+    if (id !== this.flashId || this.flashStartedAt === null) return 0;
+    const elapsed = performance.now() - this.flashStartedAt;
+    if (elapsed >= FLASH_DURATION_MS) {
+      this.flashId = null;
+      this.flashStartedAt = null;
+      return 0;
+    }
+    const t = elapsed / FLASH_DURATION_MS; // 0..1 over the flash's lifetime
+    const blink = Math.abs(Math.sin(t * Math.PI * FLASH_BLINKS));
+    return blink * (1 - t); // fades out overall as it blinks
+  }
 
   private groupKeyFor(gear: GearInstance): string {
     return `${gear.type}:${gear.teeth || 1}:${gear.module || 1}`;
@@ -124,6 +152,7 @@ export class SceneSync {
 
     for (const gear of gears) {
       this.latestGears.set(gear.id, gear);
+      const flashBlend = this.flashBlend(gear.id);
       if (isInstanced(gear.type)) {
         const group = this.groups.get(this.gearGroupKey.get(gear.id)!)!;
         group.setTransform(gear.id, computeInstanceMatrix(gear));
@@ -135,12 +164,15 @@ export class SceneSync {
             : problemIds.has(gear.id)
               ? baseColor.clone().lerp(PROBLEM_HIGHLIGHT, HIGHLIGHT_BLEND)
               : baseColor;
-        group.setColor(gear.id, highlighted);
+        const final = flashBlend > 0 ? highlighted.clone().lerp(FLASH_COLOR, flashBlend) : highlighted;
+        group.setColor(gear.id, final);
       } else {
         const obj = this.objects.get(gear.id)!;
         obj.update(gear);
         const material = obj.mesh.material as THREE.MeshStandardMaterial;
-        if (this.previewId === gear.id) {
+        if (flashBlend > 0) {
+          material.emissive = FLASH_COLOR.clone().multiplyScalar(flashBlend);
+        } else if (this.previewId === gear.id) {
           material.emissive = PREVIEW_HIGHLIGHT.clone();
         } else {
           material.emissive = problemIds.has(gear.id) ? PROBLEM_HIGHLIGHT.clone() : new THREE.Color(0x000000);
@@ -171,6 +203,17 @@ export class SceneSync {
    *  clearing any previous preview. Pass null to clear. Applied on the next sync(). */
   setPreviewHighlight(id: string | null): void {
     this.previewId = id;
+  }
+
+  /** Briefly, visibly flashes the given gear a few times before fading back to
+   *  its normal color -- e.g. right after jumping the camera to it from the
+   *  diagnostics list, so it's unmistakable which part that actually was,
+   *  rather than just "somewhere near the middle of the screen now." Starting
+   *  a new flash (on this or any other gear) replaces whichever one was
+   *  already in progress. */
+  flash(id: string): void {
+    this.flashId = id;
+    this.flashStartedAt = performance.now();
   }
 
   /** Resolves a raycaster hit back to the gear id it represents. A single

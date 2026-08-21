@@ -1,17 +1,25 @@
 import type { GearType } from "../sim/types";
 import { PART_INFO } from "./partInfo";
+import { loadOpenState, saveOpenState } from "./persistedOpenState";
 
 interface Category {
+  /** Stable key for persisting this category's open/closed state -- independent
+   *  of `label`, so a future wording change to the label doesn't silently reset
+   *  everyone's remembered state. */
+  id: string;
   label: string;
   icon: string;
   types: GearType[];
 }
+
+const PALETTE_OPEN_STATE_KEY = "gear-sandbox:palette-open-categories";
 
 // 10 parts is too many to scan as one flat grid — grouped by "what kind of part is
 // this" (기어/동력원/부착 장치) so picking one is a two-tap drill-down instead of a wall
 // of buttons.
 const CATEGORIES: Category[] = [
   {
+    id: "gears",
     label: "기어",
     types: ["spur", "helical", "bevel", "worm"],
     icon: `<circle cx="50" cy="50" r="28" fill="none" stroke="currentColor" stroke-width="7"/>
@@ -22,17 +30,20 @@ const CATEGORIES: Category[] = [
       </g>`,
   },
   {
+    id: "power",
     label: "동력원",
     types: ["crank"],
     icon: `<polygon points="55,8 24,56 44,56 40,92 76,44 53,44" fill="currentColor"/>`,
   },
   {
+    id: "attachments",
     label: "부착 장치",
     types: ["load", "gauge", "fan", "wheel"],
     icon: `<polygon points="50,12 76,28 76,62 50,78 24,62 24,28" fill="none" stroke="currentColor" stroke-width="6"/>
       <circle cx="50" cy="45" r="13" fill="none" stroke="currentColor" stroke-width="5"/>`,
   },
   {
+    id: "transmission",
     label: "동력 전달",
     types: ["shaft", "belt"],
     icon: `<circle cx="26" cy="26" r="12" fill="none" stroke="currentColor" stroke-width="6"/>
@@ -43,6 +54,7 @@ const CATEGORIES: Category[] = [
     // Deliberately a separate category from "동력 전달" -- a beam carries no
     // rotation at all (see meshing.ts's "structural" edge kind), it's a purely
     // rigid frame member, not a drivetrain part.
+    id: "structure",
     label: "구조",
     types: ["beam"],
     icon: `<rect x="15" y="42" width="70" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="6"/>
@@ -69,6 +81,13 @@ export class PaletteUI {
   constructor(container: HTMLElement, onPick: (type: GearType) => void) {
     container.classList.add("palette");
 
+    // Default to every category open (nothing to hunt for on a first visit);
+    // once the user has actually toggled anything, remember exactly which
+    // categories were open/closed and restore that same layout next time,
+    // instead of always resetting to all-open.
+    const savedOpenState = loadOpenState(PALETTE_OPEN_STATE_KEY);
+    const openState: Record<string, boolean> = {};
+
     for (const category of CATEGORIES) {
       const categoryButton = document.createElement("button");
       categoryButton.className = "palette-category";
@@ -79,7 +98,10 @@ export class PaletteUI {
 
       const itemGrid = document.createElement("div");
       itemGrid.className = "palette-items";
-      itemGrid.hidden = true;
+      const isOpen = savedOpenState?.[category.id] ?? true;
+      itemGrid.hidden = !isOpen;
+      categoryButton.classList.toggle("open", isOpen);
+      openState[category.id] = isOpen;
       for (const type of category.types) itemGrid.appendChild(buildPartButton(type, onPick));
 
       // Each category toggles independently -- several can stay open side by
@@ -87,7 +109,10 @@ export class PaletteUI {
       // train), instead of opening one always closing every other one.
       categoryButton.addEventListener("click", () => {
         itemGrid.hidden = !itemGrid.hidden;
-        categoryButton.classList.toggle("open", !itemGrid.hidden);
+        const nowOpen = !itemGrid.hidden;
+        categoryButton.classList.toggle("open", nowOpen);
+        openState[category.id] = nowOpen;
+        saveOpenState(PALETTE_OPEN_STATE_KEY, openState);
       });
 
       container.append(categoryButton, itemGrid);

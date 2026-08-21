@@ -168,6 +168,69 @@ describe("SceneSync", () => {
     expect(withProblem.getHexString()).not.toBe(withoutProblem.getHexString());
   });
 
+  it("flashes a gear's color right after flash() is called", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" })], NO_PROBLEMS);
+    const mesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    const before = new THREE.Color();
+    mesh.getColorAt(0, before);
+
+    sync.flash("a");
+    now.mockReturnValue(1000); // no time has passed yet -- right at the start of the flash
+    sync.sync([makeGear({ id: "a" })], NO_PROBLEMS);
+    const atStart = new THREE.Color();
+    mesh.getColorAt(0, atStart);
+    expect(atStart.getHexString()).toBe(before.getHexString()); // sin(0) = 0 -- no visible blend yet
+
+    // Check partway through the first blink instead, where it's clearly lit.
+    now.mockReturnValue(1000 + 1400 / 12); // a twelfth of the way into the first of 3 blinks
+    sync.sync([makeGear({ id: "a" })], NO_PROBLEMS);
+    const midBlink = new THREE.Color();
+    mesh.getColorAt(0, midBlink);
+    expect(midBlink.getHexString()).not.toBe(before.getHexString());
+
+    now.mockRestore();
+  });
+
+  it("fades a flash back to normal once its duration has fully elapsed", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" })], NO_PROBLEMS);
+    const mesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    const before = new THREE.Color();
+    mesh.getColorAt(0, before);
+
+    sync.flash("a");
+    now.mockReturnValue(1000 + 1400 + 1); // just past the flash's full duration
+    sync.sync([makeGear({ id: "a" })], NO_PROBLEMS);
+    const after = new THREE.Color();
+    mesh.getColorAt(0, after);
+    expect(after.getHexString()).toBe(before.getHexString());
+
+    now.mockRestore();
+  });
+
+  it("only flashes the specific gear that was flash()-ed, not its group-mates", () => {
+    const now = vi.spyOn(performance, "now").mockReturnValue(1000);
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" }), makeGear({ id: "b", position: [5, 0, 0] })], NO_PROBLEMS);
+    sync.flash("a");
+    now.mockReturnValue(1000 + 1400 / 12);
+    sync.sync([makeGear({ id: "a" }), makeGear({ id: "b", position: [5, 0, 0] })], NO_PROBLEMS);
+    const mesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    const colorA = new THREE.Color();
+    const colorB = new THREE.Color();
+    mesh.getColorAt(0, colorA);
+    mesh.getColorAt(1, colorB);
+    expect(colorA.getHexString()).not.toBe(colorB.getHexString());
+
+    now.mockRestore();
+  });
+
   it("focuses the camera on a gear's own position", () => {
     const ctx = createScene(document.createElement("canvas"));
     const sync = new SceneSync(ctx);

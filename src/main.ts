@@ -41,7 +41,10 @@ app.innerHTML = `
 const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
 const ctx = createScene(canvas);
 const sceneSync = new SceneSync(ctx);
-const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => sceneSync.focusOn(id));
+const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => {
+  sceneSync.focusOn(id);
+  sceneSync.flash(id);
+});
 const partInfoModal = new PartInfoModal(document.body);
 
 let gears: GearInstance[] = [];
