@@ -137,6 +137,37 @@ describe("SceneSync", () => {
     expect(resolvedIds).toEqual(new Set(gears.map((g) => g.id)));
   });
 
+  it("does NOT tint an unconnected gear's color -- unconnected is not a problem", () => {
+    // Regression: "미연결" (unconnected) used to be treated as a "problem" and
+    // got the red warning tint -- but a freshly-placed, not-yet-hooked-up part
+    // is normal, not wrong (see diagnosticsPanel.ts's matching split).
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" })], { unconnectedIds: ["a"], noPowerIds: [], overlapPairs: [] });
+    const mesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    const color = new THREE.Color();
+    mesh.getColorAt(0, color);
+    const plainDurabilityColor = new THREE.Color(0x3ddc73); // colorForDurabilityRatio's HEALTHY at full durability, un-tinted
+    expect(color.getHexString()).not.toBe(
+      plainDurabilityColor.clone().lerp(new THREE.Color(0xff3b30), 0.5).getHexString(),
+    );
+  });
+
+  it("DOES tint a gear listed under noPowerIds -- that's a real problem", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a" })], { unconnectedIds: [], noPowerIds: ["a"], overlapPairs: [] });
+    const mesh = ctx.scene.children.find((c) => c instanceof THREE.InstancedMesh) as THREE.InstancedMesh;
+    const withProblem = new THREE.Color();
+    mesh.getColorAt(0, withProblem);
+
+    sync.sync([makeGear({ id: "a" })], NO_PROBLEMS);
+    const withoutProblem = new THREE.Color();
+    mesh.getColorAt(0, withoutProblem);
+
+    expect(withProblem.getHexString()).not.toBe(withoutProblem.getHexString());
+  });
+
   it("focuses the camera on a gear's own position", () => {
     const ctx = createScene(document.createElement("canvas"));
     const sync = new SceneSync(ctx);

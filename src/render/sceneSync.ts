@@ -116,11 +116,11 @@ export class SceneSync {
       }
     }
 
-    const problemIds = new Set([
-      ...diagnostics.unconnectedIds,
-      ...diagnostics.noPowerIds,
-      ...diagnostics.overlapPairs.flat(),
-    ]);
+    // "unconnected" is deliberately NOT in here -- it just means a part hasn't
+    // been hooked up to anything yet, which is completely normal right after
+    // placing it, not a problem worth a red warning tint (see
+    // diagnosticsPanel.ts, which draws the same distinction in its own list).
+    const problemIds = new Set([...diagnostics.noPowerIds, ...diagnostics.overlapPairs.flat()]);
 
     for (const gear of gears) {
       this.latestGears.set(gear.id, gear);

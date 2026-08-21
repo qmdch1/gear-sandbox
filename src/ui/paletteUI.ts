@@ -68,8 +68,6 @@ function buildPartButton(type: GearType, onPick: (type: GearType) => void): HTML
 export class PaletteUI {
   constructor(container: HTMLElement, onPick: (type: GearType) => void) {
     container.classList.add("palette");
-    const allItemGrids: HTMLElement[] = [];
-    const allCategoryButtons: HTMLElement[] = [];
 
     for (const category of CATEGORIES) {
       const categoryButton = document.createElement("button");
@@ -84,18 +82,14 @@ export class PaletteUI {
       itemGrid.hidden = true;
       for (const type of category.types) itemGrid.appendChild(buildPartButton(type, onPick));
 
+      // Each category toggles independently -- several can stay open side by
+      // side at once (e.g. "기어" and "동력원" both open while placing a gear
+      // train), instead of opening one always closing every other one.
       categoryButton.addEventListener("click", () => {
-        const reopening = itemGrid.hidden;
-        for (const grid of allItemGrids) grid.hidden = true;
-        for (const btn of allCategoryButtons) btn.classList.remove("open");
-        if (reopening) {
-          itemGrid.hidden = false;
-          categoryButton.classList.add("open");
-        }
+        itemGrid.hidden = !itemGrid.hidden;
+        categoryButton.classList.toggle("open", !itemGrid.hidden);
       });
 
-      allItemGrids.push(itemGrid);
-      allCategoryButtons.push(categoryButton);
       container.append(categoryButton, itemGrid);
     }
   }

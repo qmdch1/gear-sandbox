@@ -62,7 +62,16 @@ export function findSnapTarget(
     const dz = rawPosition[2] - candidate.position[2];
     const rawDistance = Math.hypot(dx, dz);
     const slack = Math.abs(rawDistance - idealDistance);
-    if (slack > SNAP_SLACK || slack >= bestSlack) continue;
+    // A coincident target (a shaft coupling, like a load/gauge/helical/worm
+    // dropped onto a power source) is a single POINT to hit exactly, unlike a
+    // meshing ring which spans a whole circle around the partner -- "drop it
+    // near the partner's center" is a much smaller, easier-to-miss target than
+    // "drop it near the partner's edge." Scaling the tolerated slack up to the
+    // partner's own visible radius means dropping ANYWHERE on top of the host
+    // gear's disc counts as "close enough," matching how it actually looks on
+    // screen, instead of only a small, invisible hot-zone at its dead center.
+    const effectiveSlack = idealDistance === 0 ? Math.max(SNAP_SLACK, (candidate.module * candidate.teeth) / 2) : SNAP_SLACK;
+    if (slack > effectiveSlack || slack >= bestSlack) continue;
 
     let position: [number, number, number];
     let rotation: number | undefined;
@@ -108,7 +117,10 @@ function findShaftEndpointSnap(
     const dx = rawPosition[0] - candidate.position[0];
     const dz = rawPosition[2] - candidate.position[2];
     const slack = Math.hypot(dx, dz);
-    if (slack > SNAP_SLACK || slack >= bestSlack) continue;
+    // Same reasoning as findSnapTarget's coincident case: dropping anywhere on
+    // top of the host gear's own visible disc should count as "close enough."
+    const effectiveSlack = Math.max(SNAP_SLACK, (candidate.module * candidate.teeth) / 2);
+    if (slack > effectiveSlack || slack >= bestSlack) continue;
     bestSlack = slack;
     best = [candidate.position[0], rawPosition[1], candidate.position[2]];
   }

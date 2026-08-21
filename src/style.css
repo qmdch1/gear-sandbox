@@ -108,16 +108,21 @@ html, body {
 #server-sync li { padding: 6px 0; border-top: 1px solid #333a4a; display: flex; justify-content: space-between; gap: 8px; }
 
 #diagnostics { font-size: 12.5px; color: #c4cbdb; }
+#diagnostics strong { display: block; margin-top: 10px; }
+#diagnostics strong:first-child { margin-top: 0; }
 #diagnostics ul { list-style: none; margin: 6px 0 0; padding: 0; }
-#diagnostics li {
-  padding: 6px 8px;
-  margin-bottom: 4px;
-  background: #3a2a2e;
-  border-left: 3px solid #e15554;
-  border-radius: 6px;
-  cursor: pointer;
-}
-#diagnostics li:hover { background: #453237; }
+#diagnostics li { padding: 6px 8px; margin-bottom: 4px; border-radius: 6px; cursor: pointer; }
+
+/* Genuinely wrong (동력 없음, 겹침) -- the alarming red treatment. */
+#diagnostics .diag-problem li { background: #3a2a2e; border-left: 3px solid #e15554; }
+#diagnostics .diag-problem li:hover { background: #453237; }
+
+/* Just "not hooked up to anything yet" -- a normal, expected state for a
+   freshly-placed part, so a calm neutral tint instead of a warning color. */
+#diagnostics .diag-info li { background: #2c2f3a; border-left: 3px solid #565f75; }
+#diagnostics .diag-info li:hover { background: #343848; }
+
+#diagnostics .diag-ok { color: #7d879e; margin: 4px 0 0; }
 
 .part-info-overlay {
   position: fixed;

@@ -232,49 +232,61 @@ function fanGeometry(module: number): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
-/** A cone with real teeth cut into its slanted face -- tapering from wide at the rim
- *  down toward the apex, the actual visual signature of a bevel gear that makes it
- *  legible as "this meshes at an angle" (fixed-size studs near the rim, tried
- *  earlier, just read as a spiky crown, not a cone with teeth on its slant). Each
- *  tooth is a small angular wedge of a SECOND, slightly larger cone sharing the same
- *  apex/height/slant as the body -- `THREE.CylinderGeometry`'s `thetaStart`/
- *  `thetaLength` params slice out that wedge directly, so it inherits the cone's
- *  taper for free instead of needing a hand-rolled lofted shape. Built in the cone's
- *  own local Y-axis frame (radial = XZ, axis = Y, apex at +Y per `ConeGeometry`'s own
- *  convention) like the plain cone was; `buildGeometryForType` applies the same
- *  `rotateX(Math.PI/2)` the old plain cone used. A wedge's angular center sits at
- *  `i * anglePerTooth` via `thetaStart`/`thetaLength` directly -- CylinderGeometry's
- *  own theta parameterization (x = r*sin(theta), z = r*cos(theta)) is exactly what
- *  `rotateY(theta)` produces on a point starting at local +Z, so this lines up with
- *  every other gear type's "tooth i's center is at angle i*pitch" convention (and
- *  with `meshPhaseAlignment`'s bevel phase math in meshing.ts, which depends on it). */
+/** A thick, mostly-flat disc with teeth cut into its outer rim -- what a real
+ *  bevel gear actually looks like (see public/parts/bevel.jpg: a chunky wheel,
+ *  barely conical, NOT a tall pointed cone). An earlier version of this function
+ *  built a full `ConeGeometry` running all the way to a sharp apex, which read as
+ *  a witch's hat / spinning top, not a gear at all. For a standard 90°, 1:1-ratio
+ *  bevel pair, the pitch cone's half-angle is 45° -- so over the disc's own SHORT
+ *  axial thickness, the radius only needs to taper by that same thickness
+ *  (tan(45°) = 1) to be geometrically honest, which is exactly the "barely
+ *  conical" look the reference photo shows. Each tooth is a small angular wedge
+ *  of a SECOND, slightly larger frustum sharing the same taper as the body --
+ *  `THREE.CylinderGeometry`'s `thetaStart`/`thetaLength` params slice out that
+ *  wedge directly. Built in the disc's own local Y-axis frame (radial = XZ,
+ *  axis = Y) like the old cone was; `buildGeometryForType` applies the same
+ *  `rotateX(Math.PI/2)`. A wedge's angular center sits at `i * anglePerTooth`
+ *  via `thetaStart`/`thetaLength` directly -- CylinderGeometry's own theta
+ *  parameterization (x = r*sin(theta), z = r*cos(theta)) is exactly what
+ *  `rotateY(theta)` produces on a point starting at local +Z, so this lines up
+ *  with every other gear type's "tooth i's center is at angle i*pitch"
+ *  convention (and with `meshPhaseAlignment`'s bevel phase math in meshing.ts,
+ *  which depends on it -- unaffected by this shape change, since that math only
+ *  ever depended on the ANGULAR placement, never the axial proportions). */
 function bevelGeometry(teeth: number, module: number): THREE.BufferGeometry {
   const pitchRadius = (module * teeth) / 2;
-  const baseRadius = pitchRadius + module * ADDENDUM_FACTOR;
-  const height = GEAR_THICKNESS * 3;
-  const cone = new THREE.ConeGeometry(baseRadius, height, 32);
+  const outerRadius = pitchRadius + module * ADDENDUM_FACTOR; // the wide, toothed front face
+  const thickness = module * 4; // chunky wheel, not a tall spike -- roughly matches the reference photo's proportions
+  const innerRadius = Math.max(outerRadius - thickness, module * 2); // the narrower back face, 45°-tapered from the front
+
+  // CylinderGeometry(radiusTop, radiusBottom, ...) -- top is +Y (the back, narrower
+  // face), bottom is -Y (the front, wider/toothed face).
+  const disc = new THREE.CylinderGeometry(innerRadius, outerRadius, thickness, 32);
 
   const anglePerTooth = (Math.PI * 2) / teeth;
   const toothAngularWidth = anglePerTooth * 0.6;
   const toothProtrusion = module * 1.1; // pronounced enough to read clearly against a meshed partner
-  const toothAxialSpan = height * 0.55; // from the wide base, most of the way toward the apex
+  const toothAxialSpan = thickness * 0.9; // nearly the full disc thickness -- a real bevel tooth runs the whole face width of its (short) toothed rim
 
-  // The body cone's own radius at height y (apex at +height/2, base at -height/2,
-  // per ConeGeometry's convention) -- the taper a tooth wedge rides on top of.
-  const bodyRadiusAt = (y: number) => (baseRadius * (height / 2 - y)) / height;
+  // The body disc's own radius at height y (front at -thickness/2, back at
+  // +thickness/2) -- the taper a tooth wedge rides on top of.
+  const bodyRadiusAt = (y: number) => {
+    const t = (y + thickness / 2) / thickness; // 0 at front, 1 at back
+    return outerRadius + (innerRadius - outerRadius) * t;
+  };
 
-  const yBase = -height / 2;
-  const yInner = yBase + toothAxialSpan;
-  const radiusAtBase = bodyRadiusAt(yBase) + toothProtrusion;
-  const radiusAtInner = bodyRadiusAt(yInner) + toothProtrusion;
+  const yFront = -thickness / 2;
+  const yBack = yFront + toothAxialSpan;
+  const radiusAtFront = bodyRadiusAt(yFront) + toothProtrusion;
+  const radiusAtBack = bodyRadiusAt(yBack) + toothProtrusion;
 
-  const parts: THREE.BufferGeometry[] = [cone];
+  const parts: THREE.BufferGeometry[] = [disc];
   for (let i = 0; i < teeth; i++) {
     const thetaStart = i * anglePerTooth - toothAngularWidth / 2;
-    // CylinderGeometry(radiusTop, radiusBottom, ...) -- top is +Y (toward the apex,
-    // narrower), bottom is -Y (the wide base), matching yInner/yBase above.
-    const wedge = new THREE.CylinderGeometry(radiusAtInner, radiusAtBase, toothAxialSpan, 2, 1, false, thetaStart, toothAngularWidth);
-    wedge.translate(0, (yBase + yInner) / 2, 0);
+    // CylinderGeometry(radiusTop, radiusBottom, ...) -- top is +Y (the back,
+    // narrower), bottom is -Y (the front, wider), matching yBack/yFront above.
+    const wedge = new THREE.CylinderGeometry(radiusAtBack, radiusAtFront, toothAxialSpan, 2, 1, false, thetaStart, toothAngularWidth);
+    wedge.translate(0, (yFront + yBack) / 2, 0);
     parts.push(wedge);
   }
   return mergeGeometries(parts);

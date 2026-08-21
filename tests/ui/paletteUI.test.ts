@@ -11,7 +11,10 @@ describe("PaletteUI", () => {
     for (const grid of grids) expect(grid.hidden).toBe(true);
   });
 
-  it("expands only the clicked category's items, collapsing any other open one", () => {
+  it("expands the clicked category's items WITHOUT collapsing any other already-open one", () => {
+    // Several categories can stay open side by side (e.g. picking a gear and a
+    // power source in the same glance), unlike an accordion that only ever
+    // allows one section open at a time.
     const container = document.createElement("div");
     new PaletteUI(container, () => {});
     const categoryButtons = container.querySelectorAll<HTMLButtonElement>(".palette-category");
@@ -22,8 +25,8 @@ describe("PaletteUI", () => {
     expect(grids[1].hidden).toBe(true);
 
     categoryButtons[1].click();
-    expect(grids[0].hidden).toBe(true);
-    expect(grids[1].hidden).toBe(false);
+    expect(grids[0].hidden).toBe(false); // still open
+    expect(grids[1].hidden).toBe(false); // newly opened too
   });
 
   it("re-collapses a category's items when its button is clicked again", () => {

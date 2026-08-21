@@ -68,4 +68,25 @@ describe("findSnapTarget", () => {
     const partner = makeGear({ id: "partner", teeth: 20, module: 1, axis: [1, 0, 0], position: [0, 0, 0] });
     expect(findSnapTarget(dragged, [12, 0, 0], [dragged, partner])).toBeNull();
   });
+
+  it("snaps a coincident-coupling drop anywhere on the host's own visible disc, not just within the fixed 6-unit slack", () => {
+    // Regression for "helical has nothing to attach to": a coincident target
+    // (e.g. a helical gear coupling onto a crank's shaft) is a single POINT to
+    // hit -- unlike a meshing ring, which spans a whole circle, so the fixed
+    // 6-unit slack alone made it much easier to miss than a normal gear mesh.
+    // A host with teeth=20, module=1 has pitch radius 10 (bigger than the old
+    // fixed slack) -- dropping 9 units out (well past the old slack, but still
+    // on the host's own disc) should now snap.
+    const dragged = makeGear({ id: "helical1", type: "helical", teeth: 20, module: 1, position: [9, 0, 0] });
+    const host = makeGear({ id: "crank1", type: "crank", teeth: 20, module: 1, position: [0, 0, 0] });
+    const snap = findSnapTarget(dragged, [9, 0, 0], [dragged, host]);
+    expect(snap?.partnerId).toBe("crank1");
+    expect(snap?.position).toEqual([0, 0, 0]);
+  });
+
+  it("still does not snap a coincident-coupling drop well OUTSIDE the host's own visible disc", () => {
+    const dragged = makeGear({ id: "helical1", type: "helical", teeth: 20, module: 1, position: [50, 0, 0] });
+    const host = makeGear({ id: "crank1", type: "crank", teeth: 20, module: 1, position: [0, 0, 0] });
+    expect(findSnapTarget(dragged, [50, 0, 0], [dragged, host])).toBeNull();
+  });
 });

@@ -7,6 +7,7 @@ import { DragControls } from "./interaction/dragControls";
 import { PaletteUI } from "./ui/paletteUI";
 import { PartInfoModal } from "./ui/partInfoModal";
 import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
+import { computeGearLabels } from "./ui/gearLabels";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
 import { fetchServerLayout, saveServerLayout } from "./persistence/serverClient";
 
@@ -198,7 +199,7 @@ function animate(): void {
   const result = tick(gears, dt, WEAR_TIME_SCALE);
   gears = result.gears;
   sceneSync.sync(gears, result.diagnostics);
-  diagnosticsPanel.render(result.diagnostics);
+  diagnosticsPanel.render(result.diagnostics, computeGearLabels(gears));
 
   ctx.controls.update();
   ctx.renderer.render(ctx.scene, ctx.camera);
