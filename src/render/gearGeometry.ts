@@ -410,7 +410,67 @@ function beltGeometry(module: number): THREE.BufferGeometry {
   return new THREE.BoxGeometry(width, thickness, 1);
 }
 
-function mergeGeometries(parts: Array<THREE.BufferGeometry | ColoredPart>): THREE.BufferGeometry {
+/** A single thin strap between two arbitrary WORLD-space points -- the same
+ *  cross-section as `beltGeometry`, but built directly at its final position/
+ *  orientation/length rather than as a unit shape meant to be transformed
+ *  afterward (see `beltTangentGeometry`, the only caller). */
+function strandBetween(a: THREE.Vector3, b: THREE.Vector3, module: number): THREE.BufferGeometry {
+  const width = module * 1.0;
+  const thickness = module * 0.15;
+  const length = Math.max(a.distanceTo(b), 1e-4);
+  const geometry = new THREE.BoxGeometry(width, thickness, length);
+  const direction = b.clone().sub(a).normalize();
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+  geometry.applyQuaternion(quaternion);
+  const midpoint = a.clone().add(b).multiplyScalar(0.5);
+  geometry.translate(midpoint.x, midpoint.y, midpoint.z);
+  return geometry;
+}
+
+/** The real two-strand "open belt" shape between two pulleys of radius `r1`
+ *  (at world point `p1`) and `r2` (at `p2`) -- the external tangent lines a
+ *  real belt/chain actually follows, which converge toward the smaller pulley
+ *  when the radii differ rather than running perfectly parallel (see the
+ *  derivation below). Unlike every other part's geometry, this is NOT cached
+ *  by (type, teeth, module) -- it depends on the two connected hosts' current
+ *  positions and radii, so gearMesh.ts rebuilds it fresh whenever either
+ *  changes (cheap: a handful of vertices, not a tooth profile).
+ *
+ *  Derivation: place both tangent points' common line in point-normal form
+ *  N·x = c. Tangency to the circle at p1 (radius r1) requires |c| = r1; take
+ *  c = r1. Tangency to the circle at p2 (radius r2), on the SAME side (open,
+ *  non-crossed belt), requires N·p2 - c = -r2. Writing N = k*u + s*n (u = unit
+ *  p1->p2 direction, n = a unit vector perpendicular to u, `d` = |p2-p1|) gives
+ *  k = (r1 - r2) / d and s = sqrt(1 - k^2). The SAME N then gives the tangent
+ *  point on EITHER circle directly: p1 + r1*N and p2 + r2*N (verified: both
+ *  satisfy N·x = c by construction) -- no separate per-circle angle needed.
+ *  The second (mirrored) strand just flips n's sign.
+ *
+ *  `n` itself is simplified to "perpendicular to u, in the world XZ-plane" --
+ *  the exact perpendicular would technically depend on the two pulleys' own
+ *  shared rotation axis, but every belt-connectable host in this sim defaults
+ *  to spinning on world +Y, and the sandbox's default camera looks straight
+ *  down that same axis, so offsetting within XZ is both the physically
+ *  correct choice for the common case and the visually sensible one even when
+ *  it isn't exact. */
+export function beltTangentGeometry(module: number, p1: THREE.Vector3, p2: THREE.Vector3, r1: number, r2: number): THREE.BufferGeometry {
+  const distance = p1.distanceTo(p2);
+  const u = p2.clone().sub(p1).normalize();
+  let n = new THREE.Vector3().crossVectors(u, new THREE.Vector3(0, 1, 0));
+  if (n.lengthSq() < 1e-8) n = new THREE.Vector3().crossVectors(u, new THREE.Vector3(1, 0, 0));
+  n.normalize();
+
+  const k = distance > 1e-6 ? Math.max(-1, Math.min(1, (r1 - r2) / distance)) : 0;
+  const s = Math.sqrt(Math.max(0, 1 - k * k));
+  const nTop = u.clone().multiplyScalar(k).add(n.clone().multiplyScalar(s));
+  const nBottom = u.clone().multiplyScalar(k).add(n.clone().multiplyScalar(-s));
+
+  const strandTop = strandBetween(p1.clone().addScaledVector(nTop, r1), p2.clone().addScaledVector(nTop, r2), module);
+  const strandBottom = strandBetween(p1.clone().addScaledVector(nBottom, r1), p2.clone().addScaledVector(nBottom, r2), module);
+  return mergeGeometries([strandTop, strandBottom]);
+}
+
+export function mergeGeometries(parts: Array<THREE.BufferGeometry | ColoredPart>): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   // Carries `uv`/`color` along with position/normal so a texture map or per-part tint
   // doesn't silently vanish on merged geometries (the crank's handle, the wheel's tire).

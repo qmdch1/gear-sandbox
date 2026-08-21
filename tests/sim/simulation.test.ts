@@ -40,6 +40,33 @@ describe("tick", () => {
     expect(rWith.durabilityCurrent).toBeLessThan(rWithout.durabilityCurrent);
   });
 
+  it("populates a connected belt's beltEndRadius fields from its live hosts, for rendering (see gearMesh.ts)", () => {
+    const gears = [
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }), // pitchRadius = 10
+      makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] }),
+      makeGear({ id: "pulley", teeth: 10, module: 1, position: [30, 0, 0] }), // pitchRadius = 5
+    ];
+    const belt = tick(gears, 1, 1).gears.find((g) => g.id === "belt")!;
+    expect(belt.beltEndRadius1).toBeCloseTo(10);
+    expect(belt.beltEndRadius2).toBeCloseTo(5);
+  });
+
+  it("leaves an unconnected belt's beltEndRadius fields undefined", () => {
+    const gears = [
+      makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] }),
+    ];
+    const belt = tick(gears, 1, 1).gears.find((g) => g.id === "belt")!;
+    expect(belt.beltEndRadius1).toBeUndefined();
+    expect(belt.beltEndRadius2).toBeUndefined();
+  });
+
+  it("does not set beltEndRadius fields on non-belt gears", () => {
+    const gears = [makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] })];
+    const a = tick(gears, 1, 1).gears.find((g) => g.id === "a")!;
+    expect(a.beltEndRadius1).toBeUndefined();
+    expect(a.beltEndRadius2).toBeUndefined();
+  });
+
   it("flags an isolated gear as unconnected and does not rotate it", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),

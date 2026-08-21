@@ -1,7 +1,7 @@
 // tests/render/gearGeometry.test.ts
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { computeSpurProfilePoints, buildGeometryForType } from "../../src/render/gearGeometry";
+import { computeSpurProfilePoints, buildGeometryForType, beltTangentGeometry } from "../../src/render/gearGeometry";
 
 describe("computeSpurProfilePoints", () => {
   it("produces the same fixed point count per tooth (2 root points + 2 mirrored 5-point involute flanks)", () => {
@@ -148,5 +148,69 @@ describe("buildGeometryForType", () => {
     expect(maxY).toBeCloseTo(module * 0.075, 5); // thickness = module*0.15, half = 0.075
     // Wide and thin -- a strap, not a square bar (beam) or round rod (shaft).
     expect(maxX).toBeGreaterThan(maxY * 3);
+  });
+});
+
+describe("beltTangentGeometry", () => {
+  it("offsets both strands by exactly the shared radius when both pulleys are equal-sized", () => {
+    // Equal radii is the degenerate case of the external-tangent derivation
+    // where the two strands run perfectly parallel to the center line, offset
+    // by exactly +/-r -- exactly how a real bike chain looks between two
+    // same-size sprockets. p1/p2 both lie on the world X axis, so the offset
+    // (perpendicular to X and to world +Y) lands on world +/-Z, letting this
+    // be checked precisely via the geometry's own bounding box.
+    const module = 1;
+    const r = 5;
+    const p1 = new THREE.Vector3(0, 0, 0);
+    const p2 = new THREE.Vector3(20, 0, 0);
+    const geometry = beltTangentGeometry(module, p1, p2, r, r);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox!;
+    expect(box.min.x).toBeCloseTo(0, 4);
+    expect(box.max.x).toBeCloseTo(20, 4);
+    expect(box.min.z).toBeCloseTo(-(r + module * 0.5), 4);
+    expect(box.max.z).toBeCloseTo(r + module * 0.5, 4);
+    expect(box.min.y).toBeCloseTo(-module * 0.075, 4);
+    expect(box.max.y).toBeCloseTo(module * 0.075, 4);
+  });
+
+  it("tapers the strand spread toward the smaller pulley when the radii differ", () => {
+    // Real external tangent lines converge toward the smaller circle, unlike
+    // this belt's own pre-tangent single-strap fallback (a fixed-width strip
+    // through both centers regardless of pulley size). Verified here by
+    // checking that vertices near the LARGE pulley end are spread wider
+    // (in Z, the offset direction for an X-aligned pair) than vertices near
+    // the SMALL pulley end.
+    const module = 1;
+    const p1 = new THREE.Vector3(0, 0, 0);
+    const p2 = new THREE.Vector3(24, 0, 0);
+    const geometry = beltTangentGeometry(module, p1, p2, 10, 2); // big at p1, small at p2
+    const position = geometry.attributes.position;
+    let nearP1MinZ = Infinity, nearP1MaxZ = -Infinity;
+    let nearP2MinZ = Infinity, nearP2MaxZ = -Infinity;
+    for (let i = 0; i < position.count; i++) {
+      const x = position.getX(i);
+      const z = position.getZ(i);
+      if (x < 6) { // close to p1 (the big pulley)
+        nearP1MinZ = Math.min(nearP1MinZ, z);
+        nearP1MaxZ = Math.max(nearP1MaxZ, z);
+      } else if (x > 18) { // close to p2 (the small pulley)
+        nearP2MinZ = Math.min(nearP2MinZ, z);
+        nearP2MaxZ = Math.max(nearP2MaxZ, z);
+      }
+    }
+    const spreadNearBigPulley = nearP1MaxZ - nearP1MinZ;
+    const spreadNearSmallPulley = nearP2MaxZ - nearP2MinZ;
+    expect(spreadNearBigPulley).toBeGreaterThan(spreadNearSmallPulley);
+  });
+
+  it("does not throw or produce NaN vertices when the two pulleys are (nearly) coincident", () => {
+    const geometry = beltTangentGeometry(1, new THREE.Vector3(0, 0, 0), new THREE.Vector3(1e-8, 0, 0), 5, 3);
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      expect(Number.isFinite(position.getX(i))).toBe(true);
+      expect(Number.isFinite(position.getY(i))).toBe(true);
+      expect(Number.isFinite(position.getZ(i))).toBe(true);
+    }
   });
 });

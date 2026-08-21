@@ -2,6 +2,7 @@ import type { GearInstance, SimTickResult } from "./types";
 import { buildEdges, classify } from "./graph";
 import { propagateRotation } from "./rotation";
 import { applyWear } from "./wear";
+import { beltHostRadii } from "./meshing";
 
 function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }[]): Map<string, boolean> {
   const adjacency = new Map<string, string[]>();
@@ -51,7 +52,18 @@ export function tick(gears: GearInstance[], dt: number, timeScale: number): SimT
       timeScale,
     });
     const rotation = broken ? g.rotation : g.rotation + angularVelocity * dt;
-    return { ...g, durabilityCurrent, broken, rotation, angularVelocity };
+    // Purely a rendering aid (see meshing.ts's beltHostRadii doc comment) --
+    // recomputed fresh every tick from the live connection graph, not persisted
+    // physics state, so it's fine to skip this for every non-belt gear.
+    const beltRadii = g.type === "belt" ? beltHostRadii(g, gears) : null;
+    return {
+      ...g,
+      durabilityCurrent,
+      broken,
+      rotation,
+      angularVelocity,
+      ...(beltRadii ? { beltEndRadius1: beltRadii.radius1, beltEndRadius2: beltRadii.radius2 } : {}),
+    };
   });
 
   return { gears: updatedGears, diagnostics };

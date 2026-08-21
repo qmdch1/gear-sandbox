@@ -29,6 +29,15 @@ export interface GearInstance {
   broken: boolean;
   rotation: number;        // accumulated rotation angle in radians
   angularVelocity: number; // signed rad/s; set externally for "crank", computed for others -- for "belt", this stores a linear "belt speed" (radius * rad/s) instead of a true angular velocity, since its two ends can drive/be driven by differently-sized pulleys (see meshing.ts's beltCouplingEnd)
+  // For "belt" only: the connected host's pitch radius at each end (position /
+  // position2), recomputed fresh every tick from the live connection graph (see
+  // meshing.ts's beltHostRadii, wired in from simulation.ts). Undefined when
+  // that end isn't currently connected to anything, or for every other type.
+  // Purely a rendering aid (see gearMesh.ts's tangent-line belt geometry) --
+  // NOT used by the physics, which derives the same radii independently and
+  // more directly inside evaluatePair/propagateRotation.
+  beltEndRadius1?: number;
+  beltEndRadius2?: number;
 }
 
 export interface MeshEdge {

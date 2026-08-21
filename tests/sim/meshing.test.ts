@@ -1,6 +1,6 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
-import { evaluatePair, isOverlapping, idealConnectionDistance, meshPhaseAlignment } from "../../src/sim/meshing";
+import { evaluatePair, isOverlapping, idealConnectionDistance, meshPhaseAlignment, beltHostRadii } from "../../src/sim/meshing";
 import type { GearInstance } from "../../src/sim/types";
 
 /** Independent reimplementation of the tooth phase check, used only to verify
@@ -318,6 +318,33 @@ describe("evaluatePair", () => {
     const edge = evaluatePair(belt, host); // belt is "a" here
     expect(edge).not.toBeNull();
     expect(edge!.ratio).toBeCloseTo(1 / 10);
+  });
+});
+
+describe("beltHostRadii", () => {
+  it("returns the connected host's pitch radius at each end", () => {
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const hostA = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] }); // pitchRadius = 10
+    const hostB = makeGear({ id: "b", teeth: 10, module: 1, position: [30, 0, 0] }); // pitchRadius = 5
+    const { radius1, radius2 } = beltHostRadii(belt, [belt, hostA, hostB]);
+    expect(radius1).toBeCloseTo(10);
+    expect(radius2).toBeCloseTo(5);
+  });
+
+  it("leaves an end undefined when nothing is coincident there", () => {
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const hostA = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const { radius1, radius2 } = beltHostRadii(belt, [belt, hostA]);
+    expect(radius1).toBeCloseTo(10);
+    expect(radius2).toBeUndefined();
+  });
+
+  it("ignores a coincident but toothless part (no meaningful pitch radius)", () => {
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const load = makeGear({ id: "load", type: "load", teeth: 0, position: [0, 0, 0] });
+    const { radius1, radius2 } = beltHostRadii(belt, [belt, load]);
+    expect(radius1).toBeUndefined();
+    expect(radius2).toBeUndefined();
   });
 });
 

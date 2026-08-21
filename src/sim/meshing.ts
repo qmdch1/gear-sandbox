@@ -136,6 +136,24 @@ function beltCouplingEnd(belt: GearInstance, host: GearInstance): "position" | "
   return null;
 }
 
+/** For a "belt" gear, the pitch radius of whatever host currently occupies each
+ *  end (`position` / `position2`), or undefined where that end isn't currently
+ *  connected to anything. Purely a rendering aid (see gearMesh.ts's tangent-line
+ *  belt geometry, wired in via simulation.ts's tick()) -- the actual power-
+ *  transmission ratio is computed independently by `evaluatePair`, from the
+ *  same underlying host radii, so this never affects the physics. */
+export function beltHostRadii(belt: GearInstance, gears: GearInstance[]): { radius1?: number; radius2?: number } {
+  let radius1: number | undefined;
+  let radius2: number | undefined;
+  for (const g of gears) {
+    if (g.id === belt.id) continue;
+    const end = beltCouplingEnd(belt, g);
+    if (end === "position") radius1 = pitchRadius(g);
+    else if (end === "position2") radius2 = pitchRadius(g);
+  }
+  return { radius1, radius2 };
+}
+
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
   // Checked before every other rule (including shaft) since a beam's join

@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
 import { cachedGeometryFor } from "./geometryCache";
+import { beltTangentGeometry } from "./gearGeometry";
 import { TYPE_HEALTHY_COLORS, createMetalTexture, createGaugeDialTexture } from "./metalTexture";
 
 const HEALTHY = new THREE.Color(0x3ddc73);
@@ -33,6 +34,12 @@ export function colorForDurabilityRatio(ratio: number, healthyColor: THREE.Color
 
 export class GearMeshObject {
   readonly mesh: THREE.Mesh;
+  // True while this.mesh.geometry is a bespoke, per-instance geometry (a
+  // connected belt's tangent-line shape, see `applyBeltTangentGeometry` below)
+  // that THIS object must dispose itself. False for the common case -- a
+  // shared/cached geometry from geometryCache.ts that other gears of the same
+  // type/teeth/module may still be actively using.
+  private ownsGeometry = false;
 
   constructor(gear: GearInstance) {
     const geometry = cachedGeometryFor(gear.type, gear.teeth || 1, gear.module || 1);
@@ -66,13 +73,23 @@ export class GearMeshObject {
   update(gear: GearInstance): void {
     this.mesh.rotation.set(0, 0, 0);
     this.mesh.scale.set(1, 1, 1);
-    if (gear.position2) {
+    const usedTangentGeometry = gear.type === "belt" && gear.position2 ? this.applyBeltTangentGeometry(gear) : false;
+    if (usedTangentGeometry) {
+      // The tangent geometry already bakes the real world-space strand
+      // positions/orientation/taper directly into its vertices (see
+      // gearGeometry.ts's beltTangentGeometry) -- unlike the generic rod
+      // transform below, the mesh itself stays at the identity transform.
+      this.mesh.position.set(0, 0, 0);
+      this.mesh.quaternion.identity();
+    } else if (gear.position2) {
       // Unlike every other type (a fixed shape at one point + a fixed axis), a
-      // rod (shaft OR beam -- the only two types that ever carry a position2)
+      // rod (shaft/beam/belt -- the only types that ever carry a position2)
       // has its position/orientation/LENGTH all derived fresh from its two
-      // endpoints every update -- gearGeometry.ts's shaftGeometry/beamGeometry
-      // are unit-length, stretched via scale.z rather than rebuilding geometry
-      // every frame.
+      // endpoints every update -- gearGeometry.ts's shaftGeometry/beamGeometry/
+      // beltGeometry are unit-length, stretched via scale.z rather than
+      // rebuilding geometry every frame. (An unconnected belt -- no host on
+      // either end yet, so no tangent geometry above -- also falls back to
+      // this single-centered-strap rendering.)
       const start = new THREE.Vector3(...gear.position);
       const end = new THREE.Vector3(...gear.position2);
       this.mesh.position.copy(start).add(end).multiplyScalar(0.5);
@@ -96,12 +113,43 @@ export class GearMeshObject {
     );
   }
 
+  /** For a "belt" connected on at least one end, rebuilds its geometry as the
+   *  real external-tangent two-strand shape (see gearGeometry.ts's
+   *  beltTangentGeometry) and swaps it onto this.mesh, disposing whatever
+   *  bespoke geometry it previously owned. Reverts to the shared/cached
+   *  default single-strap geometry once neither end is connected anymore
+   *  (e.g. dragged away). Returns whether the tangent geometry is in use, so
+   *  `update()` knows whether to skip its own position/quaternion transform
+   *  (the tangent geometry already bakes those in as absolute world
+   *  coordinates). No-op (returns false) for every other type. */
+  private applyBeltTangentGeometry(gear: GearInstance): boolean {
+    const r1 = gear.beltEndRadius1 ?? 0;
+    const r2 = gear.beltEndRadius2 ?? 0;
+    if (r1 <= 0 && r2 <= 0) {
+      if (this.ownsGeometry) {
+        this.mesh.geometry.dispose();
+        this.mesh.geometry = cachedGeometryFor(gear.type, gear.teeth || 1, gear.module || 1);
+        this.ownsGeometry = false;
+      }
+      return false;
+    }
+    const p1 = new THREE.Vector3(...gear.position);
+    const p2 = new THREE.Vector3(...gear.position2!);
+    const geometry = beltTangentGeometry(gear.module || 1, p1, p2, r1, r2);
+    if (this.ownsGeometry) this.mesh.geometry.dispose();
+    this.mesh.geometry = geometry;
+    this.ownsGeometry = true;
+    return true;
+  }
+
   dispose(): void {
-    // Deliberately does NOT dispose this.mesh.geometry -- it's a shared,
-    // cached instance (see geometryCache.ts), quite possibly still in active
-    // use by every OTHER gear of the same type/teeth/module. Only the
-    // material is genuinely per-instance (durability color/emissive), so only
-    // it needs disposing when a gear is removed.
+    // Only dispose the geometry when it's a bespoke, per-instance one (a
+    // connected belt's tangent shape) -- the common case is a shared, cached
+    // geometry from geometryCache.ts, quite possibly still in active use by
+    // every OTHER gear of the same type/teeth/module. The material, however,
+    // is ALWAYS genuinely per-instance (durability color/emissive), so it
+    // always needs disposing.
+    if (this.ownsGeometry) this.mesh.geometry.dispose();
     (this.mesh.material as THREE.Material).dispose();
   }
 }

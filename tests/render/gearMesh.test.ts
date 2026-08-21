@@ -56,4 +56,52 @@ describe("GearMeshObject", () => {
     obj.dispose();
     expect(disposeSpy).toHaveBeenCalled();
   });
+
+  it("keeps a belt on the shared/cached single-strap geometry while neither end is connected", () => {
+    const gear = makeGear({ type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const other = new GearMeshObject(makeGear({ id: "other-belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] }));
+    const obj = new GearMeshObject(gear);
+    // Same cached geometry as any other unconnected belt -- no bespoke shape yet.
+    expect(obj.mesh.geometry).toBe(other.mesh.geometry);
+  });
+
+  it("swaps in a bespoke tangent geometry once a belt is connected on at least one end", () => {
+    const gear = makeGear({
+      type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0],
+      beltEndRadius1: 10, beltEndRadius2: 5,
+    });
+    const unconnected = new GearMeshObject(makeGear({ id: "u", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] }));
+    const obj = new GearMeshObject(gear);
+    expect(obj.mesh.geometry).not.toBe(unconnected.mesh.geometry);
+    // The tangent geometry bakes absolute world coordinates directly into its
+    // vertices -- the mesh's own transform must stay at the identity, or the
+    // shape would be double-transformed.
+    expect(obj.mesh.position.toArray()).toEqual([0, 0, 0]);
+    expect(obj.mesh.quaternion.x).toBeCloseTo(0);
+    expect(obj.mesh.quaternion.y).toBeCloseTo(0);
+    expect(obj.mesh.quaternion.z).toBeCloseTo(0);
+    expect(obj.mesh.quaternion.w).toBeCloseTo(1);
+  });
+
+  it("disposes a bespoke tangent geometry it owns when replaced or removed, but never the shared default", () => {
+    const gear = makeGear({
+      type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0],
+      beltEndRadius1: 10, beltEndRadius2: 5,
+    });
+    const obj = new GearMeshObject(gear);
+    const bespokeGeometry = obj.mesh.geometry;
+    const disposeSpy = vi.spyOn(bespokeGeometry, "dispose");
+
+    // Disconnecting (both radii drop to undefined) must dispose the bespoke
+    // shape and revert to the shared cached default, not leak it.
+    obj.update({ ...gear, beltEndRadius1: undefined, beltEndRadius2: undefined });
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
+    expect(obj.mesh.geometry).not.toBe(bespokeGeometry);
+
+    // Now on the shared default -- dispose() must NOT call its dispose (it's
+    // cached, other belts may still use it).
+    const defaultDisposeSpy = vi.spyOn(obj.mesh.geometry, "dispose");
+    obj.dispose();
+    expect(defaultDisposeSpy).not.toHaveBeenCalled();
+  });
 });
