@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findNearestCompatiblePartner, findSnapTarget } from "../../src/interaction/dragControls";
+import { findNearestCompatiblePartner, findSnapTarget, pickGearByFootprint } from "../../src/interaction/dragControls";
 import type { GearInstance } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -88,5 +88,46 @@ describe("findSnapTarget", () => {
     const dragged = makeGear({ id: "helical1", type: "helical", teeth: 20, module: 1, position: [50, 0, 0] });
     const host = makeGear({ id: "crank1", type: "crank", teeth: 20, module: 1, position: [0, 0, 0] });
     expect(findSnapTarget(dragged, [50, 0, 0], [dragged, host])).toBeNull();
+  });
+});
+
+describe("pickGearByFootprint", () => {
+  // Regression: clicking near the CENTER of a gear -- exactly where its own
+  // shaft-bore hole is, genuinely empty space in the rendered geometry -- made
+  // the precise mesh raycast miss entirely, so the click fell through to
+  // OrbitControls and grabbed the camera instead of the part the user meant
+  // to drag. This fallback picks the nearest part whose own visible footprint
+  // (not its literal geometry) contains the click point.
+
+  it("picks a gear when the click lands well within its footprint, even far from its exact center", () => {
+    const gear = makeGear({ id: "spur1", teeth: 20, module: 1, position: [0, 0, 0] }); // pitch radius 10
+    expect(pickGearByFootprint(9, 0, [gear])).toBe("spur1");
+  });
+
+  it("picks a gear when the click lands exactly on its center -- the shaft-bore-hole case", () => {
+    const gear = makeGear({ id: "spur1", teeth: 20, module: 1, position: [0, 0, 0] });
+    expect(pickGearByFootprint(0, 0, [gear])).toBe("spur1");
+  });
+
+  it("returns null for a click well outside every gear's footprint (genuinely empty ground)", () => {
+    const gear = makeGear({ id: "spur1", teeth: 20, module: 1, position: [0, 0, 0] });
+    expect(pickGearByFootprint(500, 500, [gear])).toBeNull();
+  });
+
+  it("gives a toothless accessory (e.g. load) a reasonable, nonzero footprint too", () => {
+    const load = makeGear({ id: "load1", type: "load", teeth: 0, position: [0, 0, 0] });
+    expect(pickGearByFootprint(2, 0, [load])).toBe("load1");
+  });
+
+  it("picks the CLOSEST gear when footprints overlap, not just the first match", () => {
+    const near = makeGear({ id: "near", teeth: 20, module: 1, position: [0, 0, 0] });
+    const far = makeGear({ id: "far", teeth: 20, module: 1, position: [15, 0, 0] });
+    expect(pickGearByFootprint(1, 0, [near, far])).toBe("near");
+  });
+
+  it("uses point-to-segment distance for a two-endpoint rod (shaft/beam/belt), not just its first endpoint", () => {
+    const shaft = makeGear({ id: "shaft1", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    // Click near the MIDDLE of the rod, far from either endpoint.
+    expect(pickGearByFootprint(10, 0, [shaft])).toBe("shaft1");
   });
 });

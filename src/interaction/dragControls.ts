@@ -27,6 +27,58 @@ export function findNearestCompatiblePartner(
 
 const SNAP_SLACK = 6; // units of drop-point slack tolerated around the ideal meshing ring
 
+/** How far from `gear`'s own center (or, for a rod, its own centerline) a click
+ *  should still count as "on this part" for `pickGearByFootprint` -- generous
+ *  on purpose, covering the part's actual rendered silhouette (including empty
+ *  space like a shaft-bore hole) with a bit of margin, rather than trying to
+ *  match its precise geometry exactly. */
+function footprintRadius(gear: GearInstance): number {
+  const m = gear.module || 1;
+  const toothRadius = gear.teeth > 0 ? (m * gear.teeth) / 2 : 0;
+  return Math.max(toothRadius + m * 1.5, m * 4);
+}
+
+function distanceToSegmentXZ(
+  px: number,
+  pz: number,
+  ax: number,
+  az: number,
+  bx: number,
+  bz: number,
+): number {
+  const abx = bx - ax;
+  const abz = bz - az;
+  const abLenSq = abx * abx + abz * abz;
+  const t = abLenSq > 1e-9 ? Math.max(0, Math.min(1, ((px - ax) * abx + (pz - az) * abz) / abLenSq)) : 0;
+  const closestX = ax + abx * t;
+  const closestZ = az + abz * t;
+  return Math.hypot(px - closestX, pz - closestZ);
+}
+
+/** Fallback picking for when the precise mesh raycast finds nothing under the
+ *  pointer, even though the click visually landed within a part's own outline
+ *  -- most commonly, clicking a gear's shaft-bore hole (genuinely empty space
+ *  in its geometry) or an accessory's annulus hole (load/gauge). Without this,
+ *  such a click falls through to OrbitControls, which grabs the CAMERA instead
+ *  of the part the user meant to drag -- confusing since nothing looks
+ *  "empty" about where they clicked. Finds the gear whose own footprint (a
+ *  simple circle around its center, or a capsule around its centerline for a
+ *  two-endpoint rod) is closest to `(x, z)` and within `footprintRadius`. */
+export function pickGearByFootprint(x: number, z: number, gears: GearInstance[]): string | null {
+  let best: string | null = null;
+  let bestDistance = Infinity;
+  for (const gear of gears) {
+    const distance = gear.position2
+      ? distanceToSegmentXZ(x, z, gear.position[0], gear.position[2], gear.position2[0], gear.position2[2])
+      : Math.hypot(x - gear.position[0], z - gear.position[2]);
+    if (distance <= footprintRadius(gear) && distance < bestDistance) {
+      bestDistance = distance;
+      best = gear.id;
+    }
+  }
+  return best;
+}
+
 export interface SnapTarget {
   position: [number, number, number];
   partnerId: string;
@@ -208,7 +260,16 @@ export class DragControls {
     this.raycaster.setFromCamera(ndc, ctx.camera);
     const hits = this.raycaster.intersectObjects(ctx.scene.children.filter((c) => c.name));
     const hit = hits[0];
-    const hitId = hit ? this.options.resolveHitId(hit.object, hit.instanceId) : null;
+    let hitId = hit ? this.options.resolveHitId(hit.object, hit.instanceId) : null;
+
+    // The precise mesh raycast just missed everything -- try the more forgiving
+    // footprint fallback before concluding the click landed on empty ground
+    // (see pickGearByFootprint's doc comment for why this matters).
+    if (!hitId) {
+      const groundPoint = this.pointerToGroundPoint(event);
+      if (groundPoint) hitId = pickGearByFootprint(groundPoint.x, groundPoint.z, this.options.getGears());
+    }
+
     if (hitId) {
       const gears = this.options.getGears();
       const anchor = gears.find((g) => g.id === hitId);
