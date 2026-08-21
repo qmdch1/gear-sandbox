@@ -114,6 +114,28 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("wheel")).toBeCloseTo(2);
   });
 
+  it("bridges rotation through a CHAIN of two shaft segments coupled end-to-end (a driveshaft)", () => {
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [1, 0, 0], teeth: 20, module: 1,
+      position: [0, 0, 0], angularVelocity: 3,
+    });
+    const shaftA = makeGear({
+      id: "shaftA", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0],
+    });
+    const shaftB = makeGear({
+      id: "shaftB", type: "shaft", teeth: 0, position: [20, 0, 0], position2: [40, 0, 0],
+    });
+    const wheel = makeGear({
+      id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1, position: [40, 0, 0],
+    });
+    const gears = [crank, shaftA, shaftB, wheel];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    // Every rigid coupling in the chain (ratio 1, same direction) ends up at the crank's own speed.
+    expect(angularVelocities.get("shaftA")).toBeCloseTo(3);
+    expect(angularVelocities.get("shaftB")).toBeCloseTo(3);
+    expect(angularVelocities.get("wheel")).toBeCloseTo(3);
+  });
+
   it("drives propagation via the generalized POWER_SOURCE_TYPES check, not a literal 'crank' comparison", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 }),

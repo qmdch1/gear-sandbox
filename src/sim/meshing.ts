@@ -109,12 +109,25 @@ function shaftDirection(shaft: GearInstance): [number, number, number] | null {
  *  if its own length runs along the same line as the host's rotation axis at
  *  that end (like a real motor-shaft coupling, just longer) -- so this also
  *  requires the shaft's overall direction to be parallel to the host's axis,
- *  not just "close enough in position." */
+ *  not just "close enough in position." A host that's ALSO a shaft has no
+ *  meaningful `axis` field of its own (see types.ts -- a rod's orientation
+ *  comes from position/position2, not `axis`), so in that case the reference
+ *  direction is the HOST's own end-to-end direction instead -- this is what
+ *  lets two shaft segments couple end-to-end into a longer driveshaft (see
+ *  the shaft-to-shaft branch in evaluatePair, below). Checks `shaft`'s end
+ *  against EVERY point `host` has (both endpoints, when host is also a rod --
+ *  not just `host.position`), since the touching point could just as easily
+ *  be the host's SECOND endpoint (e.g. two shaft segments meeting exactly at
+ *  the far end of the second one) as its first. */
 function shaftCouplingEnd(shaft: GearInstance, host: GearInstance): "position" | "position2" | null {
   const direction = shaftDirection(shaft);
-  if (!direction || Math.abs(dot(direction, host.axis)) < PARALLEL_DOT_THRESHOLD) return null;
-  if (dist(shaft.position, host.position) <= COUPLING_DISTANCE_TOLERANCE) return "position";
-  if (shaft.position2 && dist(shaft.position2, host.position) <= COUPLING_DISTANCE_TOLERANCE) return "position2";
+  const referenceAxis = host.type === "shaft" ? shaftDirection(host) : host.axis;
+  if (!direction || !referenceAxis || Math.abs(dot(direction, referenceAxis)) < PARALLEL_DOT_THRESHOLD) return null;
+  const hostPoints = host.position2 ? [host.position, host.position2] : [host.position];
+  for (const hostPoint of hostPoints) {
+    if (dist(shaft.position, hostPoint) <= COUPLING_DISTANCE_TOLERANCE) return "position";
+    if (shaft.position2 && dist(shaft.position2, hostPoint) <= COUPLING_DISTANCE_TOLERANCE) return "position2";
+  }
   return null;
 }
 
@@ -187,7 +200,12 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   }
 
   if (a.type === "shaft" || b.type === "shaft") {
-    if (a.type === "shaft" && b.type === "shaft") return null; // no shaft-to-shaft chaining (yet)
+    // Shaft-to-shaft IS allowed (unlike belt-to-belt) -- two rigid rod
+    // segments coupling end-to-end into a longer driveshaft is a completely
+    // normal real-world mechanism (and mirrors how "beam" already allows
+    // beam-to-beam chaining for the same reason). shaftCouplingEnd's own
+    // axis check handles a shaft-typed host by comparing directions instead
+    // of reading a meaningless `axis` field.
     const shaft = a.type === "shaft" ? a : b;
     const host = a.type === "shaft" ? b : a;
     if (!shaftCouplingEnd(shaft, host)) return null;
@@ -275,11 +293,12 @@ export function idealConnectionDistance(a: GearInstance, b: GearInstance): numbe
   }
 
   if (a.type === "shaft" || b.type === "shaft") {
-    if (a.type === "shaft" && b.type === "shaft") return null;
+    // Shaft-to-shaft allowed -- see evaluatePair's matching branch for why.
     const shaft = a.type === "shaft" ? a : b;
     const host = a.type === "shaft" ? b : a;
     const direction = shaftDirection(shaft);
-    if (!direction || Math.abs(dot(direction, host.axis)) < PARALLEL_DOT_THRESHOLD) return null;
+    const referenceAxis = host.type === "shaft" ? shaftDirection(host) : host.axis;
+    if (!direction || !referenceAxis || Math.abs(dot(direction, referenceAxis)) < PARALLEL_DOT_THRESHOLD) return null;
     return 0; // coincident shaft-end coupling -- see evaluatePair's matching check
   }
 

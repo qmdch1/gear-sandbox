@@ -168,10 +168,35 @@ describe("evaluatePair", () => {
     expect(evaluatePair(shaft, host)).toBeNull();
   });
 
-  it("does not let two shafts couple to each other", () => {
+  it("couples two shafts end-to-end into a longer driveshaft, when their directions line up", () => {
+    // Deliberately allowed (unlike belt-to-belt) -- two rigid rod segments
+    // coupling end-to-end is a completely normal real mechanism, mirroring
+    // how "beam" already allows beam-to-beam chaining for the same reason.
     const shaftA = makeGear({ id: "sa", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
-    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [20, 0, 0], position2: [40, 0, 0] });
+    const edge = evaluatePair(shaftA, shaftB);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("does not couple two shafts whose directions don't line up, even if their ends coincide", () => {
+    const shaftA = makeGear({ id: "sa", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] }); // runs along +X
+    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [20, 0, 0], position2: [20, 0, 20] }); // runs along +Z
     expect(evaluatePair(shaftA, shaftB)).toBeNull();
+  });
+
+  it("couples two shafts when the touching point is the OTHER shaft's SECOND endpoint, not its first", () => {
+    // Regression: shaftCouplingEnd used to only ever check `host.position`
+    // (correct when host is a single-point type like a wheel or crank, which
+    // is every case this existed for before shaft-to-shaft chaining) -- once
+    // the host can ALSO be a two-endpoint rod, the touching point could just
+    // as easily be the host's position2, which the old check never looked at.
+    const shaftA = makeGear({ id: "sa", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    // shaftB's SECOND endpoint (not its first) is where shaftA actually touches it.
+    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [40, 0, 0], position2: [20, 0, 0] });
+    const edge = evaluatePair(shaftA, shaftB);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
   });
 
   it("couples a crank directly onto a coincident helical gear's shaft, so it can receive power", () => {
@@ -406,6 +431,18 @@ describe("idealConnectionDistance", () => {
     const shaft = makeGear({ id: "shaft", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
     const host = makeGear({ id: "host", axis: [0, 1, 0], position: [999, 0, 0] });
     expect(idealConnectionDistance(shaft, host)).toBeNull();
+  });
+
+  it("returns 0 (coincident) for two shafts whose directions line up -- shaft-to-shaft chaining", () => {
+    const shaftA = makeGear({ id: "sa", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [999, 0, 0], position2: [1019, 0, 0] });
+    expect(idealConnectionDistance(shaftA, shaftB)).toBe(0);
+  });
+
+  it("returns null for two shafts whose directions don't line up", () => {
+    const shaftA = makeGear({ id: "sa", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [999, 0, 0], position2: [999, 0, 20] });
+    expect(idealConnectionDistance(shaftA, shaftB)).toBeNull();
   });
 
   it("returns null for a spur/helical pair -- they never mesh regardless of distance", () => {
