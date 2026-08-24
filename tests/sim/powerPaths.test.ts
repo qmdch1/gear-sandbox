@@ -62,7 +62,7 @@ describe("computePowerPaths", () => {
     expect(entries.some((e) => e.outputType === "load")).toBe(false);
   });
 
-  it("reports a near-zero ratio for an output only structurally (not rotationally) reachable", () => {
+  it("omits an output only structurally (not rotationally) reachable from the crank", () => {
     const gears = withRotation([
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] }),
@@ -70,9 +70,28 @@ describe("computePowerPaths", () => {
     ]);
     const edges = buildEdges(gears);
     const entries = computePowerPaths(gears, edges);
-    const wheelEntry = entries.find((e) => e.outputId === "wheel");
-    expect(wheelEntry).toBeDefined();
-    expect(wheelEntry!.ratio).toBe(0); // honestly reflects "not actually receiving power"
+    // A structural-only bridge must not credit this crank with an output it
+    // has no real rotational path to -- e.g. a tank's turret sharing a
+    // welded hull with the main drivetrain shouldn't misattribute the
+    // drivetrain's speed to the turret's own (unrelated) motor.
+    expect(entries.find((e) => e.outputId === "wheel")).toBeUndefined();
+  });
+
+  it("does not credit one crank's output to another crank that's only structurally (not rotationally) bridged to it", () => {
+    // Mirrors a tank whose turret (its own slow traverse crank) and main
+    // drivetrain (its own fast crank) both happen to be welded to the same
+    // hull -- a purely structural bridge, no shared rotation at all.
+    const gears = withRotation([
+      makeGear({ id: "turretCrank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 0.4 }),
+      makeGear({ id: "beamToHull", type: "beam", teeth: 0, position: [0, 0, 0], position2: [50, 0, 0] }),
+      makeGear({ id: "driveCrank", type: "crank", teeth: 20, module: 1, position: [50, 0, 0], angularVelocity: 1 }),
+      makeGear({ id: "gauge", type: "gauge", position: [50, 0, 0] }), // directly coupled to driveCrank only
+    ]);
+    const edges = buildEdges(gears);
+    const entries = computePowerPaths(gears, edges);
+    expect(entries.find((e) => e.sourceId === "driveCrank" && e.outputId === "gauge")?.ratio).toBeCloseTo(1);
+    // The turret's own (much slower) crank must not also claim this gauge.
+    expect(entries.find((e) => e.sourceId === "turretCrank" && e.outputId === "gauge")).toBeUndefined();
   });
 
   it("returns a null ratio when the source itself has stopped (e.g. broken)", () => {

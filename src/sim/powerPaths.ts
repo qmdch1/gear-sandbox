@@ -28,6 +28,16 @@ function buildAdjacency(gears: GearInstance[], edges: MeshEdge[]): Map<string, s
   const adjacency = new Map<string, string[]>();
   for (const g of gears) adjacency.set(g.id, []);
   for (const e of edges) {
+    // Unlike graph.ts's classify() (which deliberately treats ALL edges,
+    // structural included, as "connected enough to not need a power
+    // warning"), this BFS is standing in for an actual rotational path --
+    // so it has to skip "structural" edges the exact same way rotation.ts's
+    // own propagateRotation does. Two independent assemblies that happen to
+    // share a rigid structural mount (e.g. a tank's turret ring welded to
+    // the same hull as its drivetrain) must NOT have one's crank credited
+    // with driving the other's outputs just because they're structurally
+    // bolted together.
+    if (e.kind === "structural") continue;
     adjacency.get(e.a)?.push(e.b);
     adjacency.get(e.b)?.push(e.a);
   }
@@ -35,14 +45,17 @@ function buildAdjacency(gears: GearInstance[], edges: MeshEdge[]): Map<string, s
 }
 
 /** For every power source (crank) in the assembly, lists every real output
- *  part (wheel/fan/rotor/gauge -- see OUTPUT_TYPES) reachable from it at all
- *  (via ANY edge, same reachability notion as graph.ts's classify -- an
- *  output only structurally, not rotationally, connected still shows up here,
- *  just with an honest near-zero ratio, since it reads its speed straight off
- *  the gear's own `angularVelocity`, already computed by propagateRotation).
- *  Two independent builds (e.g. two different toy cars) in the same scene
- *  each get their own entries, since each has its own crank -- letting the
- *  UI show them side by side for a direct efficiency comparison. */
+ *  part (wheel/fan/rotor/gauge -- see OUTPUT_TYPES) reachable from it via an
+ *  actual rotation-carrying path (mesh/coupling edges only -- "structural"
+ *  edges are excluded here for the same reason rotation.ts's own
+ *  propagateRotation excludes them, see buildAdjacency's doc comment). An
+ *  output only reachable via a rigid structural mount, not a real drivetrain
+ *  connection, simply doesn't appear for that crank at all -- e.g. a tank's
+ *  turret and its main drivetrain can share the same welded hull without the
+ *  turret's slow traverse motor getting credited with the drivetrain's own
+ *  output speed. Two independent builds (e.g. two different toy cars) in the
+ *  same scene each get their own entries, since each has its own crank --
+ *  letting the UI show them side by side for a direct efficiency comparison. */
 export function computePowerPaths(gears: GearInstance[], edges: MeshEdge[]): PowerPathEntry[] {
   const adjacency = buildAdjacency(gears, edges);
   const byId = new Map(gears.map((g) => [g.id, g] as const));
