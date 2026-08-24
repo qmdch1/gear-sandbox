@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGear, defaultAxisForType, defaultTeethForType, toggledAxis, rotatedAxis } from "../../src/sim/gearFactory";
+import { createGear, defaultAxisForType, defaultTeethForType, toggledAxis, turnedAxis } from "../../src/sim/gearFactory";
 
 describe("defaultAxisForType", () => {
   it("gives bevel and worm gears a perpendicular default axis", () => {
@@ -24,33 +24,35 @@ describe("toggledAxis", () => {
   });
 });
 
-describe("rotatedAxis", () => {
-  it("steps forward through the X -> Y -> Z cycle, wrapping back to X", () => {
-    expect(rotatedAxis([1, 0, 0], 1)).toEqual([0, 1, 0]);
-    expect(rotatedAxis([0, 1, 0], 1)).toEqual([0, 0, 1]);
-    expect(rotatedAxis([0, 0, 1], 1)).toEqual([1, 0, 0]);
+describe("turnedAxis", () => {
+  it("flips between the two horizontal directions, +X and +Z", () => {
+    expect(turnedAxis([1, 0, 0])).toEqual([0, 0, 1]);
+    expect(turnedAxis([0, 0, 1])).toEqual([1, 0, 0]);
   });
 
-  it("steps backward through the same cycle, wrapping the other way", () => {
-    expect(rotatedAxis([1, 0, 0], -1)).toEqual([0, 0, 1]);
-    expect(rotatedAxis([0, 0, 1], -1)).toEqual([0, 1, 0]);
-    expect(rotatedAxis([0, 1, 0], -1)).toEqual([1, 0, 0]);
+  it("never lands on +Y -- that's toggledAxis's (the V key's) own job, not this one's", () => {
+    // Regression: an earlier version cycled X -> Y -> Z in one shared
+    // sequence, so "turn sideways" sometimes visibly flopped a standing part
+    // flat first before reaching the other standing direction.
+    expect(turnedAxis([1, 0, 0])[1]).toBe(0);
+    expect(turnedAxis([0, 0, 1])[1]).toBe(0);
+    expect(turnedAxis([0, 1, 0])[1]).toBe(0);
   });
 
-  it("reaches the Z axis, unlike toggledAxis which only ever reaches X or Y", () => {
-    expect(rotatedAxis([0, 1, 0], 1)).toEqual([0, 0, 1]);
+  it("falls through to +Z (its original motivating case) from the default +Y, lying-flat axis", () => {
+    expect(turnedAxis([0, 1, 0])).toEqual([0, 0, 1]);
   });
 
-  it("a full loop of 3 forward steps returns to the starting axis", () => {
+  it("is its own inverse -- ArrowLeft and ArrowRight can both call it the same way", () => {
     let axis: [number, number, number] = [1, 0, 0];
-    for (let i = 0; i < 3; i++) axis = rotatedAxis(axis, 1);
+    axis = turnedAxis(axis);
+    axis = turnedAxis(axis);
     expect(axis).toEqual([1, 0, 0]);
   });
 
-  it("finds the NEAREST cycle entry for a not-quite-exact axis, rather than requiring an exact match", () => {
-    // e.g. a hand-authored or slightly-off axis value should still round to
-    // whichever cardinal direction it's actually closest to.
-    expect(rotatedAxis([0.9, 0.1, 0.1], 1)).toEqual([0, 1, 0]); // closest to X -> steps to Y
+  it("finds the NEAREST of the two directions for a not-quite-exact axis, rather than requiring an exact match", () => {
+    expect(turnedAxis([0.9, 0.1, 0.1])).toEqual([0, 0, 1]); // closer to X -> flips to Z
+    expect(turnedAxis([0.1, 0.1, 0.9])).toEqual([1, 0, 0]); // closer to Z -> flips to X
   });
 });
 

@@ -51,13 +51,15 @@ const PITCH_RADIUS = 5; // every mesh gear below keeps the default module 0.5 / 
 function buildCar(originX: number): void {
   const X = originX;
   const CHASSIS_LEN = 70; // front (0) to rear (70) along local X
-  const CHASSIS_WIDTH = 32; // left (Z=0) to right (Z=32)
+  const CHASSIS_WIDTH = 32; // left (-16) to right (+16), centered on Z=0
   const ROOF_HEIGHT = 22;
+  const ZL = -CHASSIS_WIDTH / 2;
+  const ZR = CHASSIS_WIDTH / 2;
 
-  const FL: Vec3 = [X + 0, 0, 0];
-  const FR: Vec3 = [X + 0, 0, CHASSIS_WIDTH];
-  const RL: Vec3 = [X + CHASSIS_LEN, 0, 0];
-  const RR: Vec3 = [X + CHASSIS_LEN, 0, CHASSIS_WIDTH];
+  const FL: Vec3 = [X + 0, 0, ZL];
+  const FR: Vec3 = [X + 0, 0, ZR];
+  const RL: Vec3 = [X + CHASSIS_LEN, 0, ZL];
+  const RR: Vec3 = [X + CHASSIS_LEN, 0, ZR];
   const FLt: Vec3 = [FL[0], ROOF_HEIGHT, FL[2]];
   const FRt: Vec3 = [FR[0], ROOF_HEIGHT, FR[2]];
   const RLt: Vec3 = [RL[0], ROOF_HEIGHT, RL[2]];
@@ -76,7 +78,7 @@ function buildCar(originX: number): void {
   // rear stub axle -> rear wheel. Front wheels roll free, structurally
   // mounted straight to the chassis corner (unpowered, exactly like a real
   // RWD car).
-  const crankPos: Vec3 = [X + CHASSIS_LEN + 8, 0, CHASSIS_WIDTH / 2];
+  const crankPos: Vec3 = [X + CHASSIS_LEN + 8, 0, 0];
   const crank = place("crank", crankPos, { angularVelocity: 1 });
   place("gauge", crankPos);
   place("bearing", crankPos);
@@ -84,11 +86,11 @@ function buildCar(originX: number): void {
   const bevelPos: Vec3 = [crankPos[0] - PITCH_RADIUS * 2, 0, crankPos[2]];
   place("bevel", bevelPos);
 
-  const diffPos: Vec3 = [X + 20, 0, CHASSIS_WIDTH / 2];
+  const diffPos: Vec3 = [X + 20, 0, 0];
   rod("shaft", bevelPos, diffPos); // driveshaft: position=bevel end, position2=differential junction
 
-  const jointL = rod("joint", diffPos, [diffPos[0], 0, 0]);
-  const jointR = rod("joint", diffPos, [diffPos[0], 0, CHASSIS_WIDTH]);
+  const jointL = rod("joint", diffPos, [diffPos[0], 0, ZL]);
+  const jointR = rod("joint", diffPos, [diffPos[0], 0, ZR]);
 
   // A shaft-to-accessory coupling (evaluatePair's "shaft" branch, checked
   // BEFORE the COUPLING_ONLY_TYPES branch) requires the SHAFT's own
@@ -192,13 +194,15 @@ function buildHelicopter(originX: number): void {
 function buildTank(originX: number): void {
   const X = originX;
   const HULL_LEN = 50;
-  const HULL_WIDTH = 24;
+  const HULL_WIDTH = 24; // left (-12) to right (+12), centered on Z=0
   const HULL_HEIGHT = 10;
+  const ZL = -HULL_WIDTH / 2;
+  const ZR = HULL_WIDTH / 2;
 
-  const b0: Vec3 = [X + 0, 0, 0];
-  const b1: Vec3 = [X + 0, 0, HULL_WIDTH];
-  const b2: Vec3 = [X + HULL_LEN, 0, HULL_WIDTH];
-  const b3: Vec3 = [X + HULL_LEN, 0, 0];
+  const b0: Vec3 = [X + 0, 0, ZL];
+  const b1: Vec3 = [X + 0, 0, ZR];
+  const b2: Vec3 = [X + HULL_LEN, 0, ZR];
+  const b3: Vec3 = [X + HULL_LEN, 0, ZL];
   const t0: Vec3 = [b0[0], HULL_HEIGHT, b0[2]];
   const t1: Vec3 = [b1[0], HULL_HEIGHT, b1[2]];
   const t2: Vec3 = [b2[0], HULL_HEIGHT, b2[2]];
@@ -212,7 +216,7 @@ function buildTank(originX: number): void {
   // coupled at the same hull-roof point -- the load turns with the crank
   // exactly like the "output = whatever's coupled to the crank's own shaft"
   // pattern used everywhere else, just standing in for a rotating turret.
-  const turretPos: Vec3 = [X + HULL_LEN / 2, HULL_HEIGHT, HULL_WIDTH / 2];
+  const turretPos: Vec3 = [X + HULL_LEN / 2, HULL_HEIGHT, 0];
   place("crank", turretPos, { angularVelocity: 0.4 }); // slow traverse, not a full-speed drivetrain part
   place("load", turretPos);
   place("bearing", turretPos);
@@ -220,32 +224,37 @@ function buildTank(originX: number): void {
 
   // Drivetrain: crank -> bevel -> driveshaft -> a joint per side (the
   // differential) -> front sprocket -> track -> rear (idle) sprocket.
-  const mainCrankPos: Vec3 = [X + HULL_LEN + 8, 0, HULL_WIDTH / 2];
+  const mainCrankPos: Vec3 = [X + HULL_LEN + 8, 0, 0];
   place("crank", mainCrankPos, { angularVelocity: 1 });
   place("gauge", mainCrankPos);
 
   const bevelPos: Vec3 = [mainCrankPos[0] - PITCH_RADIUS * 2, 0, mainCrankPos[2]];
   place("bevel", bevelPos);
 
-  const diffPos: Vec3 = [X + 15, 0, HULL_WIDTH / 2];
+  const diffPos: Vec3 = [X + 15, 0, 0];
   rod("shaft", bevelPos, diffPos);
   rod("beam", b0, diffPos); // engine-mount bracket, welds the whole drivetrain to the hull
 
-  const jointL = rod("joint", diffPos, [diffPos[0], 0, 0]);
-  const jointR = rod("joint", diffPos, [diffPos[0], 0, HULL_WIDTH]);
+  const jointL = rod("joint", diffPos, [diffPos[0], 0, ZL]);
+  const jointR = rod("joint", diffPos, [diffPos[0], 0, ZR]);
 
   const frontSprocketL = place("spur", jointL.position2 as Vec3);
   const frontSprocketR = place("spur", jointR.position2 as Vec3);
-  const rearSprocketL = place("spur", [X + HULL_LEN - 5, 0, 0]);
-  const rearSprocketR = place("spur", [X + HULL_LEN - 5, 0, HULL_WIDTH]);
+  const rearSprocketL = place("spur", [X + HULL_LEN - 5, 0, ZL]);
+  const rearSprocketR = place("spur", [X + HULL_LEN - 5, 0, ZR]);
 
   rod("track", frontSprocketL.position, rearSprocketL.position);
   rod("track", frontSprocketR.position, rearSprocketR.position);
 }
 
-buildCar(0);
-buildHelicopter(300);
-buildTank(600);
+// Laid out along X with a 30-unit (3-cell, see scene.ts's 10-unit grid) gap
+// between each vehicle's own bounding box, and the whole row centered on the
+// origin -- the default camera looks at (0,0,0), and the reference grid only
+// extends to +/-250, so spacing them out by hundreds of units (an earlier
+// version) put two of the three vehicles entirely off the visible grid.
+buildCar(-130);
+buildHelicopter(-22);
+buildTank(63);
 
 // ---------------------------------------------------------------------------
 // Self-check against the project's own rules before saving anything -- an

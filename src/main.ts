@@ -1,5 +1,5 @@
 import type { GearInstance, GearType } from "./sim/types";
-import { createGear, toggledAxis, rotatedAxis } from "./sim/gearFactory";
+import { createGear, toggledAxis, turnedAxis } from "./sim/gearFactory";
 import { tick } from "./sim/simulation";
 import { resizeConnectedMeshGroup } from "./sim/resize";
 import { buildEdges } from "./sim/graph";
@@ -28,7 +28,7 @@ app.innerHTML = `
         <li>부품 떼기: <b>Alt</b>+드래그</li>
         <li>높이 조절: <b>Shift</b>+드래그</li>
         <li>가로/세로 전환: 부품 클릭 후 <b>V</b></li>
-        <li>90도씩 좌우 회전: 부품 클릭 후 <b>←</b>/<b>→</b></li>
+        <li>옆으로 방향 전환(눕지 않음): 부품 클릭 후 <b>←</b>/<b>→</b></li>
         <li>빔·축·벨트 반대쪽 끝 옮기기: <b>Ctrl</b>+드래그</li>
       </ul>
     </section>
@@ -216,16 +216,18 @@ window.addEventListener("keydown", (event) => {
   gear.axis = toggledAxis(gear.axis);
 });
 
-// Left/Right arrow: step the selected part's axis 90° at a time through the
-// full X -> Y -> Z cycle (see gearFactory.ts's `rotatedAxis`) -- reaches the Z
-// axis too, unlike V's quick X<->Y-only flip above, e.g. for orienting a
-// wheel/gear to spin around a car's own width axis.
+// Left/Right arrow: turn the selected part sideways, between the sim's two
+// horizontal directions (see gearFactory.ts's `turnedAxis`) -- e.g. for
+// orienting a wheel/gear to spin around a car's own width axis instead of its
+// length axis, WITHOUT ever passing through V's "lying flat" state along the
+// way (both arrow keys trigger the same 2-state flip; there's no separate
+// "forward" vs "backward" with only two reachable directions).
 window.addEventListener("keydown", (event) => {
   if ((event.key !== "ArrowLeft" && event.key !== "ArrowRight") || !selectedGearId) return;
   const gear = gears.find((g) => g.id === selectedGearId);
   if (!gear) return;
   event.preventDefault(); // arrow keys would otherwise also scroll/pan the page
-  gear.axis = rotatedAxis(gear.axis, event.key === "ArrowRight" ? 1 : -1);
+  gear.axis = turnedAxis(gear.axis);
 });
 
 window.addEventListener("resize", () => {
