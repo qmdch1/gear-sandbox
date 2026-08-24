@@ -2,6 +2,8 @@ import type { GearInstance, GearType } from "./sim/types";
 import { createGear, toggledAxis, rotatedAxis } from "./sim/gearFactory";
 import { tick } from "./sim/simulation";
 import { resizeConnectedMeshGroup } from "./sim/resize";
+import { buildEdges } from "./sim/graph";
+import { computePowerPaths } from "./sim/powerPaths";
 import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
 import { DragControls } from "./interaction/dragControls";
@@ -10,6 +12,7 @@ import { PartInfoModal } from "./ui/partInfoModal";
 import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
 import { computeGearLabels } from "./ui/gearLabels";
 import { SizeControlPanel } from "./ui/sizeControlPanel";
+import { PowerPathPanel } from "./ui/powerPathPanel";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
 import { fetchServerLayout, saveServerLayout } from "./persistence/serverClient";
 
@@ -38,6 +41,10 @@ app.innerHTML = `
       <div id="save-load"></div>
     </section>
     <section class="panel">
+      <h2>동력 비교</h2>
+      <div id="power-paths"></div>
+    </section>
+    <section class="panel">
       <h2>확인할 것</h2>
       <div id="diagnostics"></div>
     </section>
@@ -49,6 +56,10 @@ const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
 const ctx = createScene(canvas);
 const sceneSync = new SceneSync(ctx);
 const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => {
+  sceneSync.focusOn(id);
+  sceneSync.flash(id);
+});
+const powerPathPanel = new PowerPathPanel(document.querySelector("#power-paths")!, (id) => {
   sceneSync.focusOn(id);
   sceneSync.flash(id);
 });
@@ -232,7 +243,9 @@ function animate(): void {
   const result = tick(gears, dt, WEAR_TIME_SCALE);
   gears = result.gears;
   sceneSync.sync(gears, result.diagnostics);
-  diagnosticsPanel.render(result.diagnostics, computeGearLabels(gears));
+  const labels = computeGearLabels(gears);
+  diagnosticsPanel.render(result.diagnostics, labels);
+  powerPathPanel.render(computePowerPaths(gears, buildEdges(gears)), labels);
   sizeControlPanel.render(gears.find((g) => g.id === selectedGearId) ?? null);
 
   ctx.controls.update();

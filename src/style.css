@@ -132,6 +132,19 @@ html, body {
 
 #diagnostics .diag-ok { color: #7d879e; margin: 4px 0 0; }
 
+/* 동력 비교 패널 -- 진단 패널과 같은 레이아웃 규칙(강조 제목 + 클릭 가능한 li 목록)을
+   재사용하되, 문제/정상 색 구분이 아니라 그냥 정보용 중립 톤 하나로 통일. */
+#power-paths { font-size: 12.5px; color: #c4cbdb; }
+#power-paths strong { display: block; margin-top: 10px; }
+#power-paths strong:first-child { margin-top: 0; }
+#power-paths ul { list-style: none; margin: 6px 0 0; padding: 0; }
+#power-paths li {
+  padding: 6px 8px; margin-bottom: 4px; border-radius: 6px; cursor: pointer;
+  background: #2c2f3a; border-left: 3px solid #9fb4ff;
+}
+#power-paths li:hover { background: #343848; }
+#power-paths .diag-ok { color: #7d879e; margin: 4px 0 0; }
+
 .part-info-overlay {
   position: fixed;
   inset: 0;
