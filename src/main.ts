@@ -27,7 +27,7 @@ app.innerHTML = `
         <li>같이 움직이기: 연결된 부품 하나 끌기</li>
         <li>부품 떼기: <b>Alt</b>+드래그</li>
         <li>높이 조절: <b>Shift</b>+드래그</li>
-        <li>가로/세로 전환: 부품 클릭 후 <b>V</b></li>
+        <li>눕히기/세우기: 부품 클릭 후 <b>↑</b>/<b>↓</b> (<b>V</b> 키도 동일)</li>
         <li>옆으로 방향 전환(눕지 않음): 부품 클릭 후 <b>←</b>/<b>→</b></li>
         <li>빔·축·벨트 반대쪽 끝 옮기기: <b>Ctrl</b>+드래그</li>
       </ul>
@@ -205,23 +205,29 @@ new DragControls({
   resolveHitId: (object, instanceId) => sceneSync.resolveHitId(object, instanceId),
 });
 
-// Click any gear, then press V to flip it between lying flat (horizontal axis)
-// and standing upright (vertical) -- see gearFactory.ts's `toggledAxis`. A no-op
-// for "shaft"/"beam" (rods, whose orientation comes from position/position2
-// instead of `axis`) or when nothing's selected.
+// Click any gear, then press Up/Down (or the older V shortcut, kept working
+// the same way) to flip it between lying flat (horizontal axis) and standing
+// upright (vertical) -- see gearFactory.ts's `toggledAxis`. Up/Down mirrors
+// Left/Right's own turn-sideways keys below, so all four arrow keys read as
+// one spatial control: left/right turns which way it faces, up/down flips it
+// between lying down and standing up. A no-op for "shaft"/"beam" (rods, whose
+// orientation comes from position/position2 instead of `axis`) or when
+// nothing's selected.
 window.addEventListener("keydown", (event) => {
-  if (event.key.toLowerCase() !== "v" || !selectedGearId) return;
+  const isArrow = event.key === "ArrowUp" || event.key === "ArrowDown";
+  if ((event.key.toLowerCase() !== "v" && !isArrow) || !selectedGearId) return;
   const gear = gears.find((g) => g.id === selectedGearId);
   if (!gear) return;
+  if (isArrow) event.preventDefault(); // arrow keys would otherwise also scroll/pan the page
   gear.axis = toggledAxis(gear.axis);
 });
 
 // Left/Right arrow: turn the selected part sideways, between the sim's two
 // horizontal directions (see gearFactory.ts's `turnedAxis`) -- e.g. for
 // orienting a wheel/gear to spin around a car's own width axis instead of its
-// length axis, WITHOUT ever passing through V's "lying flat" state along the
-// way (both arrow keys trigger the same 2-state flip; there's no separate
-// "forward" vs "backward" with only two reachable directions).
+// length axis, WITHOUT ever passing through the lying-flat state Up/Down (see
+// above) toggles (both arrow keys trigger the same 2-state flip; there's no
+// separate "forward" vs "backward" with only two reachable directions).
 window.addEventListener("keydown", (event) => {
   if ((event.key !== "ArrowLeft" && event.key !== "ArrowRight") || !selectedGearId) return;
   const gear = gears.find((g) => g.id === selectedGearId);
