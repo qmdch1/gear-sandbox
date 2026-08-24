@@ -153,4 +153,55 @@ export const PART_INFO: Record<GearType, PartInfo> = {
       <line x1="26" y1="30" x2="74" y2="38" stroke="currentColor" stroke-width="5"/>
       <line x1="26" y1="70" x2="74" y2="62" stroke="currentColor" stroke-width="5"/>`,
   },
+  joint: {
+    label: "유니버설 조인트",
+    description: "양쪽 끝에 작은 구슬 모양 관절이 달린 축입니다. 양쪽 끝을 각각 다른 부품의 축 위치에 겹치게 놓으면 회전을 그대로 전달합니다 — 동력전달축과 달리 두 축의 방향이 서로 어긋나 있어도(일직선이 아니어도) 연결되고 회전이 전달됩니다.",
+    purpose:
+      "실제 자동차의 등속 조인트(CV 조인트)처럼, 서로 각도가 다른 두 축 사이에도 회전을 전달해야 할 때 씁니다. 동력전달축은 두 축이 일직선일 때만 연결되지만, 이 조인트를 쓰면 바퀴가 위아래로 움직이거나 차체가 기울어도 계속 동력이 전달되는 실제 서스펜션 구조를 흉내낼 수 있습니다.",
+    icon: `<circle cx="22" cy="30" r="11" fill="none" stroke="currentColor" stroke-width="5"/>
+      <circle cx="78" cy="70" r="11" fill="none" stroke="currentColor" stroke-width="5"/>
+      <line x1="30" y1="38" x2="70" y2="62" stroke="currentColor" stroke-width="6"/>`,
+  },
+  bearing: {
+    label: "베어링",
+    description: "축을 부드럽게 받쳐주는 작은 고리입니다. 다른 기어의 축 위치에 정확히 겹치게 놓으면 그 축에 결합되어 함께 돌지만, 부하(플라이휠)와 달리 가볍고 마모에 영향을 주지 않습니다.",
+    purpose:
+      "자동차 바퀴 축, 선풍기 모터 축처럼 실제 기계 대부분의 회전축 끝에는 마찰을 줄여주는 베어링이 들어갑니다. 이 샌드박스에서는 뼈대(빔) 위에 축을 가볍게 지지하는 용도로 씁니다 — 무거운 부하 없이 그냥 '여기서 축이 매끄럽게 돈다'는 지점을 표시할 때 적합합니다.",
+    icon: `<circle cx="50" cy="50" r="30" fill="none" stroke="currentColor" stroke-width="5"/>
+      <circle cx="50" cy="50" r="14" fill="none" stroke="currentColor" stroke-width="5"/>
+      <g fill="currentColor">
+        <circle cx="50" cy="24" r="4"/><circle cx="72" cy="37" r="4"/><circle cx="72" cy="63" r="4"/>
+        <circle cx="50" cy="76" r="4"/><circle cx="28" cy="63" r="4"/><circle cx="28" cy="37" r="4"/>
+      </g>`,
+  },
+  spring: {
+    label: "스프링",
+    description: "코일처럼 감긴 유연한 막대입니다. 구조용 빔과 똑같이 양쪽 끝을 다른 부품의 위치에 겹치게 놓으면 그 지점에서 고정되고, 빔·다른 스프링과도 끝을 맞대어 이어붙일 수 있습니다 — 다만 빔처럼 완전히 뻣뻣한 대신, 실제로는 눌리고 늘어나는 부품이라는 뜻으로 표시만 다르게 합니다.",
+    purpose:
+      "자동차 서스펜션(현가장치)처럼, 뼈대의 특정 부분에 '여기는 완전히 뻣뻣하지 않고 어느 정도 힘을 흡수한다'는 걸 표현할 때 씁니다. 빔으로만 뼈대를 짜면 지나치게 딱딱한 구조가 되지만, 바퀴 쪽 연결에 스프링을 섞으면 실제 자동차 뼈대에 더 가까운 모습이 됩니다.",
+    icon: `<path d="M20 20 Q35 20 35 32 Q35 44 50 44 Q65 44 65 56 Q65 68 80 68" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+      <circle cx="20" cy="20" r="6" fill="currentColor"/><circle cx="80" cy="68" r="6" fill="currentColor"/>`,
+  },
+  rotor: {
+    label: "회전날개(로터)",
+    description: "길고 얇은 날개 두 개가 달린 회전 장치입니다. 다른 기어의 축 위치에 겹치게 놓으면 결합되어 그 속도로 돌아갑니다 — 팬(프로펠러)과 같은 방식이지만 날개가 훨씬 길어서 헬리콥터의 주 로터·테일 로터처럼 보입니다.",
+    purpose:
+      "헬리콥터의 메인 로터(위에서 큰 원을 그리며 도는 날개)나 테일 로터(꼬리에서 옆으로 도는 작은 날개)를 표현할 때 씁니다. 팬은 '회전으로 바람을 만든다'는 걸 보여주는 범용 출력 장치지만, 로터는 그중에서도 특히 헬리콥터를 만들 때 쓰도록 길고 가느다란 모양으로 되어 있습니다.",
+    icon: `<circle cx="50" cy="50" r="7" fill="currentColor"/>
+      <rect x="8" y="46" width="84" height="8" rx="4" fill="none" stroke="currentColor" stroke-width="4"/>
+      <rect x="46" y="8" width="8" height="84" rx="4" fill="none" stroke="currentColor" stroke-width="4" transform="rotate(35 50 50)"/>`,
+  },
+  track: {
+    label: "무한궤도(탱크 트랙)",
+    description: "떨어져 있는 두 바퀴(스프로킷)를 감아 도는 두꺼운 돌기 벨트입니다. 벨트/체인 구동과 똑같은 방식으로 양쪽 끝을 이빨이 있는 기어의 축 위치에 겹치게 놓으면 연결됩니다 — 회전 방향이 그대로 유지되고, 두 바퀴의 잇수 비율만큼 속도가 달라집니다.",
+    purpose:
+      "탱크나 굴착기처럼 바퀴 대신 무한궤도로 움직이는 차량을 표현할 때 씁니다. 벨트/체인과 물리적인 동작 방식은 완전히 같지만, 두꺼운 돌기(그루서)가 있는 모양이라 '땅을 밟고 나가는 궤도'처럼 보이도록 만들어졌습니다.",
+    icon: `<circle cx="26" cy="50" r="18" fill="none" stroke="currentColor" stroke-width="6"/>
+      <circle cx="74" cy="50" r="18" fill="none" stroke="currentColor" stroke-width="6"/>
+      <path d="M26 30 L74 30 M26 70 L74 70" stroke="currentColor" stroke-width="8"/>
+      <g stroke="currentColor" stroke-width="4">
+        <line x1="34" y1="26" x2="34" y2="34"/><line x1="50" y1="26" x2="50" y2="34"/><line x1="66" y1="26" x2="66" y2="34"/>
+        <line x1="34" y1="66" x2="34" y2="74"/><line x1="50" y1="66" x2="50" y2="74"/><line x1="66" y1="66" x2="66" y2="74"/>
+      </g>`,
+  },
 };

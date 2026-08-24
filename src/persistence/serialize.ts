@@ -4,6 +4,7 @@ const SCHEMA_VERSION = 1;
 
 const GEAR_TYPES = new Set<GearType>([
   "spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt",
+  "joint", "bearing", "spring", "rotor", "track",
 ]);
 
 // "battery"/"outlet" used to be separate power-source types, mechanically identical to
@@ -36,7 +37,7 @@ function isValidGear(value: unknown): value is GearInstance {
     typeof g.broken === "boolean" &&
     isFiniteNumber(g.rotation) &&
     isFiniteNumber(g.angularVelocity) &&
-    (g.position2 === undefined || isVec3(g.position2)) // only meaningful for "shaft"/"beam"/"belt"
+    (g.position2 === undefined || isVec3(g.position2)) // only meaningful for the rod types (see types.ts)
   );
 }
 

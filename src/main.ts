@@ -1,5 +1,5 @@
 import type { GearInstance, GearType } from "./sim/types";
-import { createGear, toggledAxis } from "./sim/gearFactory";
+import { createGear, toggledAxis, rotatedAxis } from "./sim/gearFactory";
 import { tick } from "./sim/simulation";
 import { resizeConnectedMeshGroup } from "./sim/resize";
 import { createScene } from "./render/scene";
@@ -25,6 +25,7 @@ app.innerHTML = `
         <li>부품 떼기: <b>Alt</b>+드래그</li>
         <li>높이 조절: <b>Shift</b>+드래그</li>
         <li>가로/세로 전환: 부품 클릭 후 <b>V</b></li>
+        <li>90도씩 좌우 회전: 부품 클릭 후 <b>←</b>/<b>→</b></li>
         <li>빔·축·벨트 반대쪽 끝 옮기기: <b>Ctrl</b>+드래그</li>
       </ul>
     </section>
@@ -114,7 +115,10 @@ function spawnGridPosition(index: number): [number, number, number] {
 // left everything else undiscoverable unless you dug through the palette -- one of
 // every type instead, spiraling out from the origin (crank first, so the one
 // power-source gear still lands dead center where the default camera looks).
-const STARTER_TYPES: GearType[] = ["crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt"];
+const STARTER_TYPES: GearType[] = [
+  "crank", "spur", "helical", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt",
+  "joint", "bearing", "spring", "rotor", "track",
+];
 
 // No user accounts, so there's exactly one saved layout on the server (see
 // serverClient.ts) -- fetch it once on startup. A brand-new server (or a fresh
@@ -199,6 +203,18 @@ window.addEventListener("keydown", (event) => {
   const gear = gears.find((g) => g.id === selectedGearId);
   if (!gear) return;
   gear.axis = toggledAxis(gear.axis);
+});
+
+// Left/Right arrow: step the selected part's axis 90° at a time through the
+// full X -> Y -> Z cycle (see gearFactory.ts's `rotatedAxis`) -- reaches the Z
+// axis too, unlike V's quick X<->Y-only flip above, e.g. for orienting a
+// wheel/gear to spin around a car's own width axis.
+window.addEventListener("keydown", (event) => {
+  if ((event.key !== "ArrowLeft" && event.key !== "ArrowRight") || !selectedGearId) return;
+  const gear = gears.find((g) => g.id === selectedGearId);
+  if (!gear) return;
+  event.preventDefault(); // arrow keys would otherwise also scroll/pan the page
+  gear.axis = rotatedAxis(gear.axis, event.key === "ArrowRight" ? 1 : -1);
 });
 
 window.addEventListener("resize", () => {

@@ -29,6 +29,24 @@ export const GEAR_DEFS: Record<GearType, GearTypeDef> = {
   // between two pulleys), but with friction against its own pulleys that a rigid
   // shaft coupling doesn't have -- wears a bit faster than shaft as a result.
   belt:    { durabilityMax: 130, baseWearPerSecond: 0.6, loadWearMultiplier: 1.3 },
+  // A real drivetrain part (carries torque, like shaft) but constantly flexing
+  // at both its ball joints in real use -- wears faster than a plain rigid
+  // shaft coupling, closer to a worm's rate.
+  joint:   { durabilityMax: 110, baseWearPerSecond: 0.9, loadWearMultiplier: 1.6 },
+  // A coupling-only support accessory, same reasoning as load/gauge/fan/wheel --
+  // it just holds a shaft in place, it doesn't itself wear from that.
+  bearing: { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  // A purely structural connector like beam -- never spins, never carries
+  // torque, so there's nothing to wear it out either.
+  spring:  { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  // A coupling-only output accessory, same reasoning as fan/wheel -- it just
+  // spins to show the output visually, it doesn't wear from that.
+  rotor:   { durabilityMax: 1_000_000, baseWearPerSecond: 0, loadWearMultiplier: 0 },
+  // A real drivetrain part like belt (carries torque at a distance between two
+  // sprockets), but under heavier mechanical stress in real use (dragging its
+  // own weight across the ground, not just spinning free) -- wears a bit
+  // faster than belt as a result.
+  track:   { durabilityMax: 120, baseWearPerSecond: 0.7, loadWearMultiplier: 1.4 },
 };
 
 /** Gears that drive the rest of the train the moment they're placed (their

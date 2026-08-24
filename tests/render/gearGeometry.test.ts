@@ -1,7 +1,7 @@
 // tests/render/gearGeometry.test.ts
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
-import { computeSpurProfilePoints, buildGeometryForType, beltTangentGeometry } from "../../src/render/gearGeometry";
+import { computeSpurProfilePoints, buildGeometryForType, beltTangentGeometry, trackTangentGeometry } from "../../src/render/gearGeometry";
 
 describe("computeSpurProfilePoints", () => {
   it("produces the same fixed point count per tooth (2 root points + 2 mirrored 5-point involute flanks)", () => {
@@ -33,7 +33,10 @@ describe("computeSpurProfilePoints", () => {
 
 describe("buildGeometryForType", () => {
   it("builds a non-empty geometry for every gear type", () => {
-    const types = ["spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt"] as const;
+    const types = [
+      "spur", "helical", "crank", "bevel", "worm", "load", "gauge", "fan", "wheel", "shaft", "beam", "belt",
+      "joint", "bearing", "spring", "rotor", "track",
+    ] as const;
     for (const t of types) {
       const geometry = buildGeometryForType(t, 20, 1);
       expect(geometry.attributes.position.count).toBeGreaterThan(0);
@@ -129,6 +132,73 @@ describe("buildGeometryForType", () => {
     expect(maxY).toBeCloseTo(module * 0.35, 5);
   });
 
+  it("builds the joint with ball bulges wider than a plain shaft's constant radius", () => {
+    const module = 1;
+    const jointGeometry = buildGeometryForType("joint", 0, module);
+    const shaftGeometry = buildGeometryForType("shaft", 0, module);
+    const maxRadial = (g: typeof jointGeometry) => {
+      const position = g.attributes.position;
+      let max = 0;
+      for (let i = 0; i < position.count; i++) {
+        max = Math.max(max, Math.hypot(position.getX(i), position.getY(i)));
+      }
+      return max;
+    };
+    expect(maxRadial(jointGeometry)).toBeGreaterThan(maxRadial(shaftGeometry));
+  });
+
+  it("builds the spring as a coil spanning multiple turns, not a straight rod", () => {
+    const module = 1;
+    const geometry = buildGeometryForType("spring", 0, module);
+    const position = geometry.attributes.position;
+    // A coil's cross-section wanders through every quadrant of X/Y as it winds,
+    // unlike a straight rod (shaft/beam/belt) whose vertices stay near one
+    // fixed (x, y) offset from the Z axis the whole way along.
+    let sawPositiveX = false;
+    let sawNegativeX = false;
+    for (let i = 0; i < position.count; i++) {
+      if (position.getX(i) > module * 0.3) sawPositiveX = true;
+      if (position.getX(i) < -module * 0.3) sawNegativeX = true;
+    }
+    expect(sawPositiveX).toBe(true);
+    expect(sawNegativeX).toBe(true);
+  });
+
+  it("builds the rotor with blades much longer than a fan's", () => {
+    const module = 1;
+    const rotorGeometry = buildGeometryForType("rotor", 0, module);
+    const fanGeometry = buildGeometryForType("fan", 0, module);
+    const maxRadial = (g: typeof rotorGeometry) => {
+      const position = g.attributes.position;
+      let max = 0;
+      for (let i = 0; i < position.count; i++) {
+        max = Math.max(max, Math.hypot(position.getX(i), position.getY(i)));
+      }
+      return max;
+    };
+    expect(maxRadial(rotorGeometry)).toBeGreaterThan(maxRadial(fanGeometry));
+  });
+
+  it("builds the track wider than the belt, with lugs protruding past its flat band", () => {
+    const module = 1;
+    const trackGeometry = buildGeometryForType("track", 0, module);
+    const beltGeometry = buildGeometryForType("belt", 0, module);
+    const maxAbsY = (g: typeof trackGeometry) => {
+      const position = g.attributes.position;
+      let max = 0;
+      for (let i = 0; i < position.count; i++) max = Math.max(max, Math.abs(position.getY(i)));
+      return max;
+    };
+    const maxAbsX = (g: typeof trackGeometry) => {
+      const position = g.attributes.position;
+      let max = 0;
+      for (let i = 0; i < position.count; i++) max = Math.max(max, Math.abs(position.getX(i)));
+      return max;
+    };
+    expect(maxAbsX(trackGeometry)).toBeGreaterThan(maxAbsX(beltGeometry)); // wider
+    expect(maxAbsY(trackGeometry)).toBeGreaterThan(module * 0.125); // belt's own half-thickness -- track's lugs protrude past it
+  });
+
   it("builds the belt as a unit-length flat, wide strap (distinct from beam's square bar)", () => {
     const module = 1;
     const geometry = buildGeometryForType("belt", 0, module);
@@ -206,6 +276,35 @@ describe("beltTangentGeometry", () => {
 
   it("does not throw or produce NaN vertices when the two pulleys are (nearly) coincident", () => {
     const geometry = beltTangentGeometry(1, new THREE.Vector3(0, 0, 0), new THREE.Vector3(1e-8, 0, 0), 5, 3);
+    const position = geometry.attributes.position;
+    for (let i = 0; i < position.count; i++) {
+      expect(Number.isFinite(position.getX(i))).toBe(true);
+      expect(Number.isFinite(position.getY(i))).toBe(true);
+      expect(Number.isFinite(position.getZ(i))).toBe(true);
+    }
+  });
+});
+
+describe("trackTangentGeometry", () => {
+  it("spans the same real-world distance between two sprockets as beltTangentGeometry, but wider", () => {
+    const module = 1;
+    const p1 = new THREE.Vector3(0, 0, 0);
+    const p2 = new THREE.Vector3(20, 0, 0);
+    const trackGeom = trackTangentGeometry(module, p1, p2, 5, 5);
+    const beltGeom = beltTangentGeometry(module, p1, p2, 5, 5);
+    trackGeom.computeBoundingBox();
+    beltGeom.computeBoundingBox();
+    expect(trackGeom.boundingBox!.min.x).toBeCloseTo(beltGeom.boundingBox!.min.x, 2);
+    expect(trackGeom.boundingBox!.max.x).toBeCloseTo(beltGeom.boundingBox!.max.x, 2);
+    // The track's own Z bounding box (tread width direction) should reach further
+    // than the belt's flat strap, per trackGeometry's wider cross-section.
+    const beltZSpread = beltGeom.boundingBox!.max.z - beltGeom.boundingBox!.min.z;
+    const trackZSpread = trackGeom.boundingBox!.max.z - trackGeom.boundingBox!.min.z;
+    expect(trackZSpread).toBeGreaterThan(beltZSpread);
+  });
+
+  it("does not throw or produce NaN vertices when the two sprockets are (nearly) coincident", () => {
+    const geometry = trackTangentGeometry(1, new THREE.Vector3(0, 0, 0), new THREE.Vector3(1e-8, 0, 0), 5, 3);
     const position = geometry.attributes.position;
     for (let i = 0; i < position.count; i++) {
       expect(Number.isFinite(position.getX(i))).toBe(true);

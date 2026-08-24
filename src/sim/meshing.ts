@@ -34,7 +34,21 @@ function bevelMeshCompatible(a: GearInstance["type"], b: GearInstance["type"]): 
 // on another gear's shaft, exactly like the original "load" flywheel (an RPM gauge, a
 // fan, or a wheel is functionally the same attach rule, just a different
 // indicator/output device).
-const COUPLING_ONLY_TYPES = new Set<GearInstance["type"]>(["load", "gauge", "fan", "wheel"]);
+const COUPLING_ONLY_TYPES = new Set<GearInstance["type"]>(["load", "gauge", "fan", "wheel", "bearing", "rotor"]);
+
+// Rod types that lock together whatever their endpoints happen to touch, and
+// never carry rotation at all (see rotation.ts, which skips "structural"
+// edges entirely) -- a real chassis is built from beams AND springs joined at
+// shared nodes (a spring is just a flexible strut in this simplified model,
+// not an actively-damped one), not just one continuous rigid rod.
+const STRUCTURAL_ROD_TYPES = new Set<GearInstance["type"]>(["beam", "spring"]);
+
+// Belt/chain (endless loop, needs teeth on both hosts, ratio = pitch-radius
+// ratio) and track (tank tread, mechanically identical to a belt/chain loop --
+// same same-direction radius-ratio coupling, just draped over sprockets
+// instead of pulleys/gears) share every meshing rule below, differing only in
+// their rendering (see gearGeometry.ts).
+const BELT_LIKE_TYPES = new Set<GearInstance["type"]>(["belt", "track"]);
 
 // A helical gear only meshes (via teeth) with another helical gear -- a plain (0°-
 // helix) power source like a crank can't properly mesh into it either, same as any
@@ -68,16 +82,35 @@ function endpointsOf(g: GearInstance): Array<[number, number, number]> {
   return g.position2 ? [g.position, g.position2] : [g.position];
 }
 
-/** A "beam" is a purely structural rod -- unlike "shaft," it carries no rotation
- *  at all (see rotation.ts, which skips "structural" edges entirely), so there's
- *  no axis-alignment requirement to check: it's just a rigid strut that locks
- *  together whatever its endpoints happen to touch, exactly like bolting two
- *  real beams together at a shared joint. This also means beams CAN chain
- *  end-to-end to build up a frame (unlike shaft-to-shaft, which stays
- *  disallowed above) -- a real chassis is built from many beams joined at
- *  shared nodes, not just one continuous rod. */
+/** A "beam"/"spring" is a purely structural rod -- unlike "shaft," it carries no
+ *  rotation at all (see rotation.ts, which skips "structural" edges entirely), so
+ *  there's no axis-alignment requirement to check: it's just a rigid strut that
+ *  locks together whatever its endpoints happen to touch, exactly like bolting
+ *  two real beams together at a shared joint. This also means these rods CAN
+ *  chain end-to-end (and to each other) to build up a frame (unlike
+ *  shaft-to-shaft, which stays disallowed above) -- a real chassis is built from
+ *  many beams (and springs, in a suspension) joined at shared nodes, not just
+ *  one continuous rigid rod. */
 function beamJoinsAt(a: GearInstance, b: GearInstance): boolean {
-  if (a.type !== "beam" && b.type !== "beam") return false;
+  if (!STRUCTURAL_ROD_TYPES.has(a.type) && !STRUCTURAL_ROD_TYPES.has(b.type)) return false;
+  for (const pa of endpointsOf(a)) {
+    for (const pb of endpointsOf(b)) {
+      if (dist(pa, pb) <= COUPLING_DISTANCE_TOLERANCE) return true;
+    }
+  }
+  return false;
+}
+
+/** A "joint" (universal joint) bridges two endpoints by bare coincidence, same as
+ *  `beamJoinsAt` -- but UNLIKE a beam/spring, it's a "coupling" edge, not
+ *  "structural": it DOES carry rotation (1:1, same direction) between whatever
+ *  it touches (see rotation.ts, which propagates "coupling" edges). This is
+ *  exactly what a real universal joint is for: transmitting rotation between two
+ *  shafts whose axes don't line up -- which is why this check, like beam's, has
+ *  no axis-alignment requirement at all (that's the entire point of the part),
+ *  unlike `shaftCouplingEnd`'s strict parallel-axis requirement. */
+function jointJoinsAt(a: GearInstance, b: GearInstance): boolean {
+  if (a.type !== "joint" && b.type !== "joint") return false;
   for (const pa of endpointsOf(a)) {
     for (const pb of endpointsOf(b)) {
       if (dist(pa, pb) <= COUPLING_DISTANCE_TOLERANCE) return true;
@@ -176,26 +209,36 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
     return { a: a.id, b: b.id, kind: "structural", ratio: 1, oneWay: "none" };
   }
 
-  // A belt/chain: same-direction power transmission (unlike a tooth mesh, which
-  // reverses direction) between two pulleys at a distance, scaled by their
+  // A "joint" (universal joint): bare coincidence, like beam above, but a
+  // rotation-CARRYING coupling instead of a non-rotating structural link --
+  // see `jointJoinsAt`'s doc comment. Checked at the same early priority as
+  // beam, before belt/shaft's stricter axis-aligned rules, so a joint always
+  // wins on bare coincidence even when one side happens to be a shaft/belt.
+  if (jointJoinsAt(a, b)) {
+    return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+  }
+
+  // A belt/chain (or tank track, mechanically identical -- see BELT_LIKE_TYPES):
+  // same-direction power transmission (unlike a tooth mesh, which reverses
+  // direction) between two pulleys/sprockets at a distance, scaled by their
   // relative pitch radii (unlike a shaft's rigid 1:1 coupling) -- exactly how a
-  // real bicycle chain or belt drive behaves. Encoded as an ordinary "coupling"
-  // edge (same-direction sign, see rotation.ts) whose ratio is the HOST's own
-  // pitch radius: propagateRotation's existing generic ratio/1-ratio reversal
-  // then correctly converts an angular velocity into a "linear belt speed" units
-  // going one way, and back into the other pulley's own angular velocity coming
-  // back out -- no core rotation.ts changes needed.
-  if (a.type === "belt" || b.type === "belt") {
-    if (a.type === "belt" && b.type === "belt") return null; // no belt-to-belt chaining -- a belt loop connects two pulleys, not another belt
-    const belt = a.type === "belt" ? a : b;
-    const host = a.type === "belt" ? b : a;
+  // real bicycle chain, belt drive, or tank tread behaves. Encoded as an
+  // ordinary "coupling" edge (same-direction sign, see rotation.ts) whose ratio
+  // is the HOST's own pitch radius: propagateRotation's existing generic
+  // ratio/1-ratio reversal then correctly converts an angular velocity into a
+  // "linear belt speed" units going one way, and back into the other pulley's
+  // own angular velocity coming back out -- no core rotation.ts changes needed.
+  if (BELT_LIKE_TYPES.has(a.type) || BELT_LIKE_TYPES.has(b.type)) {
+    if (BELT_LIKE_TYPES.has(a.type) && BELT_LIKE_TYPES.has(b.type)) return null; // no belt/track-to-belt/track chaining -- a loop connects two sprockets, not another loop
+    const belt = BELT_LIKE_TYPES.has(a.type) ? a : b;
+    const host = BELT_LIKE_TYPES.has(a.type) ? b : a;
     if (!beltCouplingEnd(belt, host)) return null;
     // `ratio` is "b's speed = ratio * a's speed" (see rotation.ts) -- so which
     // way to multiply by the host's pitch radius depends on which of a/b IS the
     // host here, not just which one it is conceptually: going host->belt
     // multiplies (angularVelocity * radius = linear speed), going belt->host
     // divides (linear speed / radius = angularVelocity back out).
-    const ratio = a.type === "belt" ? 1 / pitchRadius(host) : pitchRadius(host);
+    const ratio = BELT_LIKE_TYPES.has(a.type) ? 1 / pitchRadius(host) : pitchRadius(host);
     return { a: a.id, b: b.id, kind: "coupling", ratio, oneWay: "none" };
   }
 
@@ -282,13 +325,17 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
  *  rules as a separate function rather than refactoring `evaluatePair` to share it —
  *  `evaluatePair` is exhaustively tested already, and this keeps that logic unrisked. */
 export function idealConnectionDistance(a: GearInstance, b: GearInstance): number | null {
-  if (a.type === "beam" || b.type === "beam") {
+  if (STRUCTURAL_ROD_TYPES.has(a.type) || STRUCTURAL_ROD_TYPES.has(b.type)) {
     return 0; // bare coincidence, no axis requirement -- see beamJoinsAt/evaluatePair
   }
 
-  if (a.type === "belt" || b.type === "belt") {
-    if (a.type === "belt" && b.type === "belt") return null;
-    const host = a.type === "belt" ? b : a;
+  if (a.type === "joint" || b.type === "joint") {
+    return 0; // bare coincidence, no axis requirement -- see jointJoinsAt/evaluatePair
+  }
+
+  if (BELT_LIKE_TYPES.has(a.type) || BELT_LIKE_TYPES.has(b.type)) {
+    if (BELT_LIKE_TYPES.has(a.type) && BELT_LIKE_TYPES.has(b.type)) return null;
+    const host = BELT_LIKE_TYPES.has(a.type) ? b : a;
     return host.teeth > 0 ? 0 : null; // bare coincidence -- see beltCouplingEnd/evaluatePair
   }
 

@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
 import { cachedGeometryFor } from "./geometryCache";
-import { beltTangentGeometry } from "./gearGeometry";
+import { beltTangentGeometry, trackTangentGeometry } from "./gearGeometry";
 import { TYPE_HEALTHY_COLORS, createMetalTexture, createGaugeDialTexture } from "./metalTexture";
 
 const HEALTHY = new THREE.Color(0x3ddc73);
@@ -75,7 +75,8 @@ export class GearMeshObject {
   update(gear: GearInstance): void {
     this.mesh.rotation.set(0, 0, 0);
     this.mesh.scale.set(1, 1, 1);
-    const usedTangentGeometry = gear.type === "belt" && gear.position2 ? this.applyBeltTangentGeometry(gear) : false;
+    const usedTangentGeometry =
+      (gear.type === "belt" || gear.type === "track") && gear.position2 ? this.applyBeltTangentGeometry(gear) : false;
     if (usedTangentGeometry) {
       // The tangent geometry already bakes the real world-space strand
       // positions/orientation/taper directly into its vertices (see
@@ -115,15 +116,16 @@ export class GearMeshObject {
     );
   }
 
-  /** For a "belt" connected on at least one end, rebuilds its geometry as the
-   *  real external-tangent two-strand shape (see gearGeometry.ts's
-   *  beltTangentGeometry) and swaps it onto this.mesh, disposing whatever
-   *  bespoke geometry it previously owned. Reverts to the shared/cached
-   *  default single-strap geometry once neither end is connected anymore
-   *  (e.g. dragged away). Returns whether the tangent geometry is in use, so
-   *  `update()` knows whether to skip its own position/quaternion transform
-   *  (the tangent geometry already bakes those in as absolute world
-   *  coordinates). No-op (returns false) for every other type. */
+  /** For a "belt"/"track" connected on at least one end, rebuilds its geometry
+   *  as the real external-tangent two-strand shape (see gearGeometry.ts's
+   *  beltTangentGeometry/trackTangentGeometry) and swaps it onto this.mesh,
+   *  disposing whatever bespoke geometry it previously owned. Reverts to the
+   *  shared/cached default single-strap geometry once neither end is
+   *  connected anymore (e.g. dragged away). Returns whether the tangent
+   *  geometry is in use, so `update()` knows whether to skip its own
+   *  position/quaternion transform (the tangent geometry already bakes those
+   *  in as absolute world coordinates). No-op (returns false) for every other
+   *  type. */
   private applyBeltTangentGeometry(gear: GearInstance): boolean {
     const r1 = gear.beltEndRadius1 ?? 0;
     const r2 = gear.beltEndRadius2 ?? 0;
@@ -133,14 +135,18 @@ export class GearMeshObject {
         this.ownsGeometry = false;
       }
       // Always re-fetch (not just when transitioning away from a bespoke
-      // tangent shape) so a disconnected belt's module change (see the size
-      // slider in main.ts) is reflected too -- a cheap cache lookup either way.
+      // tangent shape) so a disconnected belt/track's module change (see the
+      // size slider in main.ts) is reflected too -- a cheap cache lookup
+      // either way.
       this.mesh.geometry = cachedGeometryFor(gear.type, gear.teeth || 1, gear.module || 1);
       return false;
     }
     const p1 = new THREE.Vector3(...gear.position);
     const p2 = new THREE.Vector3(...gear.position2!);
-    const geometry = beltTangentGeometry(gear.module || 1, p1, p2, r1, r2);
+    const geometry =
+      gear.type === "track"
+        ? trackTangentGeometry(gear.module || 1, p1, p2, r1, r2)
+        : beltTangentGeometry(gear.module || 1, p1, p2, r1, r2);
     if (this.ownsGeometry) this.mesh.geometry.dispose();
     this.mesh.geometry = geometry;
     this.ownsGeometry = true;

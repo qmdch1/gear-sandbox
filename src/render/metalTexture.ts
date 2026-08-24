@@ -22,6 +22,11 @@ export const TYPE_HEALTHY_COLORS: Record<GearType, THREE.Color> = {
   shaft: new THREE.Color(0x8f939c), // plain steel rod -- a cooler, slightly darker steel than the spur gear's tone, distinct at a glance
   beam: new THREE.Color(0x5a5f66), // matte structural-steel gray, darker than the shaft's rod tone -- reads as "framing member," not "shiny drivetrain part"
   belt: new THREE.Color(0x232323), // near-black rubber, like a real belt/chain -- distinct from every metal-toned part
+  joint: new THREE.Color(0x6b6e73), // mid steel-gray, between shaft's cool tone and bearing's -- a universal joint's housing
+  bearing: new THREE.Color(0xa8adb3), // bright ball-bearing steel, a shade lighter than a plain shaft
+  spring: new THREE.Color(0x8c7a3d), // spring-steel bronze/gold tint, distinct from beam's flat structural gray
+  rotor: new THREE.Color(0xd8dbdf), // bright chrome, close to fan's but slightly cooler -- a helicopter rotor blade
+  track: new THREE.Color(0x1a1a1a), // near-black rubber/steel tread, a touch darker than belt -- a tank track
 };
 
 /** jsdom (used by this project's DOM-touching tests) implements `getContext` but has no

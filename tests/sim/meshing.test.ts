@@ -602,3 +602,145 @@ describe("meshPhaseAlignment", () => {
     expect(meshPhaseAlignment(dragged, 1.0, partner)).toBeNull();
   });
 });
+
+describe("joint (universal joint)", () => {
+  it("carries rotation (a coupling edge, not structural) between two shafts whose directions DON'T line up", () => {
+    // The whole point of a universal joint: unlike a plain shaft-to-shaft
+    // coupling (which requires the two shafts' directions to be parallel),
+    // a joint bridges two misaligned shafts by bare coincidence.
+    const shaftA = makeGear({ id: "sa", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0] });
+    const shaftB = makeGear({ id: "sb", type: "shaft", teeth: 0, position: [20, 0, 0], position2: [20, 0, 20] }); // perpendicular to shaftA
+    // Plain shaft-to-shaft: their directions don't line up, so no edge at all.
+    expect(evaluatePair(shaftA, shaftB)).toBeNull();
+
+    const joint = makeGear({ id: "j", type: "joint", teeth: 0, position: [20, 0, 0], position2: [20, 5, 0] });
+    const edgeA = evaluatePair(joint, shaftA);
+    const edgeB = evaluatePair(joint, shaftB);
+    expect(edgeA).not.toBeNull();
+    expect(edgeA!.kind).toBe("coupling");
+    expect(edgeA!.ratio).toBe(1);
+    expect(edgeB).not.toBeNull();
+    expect(edgeB!.kind).toBe("coupling");
+  });
+
+  it("joins by bare coincidence, ignoring axis, same as beamJoinsAt but as a coupling edge", () => {
+    const joint = makeGear({ id: "j", type: "joint", teeth: 0, position: [0, 0, 0], position2: [5, 0, 0] });
+    const spur = makeGear({ id: "s", type: "spur", axis: [0, 0, 1], teeth: 20, module: 1, position: [5, 0, 0] });
+    const edge = evaluatePair(joint, spur);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
+  it("does not join when neither endpoint is coincident with anything", () => {
+    const joint = makeGear({ id: "j", type: "joint", teeth: 0, position: [0, 0, 0], position2: [5, 0, 0] });
+    const spur = makeGear({ id: "s", type: "spur", teeth: 20, module: 1, position: [999, 0, 0] });
+    expect(evaluatePair(joint, spur)).toBeNull();
+  });
+
+  it("idealConnectionDistance returns 0 (coincident, no axis requirement) for any joint-involved pair", () => {
+    const joint = makeGear({ id: "j", type: "joint", teeth: 0, position: [0, 0, 0], position2: [5, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], position: [999, 0, 0] });
+    expect(idealConnectionDistance(joint, host)).toBe(0);
+  });
+});
+
+describe("bearing", () => {
+  it("couples onto a host's shaft position exactly like load/gauge/fan/wheel", () => {
+    const bearing = makeGear({ id: "b", type: "bearing", teeth: 0, position: [0, 0, 0] });
+    const host = makeGear({ id: "host", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(bearing, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+    expect(edge!.ratio).toBe(1);
+  });
+
+  it("never couples to another coupling-only accessory", () => {
+    const bearing = makeGear({ id: "b", type: "bearing", teeth: 0, position: [0, 0, 0] });
+    const load = makeGear({ id: "l", type: "load", teeth: 0, position: [0, 0, 0] });
+    expect(evaluatePair(bearing, load)).toBeNull();
+  });
+
+  it("requires matching axis, same as every other coupling-only accessory", () => {
+    const bearing = makeGear({ id: "b", type: "bearing", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    expect(evaluatePair(bearing, host)).toBeNull();
+  });
+});
+
+describe("spring", () => {
+  it("joins a beam end-to-end, same structural (non-rotating) coupling as beam-to-beam", () => {
+    const beam = makeGear({ id: "beam", type: "beam", teeth: 0, position: [0, 0, 0], position2: [12, 0, 0] });
+    const spring = makeGear({ id: "spring", type: "spring", teeth: 0, position: [12, 0, 0], position2: [12, 8, 0] });
+    const edge = evaluatePair(beam, spring);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("structural");
+  });
+
+  it("joins another spring end-to-end too", () => {
+    const springA = makeGear({ id: "sa", type: "spring", teeth: 0, position: [0, 0, 0], position2: [0, 8, 0] });
+    const springB = makeGear({ id: "sb", type: "spring", teeth: 0, position: [0, 8, 0], position2: [0, 16, 0] });
+    const edge = evaluatePair(springA, springB);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("structural");
+  });
+
+  it("idealConnectionDistance returns 0 for any spring-involved pair", () => {
+    const spring = makeGear({ id: "spring", type: "spring", teeth: 0, position: [0, 0, 0], position2: [0, 8, 0] });
+    const host = makeGear({ id: "host", axis: [1, 0, 0], position: [999, 0, 0] });
+    expect(idealConnectionDistance(spring, host)).toBe(0);
+  });
+});
+
+describe("rotor", () => {
+  it("couples onto a host's shaft position exactly like fan/wheel", () => {
+    const rotor = makeGear({ id: "r", type: "rotor", teeth: 0, position: [0, 0, 0] });
+    const host = makeGear({ id: "host", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(rotor, host);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+    expect(edge!.ratio).toBe(1);
+  });
+
+  it("never couples to another coupling-only accessory", () => {
+    const rotor = makeGear({ id: "r", type: "rotor", teeth: 0, position: [0, 0, 0] });
+    const fan = makeGear({ id: "f", type: "fan", teeth: 0, position: [0, 0, 0] });
+    expect(evaluatePair(rotor, fan)).toBeNull();
+  });
+});
+
+describe("track (tank tread)", () => {
+  it("couples two toothed hosts with a radius-ratio edge, same mechanics as belt", () => {
+    const track = makeGear({ id: "t", type: "track", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const sprocketA = makeGear({ id: "a", type: "spur", teeth: 20, module: 1, position: [0, 0, 0] }); // pitch radius 10
+    const sprocketB = makeGear({ id: "b", type: "spur", teeth: 10, module: 1, position: [30, 0, 0] }); // pitch radius 5
+
+    const edgeToA = evaluatePair(track, sprocketA);
+    expect(edgeToA).not.toBeNull();
+    expect(edgeToA!.kind).toBe("coupling");
+    expect(edgeToA!.ratio).toBeCloseTo(1 / 10); // track = a, host pitch radius 10 -> ratio = 1/radius
+
+    const edgeToB = evaluatePair(sprocketB, track);
+    expect(edgeToB).not.toBeNull();
+    expect(edgeToB!.ratio).toBeCloseTo(5); // host = a here, track = b -> ratio = host's pitch radius
+  });
+
+  it("does not chain track-to-track, same as belt-to-belt", () => {
+    const trackA = makeGear({ id: "ta", type: "track", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const trackB = makeGear({ id: "tb", type: "track", teeth: 0, position: [30, 0, 0], position2: [60, 0, 0] });
+    expect(evaluatePair(trackA, trackB)).toBeNull();
+  });
+
+  it("does not chain belt-to-track either -- a loop connects two sprockets, not another loop", () => {
+    const belt = makeGear({ id: "belt", type: "belt", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const track = makeGear({ id: "track", type: "track", teeth: 0, position: [30, 0, 0], position2: [60, 0, 0] });
+    expect(evaluatePair(belt, track)).toBeNull();
+  });
+
+  it("idealConnectionDistance returns 0 against a toothed host, null against a toothless one", () => {
+    const track = makeGear({ id: "t", type: "track", teeth: 0, position: [0, 0, 0], position2: [30, 0, 0] });
+    const host = makeGear({ id: "host", teeth: 20, module: 1, position: [999, 0, 0] });
+    const toothless = makeGear({ id: "toothless", type: "load", teeth: 0, position: [999, 0, 0] });
+    expect(idealConnectionDistance(track, host)).toBe(0);
+    expect(idealConnectionDistance(track, toothless)).toBeNull();
+  });
+});

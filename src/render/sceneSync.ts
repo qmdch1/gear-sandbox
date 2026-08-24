@@ -36,16 +36,17 @@ export function computeSyncActions(
   return { toAdd, toRemoveIds };
 }
 
-/** "belt" keeps its own bespoke, frequently-rebuilt geometry (see gearGeometry.ts's
- *  beltTangentGeometry) -- instancing requires many gears to share ONE static
- *  geometry, which a connected belt's shape structurally can't (it depends on its
- *  own two hosts' live positions/radii, and changes whenever either does). Every
- *  other type's geometry, by contrast, is a pure, cached function of just
- *  (type, teeth, module) -- see geometryCache.ts -- so those benefit from collapsing
- *  what would otherwise be one draw call per gear into one draw call per distinct
+/** "belt"/"track" keep their own bespoke, frequently-rebuilt geometry (see
+ *  gearGeometry.ts's beltTangentGeometry/trackTangentGeometry) -- instancing
+ *  requires many gears to share ONE static geometry, which a connected belt or
+ *  track's shape structurally can't (it depends on its own two hosts' live
+ *  positions/radii, and changes whenever either does). Every other type's
+ *  geometry, by contrast, is a pure, cached function of just (type, teeth,
+ *  module) -- see geometryCache.ts -- so those benefit from collapsing what
+ *  would otherwise be one draw call per gear into one draw call per distinct
  *  shape actually in use. */
 function isInstanced(type: GearType): boolean {
-  return type !== "belt";
+  return type !== "belt" && type !== "track";
 }
 
 function buildSharedMaterial(isGauge: boolean): THREE.MeshStandardMaterial {

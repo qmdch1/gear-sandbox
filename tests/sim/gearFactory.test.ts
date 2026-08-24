@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createGear, defaultAxisForType, defaultTeethForType, toggledAxis } from "../../src/sim/gearFactory";
+import { createGear, defaultAxisForType, defaultTeethForType, toggledAxis, rotatedAxis } from "../../src/sim/gearFactory";
 
 describe("defaultAxisForType", () => {
   it("gives bevel and worm gears a perpendicular default axis", () => {
@@ -24,6 +24,36 @@ describe("toggledAxis", () => {
   });
 });
 
+describe("rotatedAxis", () => {
+  it("steps forward through the X -> Y -> Z cycle, wrapping back to X", () => {
+    expect(rotatedAxis([1, 0, 0], 1)).toEqual([0, 1, 0]);
+    expect(rotatedAxis([0, 1, 0], 1)).toEqual([0, 0, 1]);
+    expect(rotatedAxis([0, 0, 1], 1)).toEqual([1, 0, 0]);
+  });
+
+  it("steps backward through the same cycle, wrapping the other way", () => {
+    expect(rotatedAxis([1, 0, 0], -1)).toEqual([0, 0, 1]);
+    expect(rotatedAxis([0, 0, 1], -1)).toEqual([0, 1, 0]);
+    expect(rotatedAxis([0, 1, 0], -1)).toEqual([1, 0, 0]);
+  });
+
+  it("reaches the Z axis, unlike toggledAxis which only ever reaches X or Y", () => {
+    expect(rotatedAxis([0, 1, 0], 1)).toEqual([0, 0, 1]);
+  });
+
+  it("a full loop of 3 forward steps returns to the starting axis", () => {
+    let axis: [number, number, number] = [1, 0, 0];
+    for (let i = 0; i < 3; i++) axis = rotatedAxis(axis, 1);
+    expect(axis).toEqual([1, 0, 0]);
+  });
+
+  it("finds the NEAREST cycle entry for a not-quite-exact axis, rather than requiring an exact match", () => {
+    // e.g. a hand-authored or slightly-off axis value should still round to
+    // whichever cardinal direction it's actually closest to.
+    expect(rotatedAxis([0.9, 0.1, 0.1], 1)).toEqual([0, 1, 0]); // closest to X -> steps to Y
+  });
+});
+
 describe("defaultTeethForType", () => {
   it("gives worm gears a single thread-start, the standard/simplest worm", () => {
     expect(defaultTeethForType("worm")).toBe(1);
@@ -37,6 +67,14 @@ describe("defaultTeethForType", () => {
     expect(defaultTeethForType("shaft")).toBe(0);
     expect(defaultTeethForType("beam")).toBe(0);
     expect(defaultTeethForType("belt")).toBe(0);
+  });
+
+  it("gives joint, bearing, spring, rotor, and track zero teeth too", () => {
+    expect(defaultTeethForType("joint")).toBe(0);
+    expect(defaultTeethForType("bearing")).toBe(0);
+    expect(defaultTeethForType("spring")).toBe(0);
+    expect(defaultTeethForType("rotor")).toBe(0);
+    expect(defaultTeethForType("track")).toBe(0);
   });
 
   it("gives spur/helical/crank gears 20 teeth", () => {
@@ -83,6 +121,19 @@ describe("createGear", () => {
     const belt = createGear("belt", [5, 0, 0]);
     expect(belt.position2).toBeDefined();
     expect(belt.position2).not.toEqual(belt.position);
+  });
+
+  it("gives a joint, spring, and track a second end too (all rod types)", () => {
+    for (const type of ["joint", "spring", "track"] as const) {
+      const gear = createGear(type, [5, 0, 0]);
+      expect(gear.position2).toBeDefined();
+      expect(gear.position2).not.toEqual(gear.position);
+    }
+  });
+
+  it("leaves position2 undefined for bearing and rotor -- single-point accessories, not rods", () => {
+    expect(createGear("bearing", [0, 0, 0]).position2).toBeUndefined();
+    expect(createGear("rotor", [0, 0, 0]).position2).toBeUndefined();
   });
 
   it("leaves position2 undefined for every other type", () => {

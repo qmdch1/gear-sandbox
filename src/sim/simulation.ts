@@ -54,8 +54,8 @@ export function tick(gears: GearInstance[], dt: number, timeScale: number): SimT
     const rotation = broken ? g.rotation : g.rotation + angularVelocity * dt;
     // Purely a rendering aid (see meshing.ts's beltHostRadii doc comment) --
     // recomputed fresh every tick from the live connection graph, not persisted
-    // physics state, so it's fine to skip this for every non-belt gear.
-    const beltRadii = g.type === "belt" ? beltHostRadii(g, gears) : null;
+    // physics state, so it's fine to skip this for every non-belt/track gear.
+    const beltRadii = g.type === "belt" || g.type === "track" ? beltHostRadii(g, gears) : null;
     return {
       ...g,
       durabilityCurrent,

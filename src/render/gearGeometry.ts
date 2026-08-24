@@ -383,6 +383,49 @@ function wheelGeometry(module: number): THREE.BufferGeometry {
   return mergeGeometries(parts);
 }
 
+/** A small support collar -- a coupling-only accessory like `load`, but
+ *  noticeably smaller/thinner (a real bearing just holds a shaft steady, it's
+ *  not a heavy flywheel) and with a visible ring of tiny ball bearings inside
+ *  the collar, so it reads as "smooth-running support," not "another weight." */
+function bearingGeometry(module: number): THREE.BufferGeometry {
+  const outerRadius = module * 1.1;
+  const innerRadius = module * 0.55;
+  const thickness = GEAR_THICKNESS * 0.6;
+  const collar = discWithHole(outerRadius, innerRadius, thickness);
+  const ballRadius = (outerRadius - innerRadius) * 0.35;
+  const ballOrbit = (outerRadius + innerRadius) / 2;
+  const ballCount = 8;
+  const parts: THREE.BufferGeometry[] = [collar];
+  for (let i = 0; i < ballCount; i++) {
+    const angle = (i / ballCount) * Math.PI * 2;
+    const ball = new THREE.SphereGeometry(ballRadius, 8, 6);
+    ball.translate(Math.cos(angle) * ballOrbit, Math.sin(angle) * ballOrbit, 0);
+    parts.push(ball);
+  }
+  return mergeGeometries(parts);
+}
+
+/** A helicopter-style multi-blade rotor -- mechanically a coupling-only output
+ *  accessory exactly like `fan` (attaches onto a host's shaft, spins with it,
+ *  doesn't wear), but with fewer, longer, thinner blades and a taller hub, so
+ *  a rotor-topped build reads as "helicopter," not "desk fan." */
+function rotorGeometry(module: number): THREE.BufferGeometry {
+  const hubRadius = module * 0.7;
+  const hubHeight = GEAR_THICKNESS * 1.6;
+  const hub = discWithHole(hubRadius, hubRadius * 0.35, hubHeight);
+  const bladeCount = 2;
+  const bladeLength = module * 6.5; // long, slender blades -- much longer than a fan's, the classic rotor silhouette
+  const bladeWidth = module * 0.9;
+  const parts: THREE.BufferGeometry[] = [hub];
+  for (let i = 0; i < bladeCount; i++) {
+    const blade = new THREE.BoxGeometry(bladeLength, bladeWidth, GEAR_THICKNESS * 0.3);
+    blade.translate(bladeLength / 2 + hubRadius * 0.6, 0, 0);
+    blade.rotateZ((i / bladeCount) * Math.PI * 2);
+    parts.push(blade);
+  }
+  return mergeGeometries(parts);
+}
+
 /** A rigid coupling rod connecting two OTHER gears at a distance -- unlike every
  *  other type, its real-world length/orientation isn't fixed at construction time
  *  (it depends on where its two endpoints currently are, which can move), so this
@@ -409,6 +452,36 @@ function beamGeometry(module: number): THREE.BufferGeometry {
   return new THREE.BoxGeometry(side, side, 1);
 }
 
+/** A universal joint -- same unit-length-along-Z, stretch-via-scale.z rod
+ *  convention as `shaftGeometry`, but with a small ball bulging at each end
+ *  (slightly overshooting the exact +/-0.5 endpoints, same as a real
+ *  universal joint's housing is always a bit bulkier than the shafts it
+ *  connects) -- reads as "pivots here," distinct from a plain rigid shaft. */
+function jointGeometry(module: number): THREE.BufferGeometry {
+  const rodRadius = module * 0.3;
+  const ballRadius = module * 0.55;
+  const rod = new THREE.CylinderGeometry(rodRadius, rodRadius, 1, 12);
+  rod.rotateX(Math.PI / 2);
+  const ballFront = new THREE.SphereGeometry(ballRadius, 10, 8);
+  ballFront.translate(0, 0, 0.5);
+  const ballBack = new THREE.SphereGeometry(ballRadius, 10, 8);
+  ballBack.translate(0, 0, -0.5);
+  return mergeGeometries([rod, ballFront, ballBack]);
+}
+
+/** A helical coil spring -- same unit-length-along-Z, stretch-via-scale.z rod
+ *  convention as `shaftGeometry`/`beamGeometry`, but wound as an actual coil
+ *  (reusing the same `HelixCurve` the worm's thread rides on) rather than a
+ *  straight rod or bar, so it visibly reads as "flexible strut," not "rigid
+ *  frame member." */
+function springGeometry(module: number): THREE.BufferGeometry {
+  const coilRadius = module * 0.9;
+  const wireRadius = module * 0.18;
+  const turns = 6;
+  const curve = new HelixCurve(coilRadius, 0.94, turns); // slightly short of the full unit span, like shaftGeometry's own convention of leaving a hair of clearance at the very ends
+  return new THREE.TubeGeometry(curve, turns * 16, wireRadius, 8, false);
+}
+
 /** A belt/chain drive -- same unit-length-along-Z, stretch-via-scale.z convention
  *  as `shaftGeometry`/`beamGeometry`, but a wide, thin flat strap (not a round
  *  rod or a square bar) so it reads as "belt/chain," distinct from both. This is
@@ -420,6 +493,29 @@ function beltGeometry(module: number): THREE.BufferGeometry {
   const width = module * 1.0;
   const thickness = module * 0.15;
   return new THREE.BoxGeometry(width, thickness, 1);
+}
+
+/** A tank track -- same unit-length-along-Z, stretch-via-scale.z convention and
+ *  mechanics as `beltGeometry` (see BELT_LIKE_TYPES in meshing.ts), but wider
+ *  and chunkier, with a row of raised tread lugs (grousers) running its
+ *  length -- a flat rubber/chain strap reads as "belt drive," not "tank
+ *  tread," without them. */
+function trackGeometry(module: number): THREE.BufferGeometry {
+  const width = module * 1.6;
+  const thickness = module * 0.25;
+  const band = new THREE.BoxGeometry(width, thickness, 1);
+  const lugCount = 10;
+  const lugWidth = width * 1.15;
+  const lugThickness = thickness * 0.9;
+  const lugDepth = 1 / (lugCount * 2.2); // narrow ridges, evenly spread along the unit length
+  const parts: THREE.BufferGeometry[] = [band];
+  for (let i = 0; i < lugCount; i++) {
+    const z = -0.5 + ((i + 0.5) / lugCount) * 1;
+    const lug = new THREE.BoxGeometry(lugWidth, lugThickness, lugDepth);
+    lug.translate(0, thickness / 2 + lugThickness / 2, z);
+    parts.push(lug);
+  }
+  return mergeGeometries(parts);
 }
 
 /** A single thin strap between two arbitrary WORLD-space points -- the same
@@ -465,7 +561,14 @@ function strandBetween(a: THREE.Vector3, b: THREE.Vector3, module: number): THRE
  *  down that same axis, so offsetting within XZ is both the physically
  *  correct choice for the common case and the visually sensible one even when
  *  it isn't exact. */
-export function beltTangentGeometry(module: number, p1: THREE.Vector3, p2: THREE.Vector3, r1: number, r2: number): THREE.BufferGeometry {
+/** Shared by `beltTangentGeometry` and `trackTangentGeometry`: the two unit
+ *  offset directions (`nTop`/`nBottom`) at which a loop's two strands run
+ *  tangent to both circles -- see the derivation on `beltTangentGeometry`
+ *  above this. Kept as its own pure function purely to avoid duplicating that
+ *  derivation for track (the actual strand geometry each builds from these
+ *  directions differs -- a plain flat strap vs. a lugged tread -- so this is
+ *  a no-behavior-change extraction, not a shared rendering path). */
+function tangentOffsetDirections(p1: THREE.Vector3, p2: THREE.Vector3, r1: number, r2: number): { nTop: THREE.Vector3; nBottom: THREE.Vector3 } {
   const distance = p1.distanceTo(p2);
   const u = p2.clone().sub(p1).normalize();
   let n = new THREE.Vector3().crossVectors(u, new THREE.Vector3(0, 1, 0));
@@ -476,9 +579,53 @@ export function beltTangentGeometry(module: number, p1: THREE.Vector3, p2: THREE
   const s = Math.sqrt(Math.max(0, 1 - k * k));
   const nTop = u.clone().multiplyScalar(k).add(n.clone().multiplyScalar(s));
   const nBottom = u.clone().multiplyScalar(k).add(n.clone().multiplyScalar(-s));
+  return { nTop, nBottom };
+}
 
+export function beltTangentGeometry(module: number, p1: THREE.Vector3, p2: THREE.Vector3, r1: number, r2: number): THREE.BufferGeometry {
+  const { nTop, nBottom } = tangentOffsetDirections(p1, p2, r1, r2);
   const strandTop = strandBetween(p1.clone().addScaledVector(nTop, r1), p2.clone().addScaledVector(nTop, r2), module);
   const strandBottom = strandBetween(p1.clone().addScaledVector(nBottom, r1), p2.clone().addScaledVector(nBottom, r2), module);
+  return mergeGeometries([strandTop, strandBottom]);
+}
+
+/** Same cross-section-and-lugs convention as `trackGeometry`, built directly at
+ *  its final world-space position/orientation/length between two arbitrary
+ *  points -- the tank-tread counterpart of `strandBetween`, the only caller. */
+function trackStrandBetween(a: THREE.Vector3, b: THREE.Vector3, module: number): THREE.BufferGeometry {
+  const width = module * 1.6;
+  const thickness = module * 0.25;
+  const length = Math.max(a.distanceTo(b), 1e-4);
+  const band = new THREE.BoxGeometry(width, thickness, length);
+  const lugCount = Math.max(2, Math.round(length / (module * 2)));
+  const lugWidth = width * 1.15;
+  const lugThickness = thickness * 0.9;
+  const lugDepth = Math.min(length / (lugCount * 2.2), module * 0.5);
+  const parts: THREE.BufferGeometry[] = [band];
+  for (let i = 0; i < lugCount; i++) {
+    const z = -length / 2 + ((i + 0.5) / lugCount) * length;
+    const lug = new THREE.BoxGeometry(lugWidth, lugThickness, lugDepth);
+    lug.translate(0, thickness / 2 + lugThickness / 2, z);
+    parts.push(lug);
+  }
+  const geometry = mergeGeometries(parts);
+  const direction = b.clone().sub(a).normalize();
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), direction);
+  geometry.applyQuaternion(quaternion);
+  const midpoint = a.clone().add(b).multiplyScalar(0.5);
+  geometry.translate(midpoint.x, midpoint.y, midpoint.z);
+  return geometry;
+}
+
+/** The `trackGeometry`/BELT_LIKE_TYPES counterpart of `beltTangentGeometry` --
+ *  same real two-strand external-tangent shape between two sprockets, just
+ *  built from `trackStrandBetween`'s wider, lugged cross-section instead of a
+ *  flat strap. See `beltTangentGeometry`'s doc comment for the tangent-line
+ *  derivation shared by both. */
+export function trackTangentGeometry(module: number, p1: THREE.Vector3, p2: THREE.Vector3, r1: number, r2: number): THREE.BufferGeometry {
+  const { nTop, nBottom } = tangentOffsetDirections(p1, p2, r1, r2);
+  const strandTop = trackStrandBetween(p1.clone().addScaledVector(nTop, r1), p2.clone().addScaledVector(nTop, r2), module);
+  const strandBottom = trackStrandBetween(p1.clone().addScaledVector(nBottom, r1), p2.clone().addScaledVector(nBottom, r2), module);
   return mergeGeometries([strandTop, strandBottom]);
 }
 
@@ -539,5 +686,15 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return beamGeometry(module);
     case "belt":
       return beltGeometry(module);
+    case "joint":
+      return jointGeometry(module);
+    case "bearing":
+      return bearingGeometry(module);
+    case "spring":
+      return springGeometry(module);
+    case "rotor":
+      return rotorGeometry(module);
+    case "track":
+      return trackGeometry(module);
   }
 }

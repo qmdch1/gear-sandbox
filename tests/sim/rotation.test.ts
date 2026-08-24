@@ -136,6 +136,32 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("wheel")).toBeCloseTo(3);
   });
 
+  it("bridges rotation through a JOINT between two shafts whose directions DON'T line up", () => {
+    // A plain shaft-to-shaft coupling requires the two shafts' directions to be
+    // parallel -- a universal joint is specifically for the case where they
+    // aren't (see meshing.ts's jointJoinsAt), e.g. a driveshaft that bends
+    // partway through a suspension linkage.
+    const crank = makeGear({
+      id: "crank", type: "crank", axis: [1, 0, 0], teeth: 20, module: 1,
+      position: [0, 0, 0], angularVelocity: 4,
+    });
+    const shaftA = makeGear({
+      id: "shaftA", type: "shaft", teeth: 0, position: [0, 0, 0], position2: [20, 0, 0],
+    });
+    const joint = makeGear({
+      id: "joint", type: "joint", teeth: 0, position: [20, 0, 0], position2: [20, 10, 0],
+    });
+    const shaftB = makeGear({
+      // Perpendicular to shaftA -- would never couple directly to it.
+      id: "shaftB", type: "shaft", teeth: 0, position: [20, 10, 0], position2: [20, 10, 20],
+    });
+    const gears = [crank, shaftA, joint, shaftB];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("shaftA")).toBeCloseTo(4);
+    expect(angularVelocities.get("joint")).toBeCloseTo(4);
+    expect(angularVelocities.get("shaftB")).toBeCloseTo(4);
+  });
+
   it("drives propagation via the generalized POWER_SOURCE_TYPES check, not a literal 'crank' comparison", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 }),
