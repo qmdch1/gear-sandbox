@@ -10,17 +10,27 @@ function makeGear(overrides: Partial<GearInstance>): GearInstance {
   };
 }
 
+/** Distance from `x` to the nearest whole multiple of `period`. */
+function offLattice(x: number, period: number): number {
+  const m = ((x % period) + period) % period;
+  return Math.min(m, period - m);
+}
+
 describe("tick", () => {
   it("rotates and wears a meshed gear driven by a crank, and reports no diagnostics problems", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
-    // Pass in previousEdgeKeys that already includes the crank-b edge, so phase offset isn't applied on this tick
-    const result = tick({ gears, remoteLinks: [] }, 1, 1, new Set(["b:crank"]));
+    // Settle the mesh phase first (dt = 0 applies the phase offset without advancing
+    // time), so this measures the rotation step alone. Once settled the offset is
+    // exactly 0 on every later tick, so the pair turns purely at its angular velocity.
+    const settled = tick({ gears, remoteLinks: [] }, 0, 1).gears;
+    const before = settled.find((g) => g.id === "b")!;
+    const result = tick({ gears: settled, remoteLinks: [] }, 1, 1);
     const b = result.gears.find((g) => g.id === "b")!;
     expect(b.angularVelocity).toBeCloseTo(-2);
-    expect(b.rotation).toBeCloseTo(-2);
+    expect(b.rotation - before.rotation).toBeCloseTo(-2);
     expect(b.durabilityCurrent).toBeLessThan(100);
     expect(result.diagnostics.unconnectedIds).toEqual([]);
     expect(result.diagnostics.noPowerIds).toEqual([]);
@@ -36,8 +46,8 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
-    const rWith = tick({ gears: withLoad, remoteLinks: [] }, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
-    const rWithout = tick({ gears: withoutLoad, remoteLinks: [] }, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
+    const rWith = tick({ gears: withLoad, remoteLinks: [] }, 1, 1).gears.find((g) => g.id === "b")!;
+    const rWithout = tick({ gears: withoutLoad, remoteLinks: [] }, 1, 1).gears.find((g) => g.id === "b")!;
     expect(rWith.durabilityCurrent).toBeLessThan(rWithout.durabilityCurrent);
   });
 
@@ -46,36 +56,81 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "lonely", teeth: 20, module: 1, position: [1000, 0, 0] }),
     ];
-    const result = tick({ gears, remoteLinks: [] }, 1, 1, new Set());
+    const result = tick({ gears, remoteLinks: [] }, 1, 1);
     expect(result.diagnostics.unconnectedIds.sort()).toEqual(["crank", "lonely"]);
     expect(result.gears.find((g) => g.id === "lonely")!.angularVelocity).toBe(0);
   });
 
-  it("does not re-apply the phase offset to an already-tracked edge, even if its rotation has since drifted out of alignment", () => {
+  it("phase-aligns a newly meshed pair on the very first tick they mesh", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.7 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: 0 }),
     ];
-    const first = tick({ gears, remoteLinks: [] }, 0, 1, new Set());
-    const bAfterFirst = first.gears.find((g) => g.id === "b")!;
+    // dt = 0 isolates the phase-offset jump from the rotation-integration step.
+    const first = tick({ gears, remoteLinks: [] }, 0, 1);
+    const b = first.gears.find((g) => g.id === "b")!;
+    expect(b.rotation).not.toBe(0); // the offset moved it even with zero elapsed time
+  });
 
-    // Simulate "b" having drifted out of phase alignment since the edge was first tracked
-    // (e.g. a stale localStorage load) -- perturb its rotation away from the aligned value.
-    const perturbedGears = first.gears.map((g) => (g.id === "b" ? { ...g, rotation: g.rotation + 1.0 } : g));
+  it("leaves an already-aligned pair exactly where it is -- re-deriving the offset is a no-op", () => {
+    // This is what makes it safe to drop the "new edges only" gate: recomputing the
+    // offset on a settled pair must contribute nothing, or every tick would nudge it.
+    const gears = [
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.7 }),
+      makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: 0 }),
+    ];
+    const settled = tick({ gears, remoteLinks: [] }, 0, 1).gears;
+    const bSettled = settled.find((g) => g.id === "b")!;
+    const again = tick({ gears: settled, remoteLinks: [] }, 0, 1);
+    expect(again.gears.find((g) => g.id === "b")!.rotation).toBe(bSettled.rotation);
+  });
 
-    const knownEdgeTick = tick({ gears: perturbedGears, remoteLinks: [] }, 0, 1, first.edgeKeys); // edge already known -> gate should skip re-alignment
-    const bKnown = knownEdgeTick.gears.find((g) => g.id === "b")!;
-    expect(bKnown.rotation).toBeCloseTo(bAfterFirst.rotation + 1.0); // untouched -- the perturbation survives
+  it("keeps a spinning pair aligned across many ticks instead of accumulating phase error", () => {
+    // Regression guard on the interaction between the phase offset and the rotation
+    // integration: over 600 ticks of real motion, b's rotation must be exactly what
+    // pure integration would give -- the per-tick offset must stay 0 throughout.
+    const gears = [
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.4 }),
+      makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: -1.1 }),
+    ];
+    const dt = 1 / 60;
+    let state = tick({ gears, remoteLinks: [] }, 0, 1).gears; // settle the phase
+    const start = state.find((g) => g.id === "b")!.rotation;
+    for (let i = 0; i < 600; i++) {
+      state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+    }
+    const b = state.find((g) => g.id === "b")!;
+    expect(b.angularVelocity).toBeCloseTo(-2);
+    expect(b.rotation - start).toBeCloseTo(-2 * 600 * dt, 9); // exactly omega * elapsed
+  });
 
-    const newEdgeTick = tick({ gears: perturbedGears, remoteLinks: [] }, 0, 1, new Set()); // edge treated as new -> gate should re-align
-    const bNew = newEdgeTick.gears.find((g) => g.id === "b")!;
-    expect(bNew.rotation).not.toBeCloseTo(bAfterFirst.rotation + 1.0); // corrected -- proves the offset actually applies when ungated
+  it("re-aligns a meshed pair after one gear is perturbed, instead of leaving it stuck out of phase", () => {
+    // The fix for I1. The old code applied the offset only on the tick an edge first
+    // appeared, so dragging an already-meshed gear -- which changes the contact geometry
+    // every frame without changing the edge set -- could never be corrected.
+    const gears = [
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.7 }),
+      makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: 0 }),
+    ];
+    const aligned = tick({ gears, remoteLinks: [] }, 0, 1).gears;
+    const alignedB = aligned.find((g) => g.id === "b")!;
+
+    // Knock b a bit over 1.5 tooth-periods out of phase, as a drag would.
+    const perturbed = aligned.map((g) => (g.id === "b" ? { ...g, rotation: g.rotation + 1.0 } : g));
+    const corrected = tick({ gears: perturbed, remoteLinks: [] }, 0, 1);
+    const correctedB = corrected.gears.find((g) => g.id === "b")!;
+
+    const periodB = (Math.PI * 2) / 10;
+    expect(correctedB.rotation).not.toBeCloseTo(alignedB.rotation + 1.0); // perturbation did NOT survive
+    // and it landed back on an equivalent tooth phase (a whole number of tooth periods
+    // away from the aligned rotation), not just somewhere different
+    expect(offLattice(correctedB.rotation - alignedB.rotation, periodB)).toBeLessThan(1e-9);
   });
 
   it("accumulates a rack's linearPosition over time and leaves other gears' linearPosition undefined", () => {
     const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 });
     const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
-    const result = tick({ gears: [pinion, rack], remoteLinks: [] }, 1, 1, new Set());
+    const result = tick({ gears: [pinion, rack], remoteLinks: [] }, 1, 1);
     const rackAfter = result.gears.find((g) => g.id === "rack")!;
     const pinionAfter = result.gears.find((g) => g.id === "pinion")!;
     expect(rackAfter.linearPosition).toBeCloseTo(10); // omega(1) * pitchRadius(10) * dt(1)

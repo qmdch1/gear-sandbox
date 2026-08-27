@@ -1,5 +1,5 @@
 import type { GearInstance, LayoutState, SimTickResult } from "./types";
-import { buildEdges, classify, edgeKey } from "./graph";
+import { buildEdges, classify } from "./graph";
 import { propagateRotation } from "./rotation";
 import { applyWear } from "./wear";
 import { computeMeshPhaseOffset } from "./meshing";
@@ -36,19 +36,22 @@ function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }
   return result;
 }
 
-export function tick(
-  layout: LayoutState,
-  dt: number,
-  timeScale: number,
-  previousEdgeKeys: ReadonlySet<string>,
-): SimTickResult {
+export function tick(layout: LayoutState, dt: number, timeScale: number): SimTickResult {
   const { gears, remoteLinks } = layout;
   const edges = buildEdges(gears, remoteLinks);
   const byId = new Map(gears.map((g) => [g.id, g] as const));
 
+  // Re-derive the tooth phase for every mesh edge on EVERY tick, not just the tick an
+  // edge first appears. `computeMeshPhaseOffset` returns exactly 0 for a pair that is
+  // already aligned and turning at the ratio `propagateRotation` enforces, so this is
+  // free in steady state. What it buys: dragging an already-meshed gear changes the
+  // contact geometry every frame without changing the edge set, so the old "new edges
+  // only" gate could never correct it; and when several edges appear on the same tick
+  // (loading a layout) each was computed against the others' pre-adjustment rotations,
+  // freezing a residual misalignment down the chain. Both now self-correct.
   const phaseAdjustments = new Map<string, number>();
   for (const edge of edges) {
-    if (edge.kind !== "mesh" || previousEdgeKeys.has(edgeKey(edge))) continue;
+    if (edge.kind !== "mesh") continue;
     const a = byId.get(edge.a)!;
     const b = byId.get(edge.b)!;
     phaseAdjustments.set(b.id, computeMeshPhaseOffset(a, b, edge));
@@ -74,5 +77,5 @@ export function tick(
     return { ...g, durabilityCurrent, broken, rotation, angularVelocity, linearPosition };
   });
 
-  return { gears: updatedGears, diagnostics, edgeKeys: new Set(edges.map(edgeKey)) };
+  return { gears: updatedGears, diagnostics };
 }

@@ -175,24 +175,61 @@ describe("isOverlapping", () => {
   });
 });
 
-function isTooth(theta: number, teeth: number): boolean {
+/** Contact phase in tooth-period units: 0 = a tooth centre points at the contact line,
+ *  0.5 = a gap centre does. */
+function contactPhase(theta: number, teeth: number): number {
   const period = (Math.PI * 2) / teeth;
-  const m = ((theta % period) + period) % period;
-  return m < period / 2;
+  return (((theta % period) + period) % period) / period;
 }
 
+// In the fixtures below `b` sits at +x from `a` and both turn about +y, which puts the
+// a->b direction at local angle 0 in a's frame and the b->a direction at local angle PI
+// in b's -- the same values localAngleOf() derives internally.
+const PHI_A = 0;
+const PHI_B = Math.PI;
+
 describe("computeMeshPhaseOffset", () => {
-  it("produces a complementary tooth/gap phase at the contact point for a parallel-axis pair", () => {
+  it("interleaves the pair: whenever a shows a tooth at the contact line, b shows a gap -- for every tooth, all the way round", () => {
     const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], rotation: 0.4 });
     const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], axis: [0, 1, 0], rotation: -1.1 });
     const edge = evaluatePair(a, b)!;
-    const offset = computeMeshPhaseOffset(a, b, edge);
-    const bFixed = { ...b, rotation: b.rotation + offset };
+    const bAligned = { ...b, rotation: b.rotation + computeMeshPhaseOffset(a, b, edge) };
 
-    const dirAB: [number, number, number] = [1, 0, 0]; // b is at +x from a here
-    const thetaA = Math.atan2(0, 1) - a.rotation; // direction toward b, in a's local frame, minus a's rotation
-    const thetaB = Math.atan2(0, -1) - bFixed.rotation; // direction toward a, in b's local frame
-    expect(isTooth(thetaA, a.teeth)).not.toBe(isTooth(thetaB, b.teeth));
+    const ratio = a.teeth / b.teeth;
+    const periodA = (Math.PI * 2) / a.teeth;
+    // Turning `a` forward by this much brings its next tooth centre onto the contact line.
+    const toFirstToothCentre = (((PHI_A - a.rotation) % periodA) + periodA) % periodA;
+
+    // Walk `a` tooth by tooth through two full revolutions, driving `b` at exactly the
+    // ratio propagateRotation enforces, and check the interleaving holds every time --
+    // not merely at the instant the offset was applied.
+    for (let k = 0; k < a.teeth * 2; k++) {
+      const deltaA = toFirstToothCentre + k * periodA;
+      const aRotation = a.rotation + deltaA;
+      const bRotation = bAligned.rotation - ratio * deltaA; // wB = -(aTeeth/bTeeth) * wA
+      expect(contactPhase(PHI_A - aRotation, a.teeth)).toBeCloseTo(0, 9); // a: tooth centre
+      expect(contactPhase(PHI_B - bRotation, b.teeth)).toBeCloseTo(0.5, 9); // b: gap centre
+    }
+  });
+
+  it("returns exactly zero for a pair already aligned and turning at the meshed ratio", () => {
+    // This invariance is what lets tick() re-derive the offset every frame. If the offset
+    // drifted as the pair span, re-applying it per tick would fight the rotation and
+    // drive the gear backwards.
+    const a0 = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], rotation: 0.4 });
+    const b0 = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], axis: [0, 1, 0], rotation: -1.1 });
+    const edge = evaluatePair(a0, b0)!;
+
+    let a = { ...a0 };
+    let b = { ...b0, rotation: b0.rotation + computeMeshPhaseOffset(a0, b0, edge) };
+    const omegaA = 1;
+    const omegaB = -omegaA * (a0.teeth / b0.teeth);
+    const dt = 1 / 60;
+    for (let step = 0; step < 600; step++) {
+      expect(Math.abs(computeMeshPhaseOffset(a, b, edge))).toBeLessThan(1e-9);
+      a = { ...a, rotation: a.rotation + omegaA * dt };
+      b = { ...b, rotation: b.rotation + omegaB * dt };
+    }
   });
 
   it("produces a complementary phase for a perpendicular-axis (bevel-style) pair too", () => {

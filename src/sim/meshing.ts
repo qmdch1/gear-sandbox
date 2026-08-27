@@ -80,14 +80,36 @@ function localAngleOf(dirWorld: [number, number, number], axis: [number, number,
   return Math.atan2(dot(dirWorld, v), dot(dirWorld, u));
 }
 
-/** The rotation (radians) to ADD to `b.rotation` so that, at the current center-line
- *  direction between `a` and `b`, one gear's tooth pattern shows a tooth exactly where
- *  the other shows a gap (a "complementary half-cycle" phase). With the true-involute
- *  profile (Task 1), setting this once at the moment two gears newly mesh is sufficient
- *  -- involute conjugate action then keeps the phase correct through further rotation
- *  (see spec §2.2; verified for both parallel-axis and perpendicular-axis pairs). Not
- *  meaningful for "chain"/"belt" edges (no direct tooth contact) -- callers should only
- *  invoke this for `edge.kind === "mesh"`. */
+/** The rotation (radians) to ADD to `b.rotation` so that `a`'s and `b`'s tooth patterns
+ *  interleave at their contact point: whenever `a` presents a tooth centre on the centre
+ *  line, `b` presents a gap centre there.
+ *
+ *  Write each gear's "contact phase" as the body-frame angle of the contact direction,
+ *  measured in tooth-period units:
+ *
+ *      aPhase = frac((phiA - a.rotation) / periodA)
+ *      bPhase = frac((phiB - b.rotation) / periodB)
+ *
+ *  Under the ratio `propagateRotation` enforces (wB = -(a.teeth / b.teeth) * wA) these
+ *  drift in OPPOSITE directions at equal rate:
+ *
+ *      d(aPhase)/dt = -wA / periodA        d(bPhase)/dt = +wA / periodA
+ *
+ *  so `bPhase - aPhase` is NOT conserved -- it slews at 2*wA/periodA -- while
+ *  `aPhase + bPhase` IS. Since `a` shows a tooth centre at the contact line exactly when
+ *  aPhase = 0, the interleaving condition is the conserved combination
+ *
+ *      aPhase + bPhase = 0.5   (mod 1)
+ *
+ *  Pinning the non-conserved difference instead lets an aligned pair fall back out of
+ *  phase as it turns (measured: up to 0.45 tooth-periods of interleave error within one
+ *  revolution), and makes this function report a large non-zero offset for a pair that
+ *  is already correctly meshed and spinning -- which would make it unsafe for `tick()`
+ *  to re-derive per frame. With the conserved form an aligned, correctly co-rotating
+ *  pair yields exactly 0, so `tick()` does recompute it every tick.
+ *
+ *  Not meaningful for "chain"/"belt" edges (no direct tooth contact) -- callers should
+ *  only invoke this for `edge.kind === "mesh"`. */
 export function computeMeshPhaseOffset(a: GearInstance, b: GearInstance, edge: MeshEdge): number {
   const dirAB = normalize(sub(b.position, a.position));
   const dirBA: [number, number, number] = [-dirAB[0], -dirAB[1], -dirAB[2]];
@@ -97,7 +119,7 @@ export function computeMeshPhaseOffset(a: GearInstance, b: GearInstance, edge: M
   const periodA = TWO_PI / a.teeth;
   const periodB = TWO_PI / b.teeth;
   const fracA = mod(thetaA, periodA) / periodA;
-  const desiredFracB = mod(fracA + 0.5, 1);
+  const desiredFracB = mod(0.5 - fracA, 1);
   const desiredThetaB = desiredFracB * periodB;
   const bRotationNeeded = phiB - desiredThetaB;
   const rawOffset = bRotationNeeded - b.rotation;

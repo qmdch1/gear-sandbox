@@ -1,12 +1,6 @@
 import type { GearInstance, MeshEdge, RemoteLink, SimDiagnostics } from "./types";
 import { evaluatePair, isOverlapping, pitchRadius } from "./meshing";
 
-/** Order-independent identity for an edge -- used to diff "which edges are new this
- *  tick" without caring which gear ended up as `.a` vs `.b`. */
-export function edgeKey(edge: MeshEdge): string {
-  return [edge.a, edge.b].sort().join(":");
-}
-
 export function buildEdges(gears: GearInstance[], remoteLinks: RemoteLink[] = []): MeshEdge[] {
   const edges: MeshEdge[] = [];
   for (let i = 0; i < gears.length; i++) {
