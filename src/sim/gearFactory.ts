@@ -1,9 +1,13 @@
 import type { GearInstance, GearType } from "./types";
 import { GEAR_DEFS } from "./gearDefs";
 
-/** Bevel/worm gears mesh with a partner only on a *perpendicular* axis (see meshing.ts),
- *  so they need a different default axis than the rest of the parallel-shaft family. */
-export const PERPENDICULAR_AXIS_TYPES = new Set<GearType>(["bevel", "worm", "differential"]);
+/** These types mesh with a partner only on a *perpendicular* axis (see meshing.ts), so
+ *  they need a different default axis than the rest of the parallel-shaft family.
+ *  "rack" belongs here too: its meshing rule requires the rack's travel axis to be
+ *  perpendicular to the pinion's rotation axis, so a rack defaulting to [0, 1, 0] -- the
+ *  same default a freshly placed spur/helical pinion gets -- could never mesh with
+ *  anything placed from the palette, and the UI offers no way to edit an axis by hand. */
+export const PERPENDICULAR_AXIS_TYPES = new Set<GearType>(["bevel", "worm", "differential", "rack"]);
 
 export function defaultAxisForType(type: GearType): [number, number, number] {
   return PERPENDICULAR_AXIS_TYPES.has(type) ? [1, 0, 0] : [0, 1, 0];

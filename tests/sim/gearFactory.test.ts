@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { createGear, defaultAxisForType, defaultTeethForType } from "../../src/sim/gearFactory";
+import { evaluatePair } from "../../src/sim/meshing";
 
 describe("defaultAxisForType", () => {
-  it("gives bevel and worm gears a perpendicular default axis", () => {
+  it("gives bevel, worm, differential and rack objects a perpendicular default axis", () => {
     expect(defaultAxisForType("bevel")).toEqual([1, 0, 0]);
     expect(defaultAxisForType("worm")).toEqual([1, 0, 0]);
+    expect(defaultAxisForType("differential")).toEqual([1, 0, 0]);
+    expect(defaultAxisForType("rack")).toEqual([1, 0, 0]);
   });
 
   it("gives spur/helical/crank/load gears the standard Y axis", () => {
@@ -51,6 +54,22 @@ describe("createGear", () => {
     const rack = createGear("rack", [0, 0, 0]);
     expect(rack.linearPosition).toBe(0);
     expect(rack.teeth).toBeGreaterThan(0);
+  });
+
+  it("produces a rack that can mesh with a palette-placed pinion out of the box", () => {
+    // Regression for "a freshly placed rack can never mesh": the rack meshing rule
+    // demands the rack's travel axis be perpendicular to the pinion's rotation axis, but
+    // a rack used to default to [0, 1, 0] -- exactly the pinion's own default -- so the
+    // pair was unmeshable and the UI has no axis editor to fix it by hand.
+    const pinion = createGear("spur", [0, 0, 0]); // axis [0,1,0], 20 teeth, module 1 -> pitch radius 10
+    const rack = createGear("rack", [0, 0, 10]); // travel line passes one pitch radius away
+    const axisDot = pinion.axis[0] * rack.axis[0] + pinion.axis[1] * rack.axis[1] + pinion.axis[2] * rack.axis[2];
+    expect(axisDot).toBe(0); // perpendicular, as the rack rule requires
+
+    const edge = evaluatePair(pinion, rack);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+    expect(edge!.oneWay).toBe("aToB"); // the pinion drives the rack, never the reverse
   });
 
   it("leaves linearPosition undefined for non-rack types", () => {
