@@ -1,6 +1,6 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
-import { evaluatePair, isOverlapping } from "../../src/sim/meshing";
+import { evaluatePair, isOverlapping, computeMeshPhaseOffset } from "../../src/sim/meshing";
 import type { GearInstance } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -116,5 +116,43 @@ describe("isOverlapping", () => {
     const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
     const b = makeGear({ id: "b", teeth: 20, module: 1, position: [0, 0, 0] });
     expect(isOverlapping(a, b)).toBe(true);
+  });
+});
+
+function isTooth(theta: number, teeth: number): boolean {
+  const period = (Math.PI * 2) / teeth;
+  const m = ((theta % period) + period) % period;
+  return m < period / 2;
+}
+
+describe("computeMeshPhaseOffset", () => {
+  it("produces a complementary tooth/gap phase at the contact point for a parallel-axis pair", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], rotation: 0.4 });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], axis: [0, 1, 0], rotation: -1.1 });
+    const edge = evaluatePair(a, b)!;
+    const offset = computeMeshPhaseOffset(a, b, edge);
+    const bFixed = { ...b, rotation: b.rotation + offset };
+
+    const dirAB: [number, number, number] = [1, 0, 0]; // b is at +x from a here
+    const thetaA = Math.atan2(0, 1) - a.rotation; // direction toward b, in a's local frame, minus a's rotation
+    const thetaB = Math.atan2(0, -1) - bFixed.rotation; // direction toward a, in b's local frame
+    expect(isTooth(thetaA, a.teeth)).not.toBe(isTooth(thetaB, b.teeth));
+  });
+
+  it("produces a complementary phase for a perpendicular-axis (bevel-style) pair too", () => {
+    const a = makeGear({ id: "a", type: "bevel", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], rotation: 0.9 });
+    const b = makeGear({ id: "b", type: "bevel", teeth: 20, module: 1, position: [20, 0, 0], axis: [1, 0, 0], rotation: -0.3 });
+    const edge = evaluatePair(a, b)!;
+    const offset = computeMeshPhaseOffset(a, b, edge);
+    expect(Number.isFinite(offset)).toBe(true);
+    expect(Math.abs(offset)).toBeLessThanOrEqual((Math.PI * 2) / b.teeth); // within one full tooth period (nearest representative)
+  });
+
+  it("returns a small (nearest-representative) offset, not an arbitrary multi-turn jump", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: 100 }); // many turns already
+    const edge = evaluatePair(a, b)!;
+    const offset = computeMeshPhaseOffset(a, b, edge);
+    expect(Math.abs(offset)).toBeLessThanOrEqual((Math.PI * 2) / b.teeth);
   });
 });

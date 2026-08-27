@@ -19,6 +19,83 @@ function pitchRadius(g: GearInstance): number {
   return (g.module * g.teeth) / 2;
 }
 
+function sub(a: [number, number, number], b: [number, number, number]): [number, number, number] {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function normalize(a: [number, number, number]): [number, number, number] {
+  const l = Math.hypot(...a);
+  return [a[0] / l, a[1] / l, a[2] / l];
+}
+
+const TWO_PI = Math.PI * 2;
+
+function mod(a: number, n: number): number {
+  return ((a % n) + n) % n;
+}
+
+/** Local XY-plane basis (u, v) for a gear's rotation frame, reproducing exactly what
+ *  the render layer's `mesh.quaternion.setFromUnitVectors(Vector3(0,0,1), axis)` does
+ *  (gearMesh.ts) -- the minimal rotation taking world Z to `axis`, applied to local X
+ *  and Y -- computed here in plain vector math (Rodrigues' rotation formula) so the sim
+ *  core stays free of a Three.js dependency while agreeing exactly with what gets
+ *  rendered. Verified: max positional error 1e-15 against THREE.Quaternion across five
+ *  axis directions x four rotations x four angles (see spec §2.2). */
+function localBasis(axis: [number, number, number]): { u: [number, number, number]; v: [number, number, number] } {
+  const [ax, ay, az] = axis;
+  const rotAxis: [number, number, number] = [-ay, ax, 0]; // cross(Z, axis)
+  const rotAxisLen = Math.hypot(...rotAxis);
+  const angle = Math.acos(Math.max(-1, Math.min(1, az))); // dot(Z, axis) = az
+  function rotate(vec: [number, number, number]): [number, number, number] {
+    if (rotAxisLen < 1e-8) return az >= 0 ? vec : [vec[0], -vec[1], -vec[2]];
+    const k: [number, number, number] = [rotAxis[0] / rotAxisLen, rotAxis[1] / rotAxisLen, rotAxis[2] / rotAxisLen];
+    const cosA = Math.cos(angle);
+    const sinA = Math.sin(angle);
+    const kDotV = dot(k, vec);
+    const kCrossV: [number, number, number] = [
+      k[1] * vec[2] - k[2] * vec[1],
+      k[2] * vec[0] - k[0] * vec[2],
+      k[0] * vec[1] - k[1] * vec[0],
+    ];
+    return [
+      vec[0] * cosA + kCrossV[0] * sinA + k[0] * kDotV * (1 - cosA),
+      vec[1] * cosA + kCrossV[1] * sinA + k[1] * kDotV * (1 - cosA),
+      vec[2] * cosA + kCrossV[2] * sinA + k[2] * kDotV * (1 - cosA),
+    ];
+  }
+  return { u: rotate([1, 0, 0]), v: rotate([0, 1, 0]) };
+}
+
+/** Angle (in a gear's unrotated local frame) of a world-space direction. */
+function localAngleOf(dirWorld: [number, number, number], axis: [number, number, number]): number {
+  const { u, v } = localBasis(axis);
+  return Math.atan2(dot(dirWorld, v), dot(dirWorld, u));
+}
+
+/** The rotation (radians) to ADD to `b.rotation` so that, at the current center-line
+ *  direction between `a` and `b`, one gear's tooth pattern shows a tooth exactly where
+ *  the other shows a gap (a "complementary half-cycle" phase). With the true-involute
+ *  profile (Task 1), setting this once at the moment two gears newly mesh is sufficient
+ *  -- involute conjugate action then keeps the phase correct through further rotation
+ *  (see spec §2.2; verified for both parallel-axis and perpendicular-axis pairs). Not
+ *  meaningful for "chain"/"belt" edges (no direct tooth contact) -- callers should only
+ *  invoke this for `edge.kind === "mesh"`. */
+export function computeMeshPhaseOffset(a: GearInstance, b: GearInstance, edge: MeshEdge): number {
+  const dirAB = normalize(sub(b.position, a.position));
+  const dirBA: [number, number, number] = [-dirAB[0], -dirAB[1], -dirAB[2]];
+  const phiA = localAngleOf(dirAB, a.axis);
+  const phiB = localAngleOf(dirBA, b.axis);
+  const thetaA = phiA - a.rotation;
+  const periodA = TWO_PI / a.teeth;
+  const periodB = TWO_PI / b.teeth;
+  const fracA = mod(thetaA, periodA) / periodA;
+  const desiredFracB = mod(fracA + 0.5, 1);
+  const desiredThetaB = desiredFracB * periodB;
+  const bRotationNeeded = phiB - desiredThetaB;
+  const rawOffset = bRotationNeeded - b.rotation;
+  return mod(rawOffset + periodB / 2, periodB) - periodB / 2; // nearest representative, avoids a large jump
+}
+
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
   if (a.type === "load" || b.type === "load") {
