@@ -2,6 +2,15 @@ import { describe, it, expect } from "vitest";
 import { serializeLayout, deserializeLayout } from "../../src/persistence/serialize";
 import type { GearInstance, LayoutState } from "../../src/sim/types";
 
+/** A fully-populated, valid gear -- the baseline the rejection tests below mutate. */
+function validGear(): GearInstance {
+  return {
+    id: "a", type: "spur", position: [1, 2, 3], axis: [0, 1, 0],
+    teeth: 20, module: 1, durabilityMax: 100, durabilityCurrent: 87.5,
+    broken: false, rotation: 0.4, angularVelocity: -2,
+  };
+}
+
 describe("serialize/deserialize round-trip", () => {
   it("recovers an identical layout (gears + remoteLinks) after a round trip", () => {
     const layout: LayoutState = {
@@ -37,5 +46,39 @@ describe("serialize/deserialize round-trip", () => {
   it("rejects a save file whose remoteLinks entries are malformed", () => {
     const bad = JSON.stringify({ version: 2, gears: [], remoteLinks: [{ a: "x" }] });
     expect(() => deserializeLayout(bad)).toThrow();
+  });
+
+  it("rejects a gear array containing an element with a missing required field", () => {
+    // The bad element is second, so this also pins that validation covers every element
+    // rather than only the first.
+    const incomplete: Partial<GearInstance> = { ...validGear() };
+    delete incomplete.angularVelocity;
+    const bad = JSON.stringify({ version: 2, gears: [validGear(), incomplete], remoteLinks: [] });
+    expect(() => deserializeLayout(bad)).toThrow();
+  });
+
+  it("rejects a gear whose type is not a known gear type", () => {
+    const bad = JSON.stringify({
+      version: 2,
+      gears: [{ ...validGear(), type: "sprocketeer" }],
+      remoteLinks: [],
+    });
+    expect(() => deserializeLayout(bad)).toThrow();
+  });
+
+  it("rejects a gear whose axis is not a 3-tuple of finite numbers", () => {
+    const badAxes: unknown[] = [
+      [0, 1],                        // too short
+      [0, 1, 0, 0],                  // too long
+      [0, "up", 0],                     // not all numbers
+      [0, Number.NaN, 0],               // JSON renders NaN as null -- still not a number
+      [0, Number.POSITIVE_INFINITY, 0], // JSON renders Infinity as null -- likewise
+      "y",                              // not an array at all
+      null,
+    ];
+    for (const axis of badAxes) {
+      const bad = JSON.stringify({ version: 2, gears: [{ ...validGear(), axis }], remoteLinks: [] });
+      expect(() => deserializeLayout(bad), `axis ${JSON.stringify(axis)} should be rejected`).toThrow();
+    }
   });
 });
