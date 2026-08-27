@@ -7,8 +7,11 @@ import { buildLinkRibbon } from "./chainGeometry";
 const PROBLEM_HIGHLIGHT = new THREE.Color(0xff3b30);
 const PREVIEW_HIGHLIGHT = new THREE.Color(0x2ecc71);
 
+/** Order-independent identity for a remote link, so a pair stored as {a:"x", b:"y"} and
+ *  one stored as {a:"y", b:"x"} resolve to the same ribbon mesh rather than two
+ *  overlapping ones. Matches how the rest of the sim treats a linked pair as unordered. */
 function remoteLinkKey(link: RemoteLink): string {
-  return `${link.a}:${link.b}:${link.kind}`;
+  return `${[link.a, link.b].sort().join(":")}:${link.kind}`;
 }
 
 /** Pure diff: which gears need a new mesh, which stale meshes need removing. */

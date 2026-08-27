@@ -68,4 +68,22 @@ describe("SceneSync", () => {
     sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
     expect(ctx.scene.children.length).toBe(meshCountWithLink - 1);
   });
+
+  it("draws a single ribbon when the same pair is stored in both orders", () => {
+    // A remote link is an unordered pair, so {a,b} and {b,a} are the same connection.
+    // With an unsorted ribbon key they hashed differently and produced two overlapping
+    // ribbon meshes for one physical chain.
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    const gears = [makeGear({ id: "a", type: "sprocket" }), makeGear({ id: "b", type: "sprocket", position: [500, 0, 0] })];
+    sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    const withoutLinks = ctx.scene.children.length;
+
+    sync.sync(
+      gears,
+      [{ a: "a", b: "b", kind: "chain" as const }, { a: "b", b: "a", kind: "chain" as const }],
+      { unconnectedIds: [], noPowerIds: [], overlapPairs: [] },
+    );
+    expect(ctx.scene.children.length).toBe(withoutLinks + 1);
+  });
 });

@@ -58,6 +58,12 @@ new PaletteUI(document.querySelector("#palette")!, (type) =>
 );
 
 function addRemoteLink(a: string, b: string, kind: "chain" | "belt"): void {
+  // A link is an unordered pair, so connecting the same two objects again -- in either
+  // order -- must not stack up duplicate links (and duplicate ribbons) on the layout.
+  const alreadyLinked = remoteLinks.some(
+    (link) => link.kind === kind && ((link.a === a && link.b === b) || (link.a === b && link.b === a)),
+  );
+  if (alreadyLinked) return;
   remoteLinks.push({ a, b, kind });
 }
 
