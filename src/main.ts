@@ -5,6 +5,7 @@ import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
 import { DragControls } from "./interaction/dragControls";
 import { PaletteUI } from "./ui/paletteUI";
+import { LinkModeUI } from "./ui/linkModeUI";
 import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
 import { DurabilityPanel } from "./ui/durabilityPanel";
 import { TimeScaleSlider } from "./ui/timeScaleSlider";
@@ -16,6 +17,10 @@ const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
   <div id="sidebar">
     <div id="palette"></div>
+    <div id="link-mode-buttons">
+      <button id="chain-link-mode">체인 연결 모드</button>
+      <button id="belt-link-mode">벨트 연결 모드</button>
+    </div>
     <div id="save-load"></div>
     <div id="server-sync"></div>
     <label>시간배율 <div id="time-scale"></div></label>
@@ -51,6 +56,24 @@ function addGear(type: GearType, position: [number, number, number]): void {
 
 new PaletteUI(document.querySelector("#palette")!, (type) =>
   addGear(type, [(gears.length % 5) * 3, 0, Math.floor(gears.length / 5) * 3]),
+);
+
+function addRemoteLink(a: string, b: string, kind: "chain" | "belt"): void {
+  remoteLinks.push({ a, b, kind });
+}
+
+const chainLinkMode = new LinkModeUI(
+  document.querySelector<HTMLButtonElement>("#chain-link-mode")!,
+  "sprocket",
+  (id) => gears.find((g) => g.id === id)?.type,
+  (a, b) => addRemoteLink(a, b, "chain"),
+);
+
+const beltLinkMode = new LinkModeUI(
+  document.querySelector<HTMLButtonElement>("#belt-link-mode")!,
+  "pulley",
+  (id) => gears.find((g) => g.id === id)?.type,
+  (a, b) => addRemoteLink(a, b, "belt"),
 );
 
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
@@ -100,6 +123,7 @@ new DragControls({
     if (gear) gear.position = position;
   },
   onSelect: (id) => {
+    if (chainLinkMode.handleSelect(id) || beltLinkMode.handleSelect(id)) return;
     const gear = id ? gears.find((g) => g.id === id) : undefined;
     if (gear) durabilityPanel.show(gear);
     else durabilityPanel.hide();
@@ -122,7 +146,7 @@ function animate(): void {
   const result = tick({ gears, remoteLinks }, dt, timeScale, previousEdgeKeys);
   gears = result.gears;
   previousEdgeKeys = result.edgeKeys;
-  sceneSync.sync(gears, result.diagnostics);
+  sceneSync.sync(gears, remoteLinks, result.diagnostics);
   diagnosticsPanel.render(result.diagnostics);
 
   ctx.controls.update();
