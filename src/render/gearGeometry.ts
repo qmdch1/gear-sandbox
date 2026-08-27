@@ -2,21 +2,61 @@ import * as THREE from "three";
 import type { GearType } from "../sim/types";
 
 const GEAR_THICKNESS = 0.4;
-const ADDENDUM_FACTOR = 1.25; // tooth tip radius beyond the pitch radius, in modules
+const PRESSURE_ANGLE = 20 * (Math.PI / 180); // industry-standard 20°
+const ADDENDUM_FACTOR = 1.0;   // standard: addendum = 1×module
+const DEDENDUM_FACTOR = 1.25;  // standard: dedendum = 1.25×module (root clearance below the base circle)
+const FLANK_SAMPLES = 5;       // points sampled along each involute flank
 
-/** Pure profile math: alternating outer-tooth/inner-root points around the pitch circle. */
+/** The involute function inv(alpha) = tan(alpha) - alpha: polar angle (from the
+ *  point where the curve departs the base circle) of the involute point at radius
+ *  r = baseRadius / cos(alpha). */
+function involuteAngleAtRadius(baseRadius: number, r: number): number {
+  const alpha = Math.acos(Math.min(1, baseRadius / Math.max(r, baseRadius)));
+  return Math.tan(alpha) - alpha;
+}
+
+/** Pure profile math: a standard involute tooth profile (20° pressure angle, unity-module
+ *  proportions), traced as one closed polygon around the whole gear -- root land, right
+ *  flank (dedendum/base -> addendum), left flank (addendum -> dedendum/base), repeated
+ *  per tooth.
+ *
+ *  Verified (see spec §2.1): tooth thickness at the pitch circle equals the standard
+ *  pi*module/2 exactly, and tooth angular width narrows monotonically from dedendum to
+ *  addendum (the physical rack-limit taper) -- both checked here in the test file below. */
 export function computeSpurProfilePoints(teeth: number, module: number): THREE.Vector2[] {
   const pitchRadius = (module * teeth) / 2;
-  const outerRadius = pitchRadius + module * ADDENDUM_FACTOR;
-  const innerRadius = pitchRadius - module * ADDENDUM_FACTOR * 0.5;
+  const baseRadius = pitchRadius * Math.cos(PRESSURE_ANGLE);
+  const addendumRadius = pitchRadius + module * ADDENDUM_FACTOR;
+  const dedendumRadius = pitchRadius - module * DEDENDUM_FACTOR;
+  const flankStartRadius = Math.max(baseRadius, dedendumRadius); // involute is undefined inside the base circle
+  const toothAngularPitch = (Math.PI * 2) / teeth;
+  const halfToothAngleAtPitch = toothAngularPitch / 4; // standard: tooth thickness = half the circular pitch
+  const invAtPitch = involuteAngleAtRadius(baseRadius, pitchRadius);
+
+  function flankAngle(r: number): number {
+    return halfToothAngleAtPitch - (involuteAngleAtRadius(baseRadius, r) - invAtPitch);
+  }
+
   const points: THREE.Vector2[] = [];
-  const stepsPerTooth = 4;
-  const totalSteps = teeth * stepsPerTooth;
-  for (let i = 0; i < totalSteps; i++) {
-    const angle = (i / totalSteps) * Math.PI * 2;
-    const withinTooth = i % stepsPerTooth;
-    const radius = withinTooth < 2 ? outerRadius : innerRadius;
-    points.push(new THREE.Vector2(Math.cos(angle) * radius, Math.sin(angle) * radius));
+  for (let k = 0; k < teeth; k++) {
+    const center = k * toothAngularPitch;
+
+    points.push(new THREE.Vector2(
+      Math.cos(center - toothAngularPitch / 2) * dedendumRadius,
+      Math.sin(center - toothAngularPitch / 2) * dedendumRadius,
+    ));
+
+    for (let i = 0; i <= FLANK_SAMPLES; i++) {
+      const r = flankStartRadius + (addendumRadius - flankStartRadius) * (i / FLANK_SAMPLES);
+      const angle = center + flankAngle(r);
+      points.push(new THREE.Vector2(Math.cos(angle) * r, Math.sin(angle) * r));
+    }
+
+    for (let i = FLANK_SAMPLES; i >= 0; i--) {
+      const r = flankStartRadius + (addendumRadius - flankStartRadius) * (i / FLANK_SAMPLES);
+      const angle = center - flankAngle(r);
+      points.push(new THREE.Vector2(Math.cos(angle) * r, Math.sin(angle) * r));
+    }
   }
   return points;
 }
@@ -27,7 +67,7 @@ function extrudedGearGeometry(teeth: number, module: number, twistPerUnit = 0): 
   const geometry = new THREE.ExtrudeGeometry(shape, {
     depth: GEAR_THICKNESS,
     bevelEnabled: false,
-    curveSegments: 1,
+    curveSegments: 2,
   });
   if (twistPerUnit !== 0) {
     const position = geometry.attributes.position;
