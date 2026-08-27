@@ -7,12 +7,12 @@ const LABELS: Record<GearType, string> = {
   bevel: "베벨 기어",
   worm: "웜 기어",
   load: "부하(플라이휠)",
-  rack: "래크 기어",
-  planetary: "행성 기어",
+  rack: "랙",
+  planetary: "유성기어 세트",
   ratchet: "래칫 기어",
-  sprocket: "스프로켓 기어",
-  pulley: "풀리",
-  differential: "디퍼렌셜 기어",
+  sprocket: "스프로킷(체인용)",
+  pulley: "풀리(벨트용)",
+  differential: "차동장치",
 };
 
 export class PaletteUI {

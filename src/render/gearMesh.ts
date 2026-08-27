@@ -35,7 +35,11 @@ export class GearMeshObject {
     this.mesh.rotation.set(0, 0, 0);
     const axis = new THREE.Vector3(...gear.axis).normalize();
     this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
-    this.mesh.rotateZ(gear.rotation);
+    if (gear.type === "rack") {
+      this.mesh.position.addScaledVector(axis, gear.linearPosition ?? 0);
+    } else {
+      this.mesh.rotateZ(gear.rotation);
+    }
     const ratio = gear.durabilityMax > 0 ? gear.durabilityCurrent / gear.durabilityMax : 1;
     (this.mesh.material as THREE.MeshStandardMaterial).color = colorForDurabilityRatio(gear.broken ? 0 : ratio);
   }

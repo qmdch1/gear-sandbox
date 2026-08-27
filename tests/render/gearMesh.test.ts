@@ -34,4 +34,11 @@ describe("GearMeshObject", () => {
     const material = obj.mesh.material as THREE.MeshStandardMaterial;
     expect(material.color.r).toBeCloseTo(material.color.g, 1); // gray, not red or green
   });
+
+  it("translates a rack along its axis by linearPosition instead of rotating it", () => {
+    const gear = makeGear({ type: "rack", teeth: 8, axis: [1, 0, 0], position: [0, 0, 0], linearPosition: 5, rotation: 99 });
+    const obj = new GearMeshObject(gear);
+    expect(obj.mesh.position.x).toBeCloseTo(5);
+    expect(obj.mesh.rotation.z).toBe(0); // rotation is never applied to a rack, regardless of gear.rotation
+  });
 });

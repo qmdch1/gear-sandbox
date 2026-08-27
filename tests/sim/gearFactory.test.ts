@@ -46,4 +46,15 @@ describe("createGear", () => {
     const bevel = createGear("bevel", [0, 0, 0]);
     expect(bevel.axis).toEqual([1, 0, 0]);
   });
+
+  it("gives a rack a starting linearPosition of 0 and a default teeth count", () => {
+    const rack = createGear("rack", [0, 0, 0]);
+    expect(rack.linearPosition).toBe(0);
+    expect(rack.teeth).toBeGreaterThan(0);
+  });
+
+  it("leaves linearPosition undefined for non-rack types", () => {
+    const spur = createGear("spur", [0, 0, 0]);
+    expect(spur.linearPosition).toBeUndefined();
+  });
 });

@@ -3,7 +3,7 @@ import { GEAR_DEFS } from "./gearDefs";
 
 /** Bevel/worm gears mesh with a partner only on a *perpendicular* axis (see meshing.ts),
  *  so they need a different default axis than the rest of the parallel-shaft family. */
-export const PERPENDICULAR_AXIS_TYPES = new Set<GearType>(["bevel", "worm"]);
+export const PERPENDICULAR_AXIS_TYPES = new Set<GearType>(["bevel", "worm", "differential"]);
 
 export function defaultAxisForType(type: GearType): [number, number, number] {
   return PERPENDICULAR_AXIS_TYPES.has(type) ? [1, 0, 0] : [0, 1, 0];
@@ -11,7 +11,8 @@ export function defaultAxisForType(type: GearType): [number, number, number] {
 
 export function defaultTeethForType(type: GearType): number {
   if (type === "load") return 0;
-  if (type === "worm") return 2; // thread-starts: keep low for a real reduction ratio
+  if (type === "worm") return 2;
+  if (type === "rack") return 8; // visible tooth count along the default-length bar
   return 20;
 }
 
@@ -31,5 +32,6 @@ export function createGear(type: GearType, position: [number, number, number]): 
     broken: false,
     rotation: 0,
     angularVelocity: type === "crank" ? 1 : 0,
+    linearPosition: type === "rack" ? 0 : undefined,
   };
 }
