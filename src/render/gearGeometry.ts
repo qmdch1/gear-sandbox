@@ -16,9 +16,10 @@ function involuteAngleAtRadius(baseRadius: number, r: number): number {
 }
 
 /** Pure profile math: a standard involute tooth profile (20° pressure angle, unity-module
- *  proportions), traced as one closed polygon around the whole gear -- root land, right
- *  flank (dedendum/base -> addendum), left flank (addendum -> dedendum/base), repeated
- *  per tooth.
+ *  proportions), traced as one closed polygon around the whole gear -- root land, left
+ *  flank (dedendum/base -> addendum), right flank (addendum -> dedendum/base), repeated
+ *  per tooth. The flank order matters: it keeps the boundary a simple (non-self-
+ *  intersecting) polygon, which triangulation depends on.
  *
  *  Verified (see spec §2.1): tooth thickness at the pitch circle equals the standard
  *  pi*module/2 exactly, and tooth angular width narrows monotonically from dedendum to
@@ -46,15 +47,21 @@ export function computeSpurProfilePoints(teeth: number, module: number): THREE.V
       Math.sin(center - toothAngularPitch / 2) * dedendumRadius,
     ));
 
+    // Left flank, dedendum/base -> addendum. It MUST be the flank drawn first: the root
+    // point pushed above sits on the LEFT of the tooth centre, so emitting the right
+    // flank first would make the traced boundary jump across the tooth and cross itself
+    // (a bow-tie) once per tooth.
     for (let i = 0; i <= FLANK_SAMPLES; i++) {
       const r = flankStartRadius + (addendumRadius - flankStartRadius) * (i / FLANK_SAMPLES);
-      const angle = center + flankAngle(r);
+      const angle = center - flankAngle(r);
       points.push(new THREE.Vector2(Math.cos(angle) * r, Math.sin(angle) * r));
     }
 
+    // Right flank, addendum -> dedendum/base (mirror of the left flank), landing next to
+    // the following tooth's root point.
     for (let i = FLANK_SAMPLES; i >= 0; i--) {
       const r = flankStartRadius + (addendumRadius - flankStartRadius) * (i / FLANK_SAMPLES);
-      const angle = center - flankAngle(r);
+      const angle = center + flankAngle(r);
       points.push(new THREE.Vector2(Math.cos(angle) * r, Math.sin(angle) * r));
     }
   }
