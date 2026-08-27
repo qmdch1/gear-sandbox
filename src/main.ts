@@ -34,10 +34,13 @@ const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-
 let gears: GearInstance[] = [];
 let remoteLinks: RemoteLink[] = [];
 try {
-  gears = loadFromLocalStorage() ?? [];
+  const loaded = loadFromLocalStorage();
+  if (loaded) {
+    gears = loaded.gears;
+    remoteLinks = loaded.remoteLinks;
+  }
 } catch (err) {
   console.error("Failed to load saved layout from localStorage; starting with an empty layout.", err);
-  gears = [];
 }
 let timeScale = 1;
 let previousEdgeKeys = new Set<string>();
@@ -53,13 +56,16 @@ new PaletteUI(document.querySelector("#palette")!, (type) =>
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
 
 new SaveLoadPanel(document.querySelector("#save-load")!, {
-  save: () => saveToLocalStorage(gears),
+  save: () => saveToLocalStorage({ gears, remoteLinks }),
   load: () => {
     const loaded = loadFromLocalStorage();
-    if (loaded) gears = loaded;
+    if (loaded) {
+      gears = loaded.gears;
+      remoteLinks = loaded.remoteLinks;
+    }
   },
   exportFile: () => {
-    const blob = exportToFile(gears);
+    const blob = exportToFile({ gears, remoteLinks });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -69,7 +75,9 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
   },
   importFile: async (file) => {
     try {
-      gears = await importFromFile(file);
+      const loaded = await importFromFile(file);
+      gears = loaded.gears;
+      remoteLinks = loaded.remoteLinks;
     } catch (err) {
       console.error("Failed to import gear layout file", err);
     }

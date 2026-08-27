@@ -1,8 +1,11 @@
-import type { GearInstance, GearType } from "../sim/types";
+import type { GearInstance, GearType, LayoutState, RemoteLink } from "../sim/types";
 
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
-const GEAR_TYPES = new Set<GearType>(["spur", "helical", "crank", "bevel", "worm", "load"]);
+const GEAR_TYPES = new Set<GearType>([
+  "spur", "helical", "crank", "bevel", "worm", "load",
+  "rack", "planetary", "ratchet", "sprocket", "pulley", "differential",
+]);
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
@@ -28,15 +31,22 @@ function isValidGear(value: unknown): value is GearInstance {
     isFiniteNumber(g.durabilityCurrent) &&
     typeof g.broken === "boolean" &&
     isFiniteNumber(g.rotation) &&
-    isFiniteNumber(g.angularVelocity)
+    isFiniteNumber(g.angularVelocity) &&
+    (g.linearPosition === undefined || isFiniteNumber(g.linearPosition))
   );
 }
 
-export function serializeGears(gears: GearInstance[]): string {
-  return JSON.stringify({ version: SCHEMA_VERSION, gears }, null, 2);
+function isValidRemoteLink(value: unknown): value is RemoteLink {
+  if (typeof value !== "object" || value === null) return false;
+  const l = value as Record<string, unknown>;
+  return typeof l.a === "string" && typeof l.b === "string" && (l.kind === "chain" || l.kind === "belt");
 }
 
-export function deserializeGears(json: string): GearInstance[] {
+export function serializeLayout(layout: LayoutState): string {
+  return JSON.stringify({ version: SCHEMA_VERSION, gears: layout.gears, remoteLinks: layout.remoteLinks }, null, 2);
+}
+
+export function deserializeLayout(json: string): LayoutState {
   const parsed = JSON.parse(json);
   if (typeof parsed !== "object" || parsed === null || !Array.isArray(parsed.gears)) {
     throw new Error("Invalid gear-sandbox save file");
@@ -44,5 +54,10 @@ export function deserializeGears(json: string): GearInstance[] {
   if (!parsed.gears.every(isValidGear)) {
     throw new Error("Invalid gear-sandbox save file");
   }
-  return parsed.gears as GearInstance[];
+  // v1 saves have no `remoteLinks` field at all -- default to empty rather than reject them.
+  const remoteLinks = parsed.remoteLinks === undefined ? [] : parsed.remoteLinks;
+  if (!Array.isArray(remoteLinks) || !remoteLinks.every(isValidRemoteLink)) {
+    throw new Error("Invalid gear-sandbox save file");
+  }
+  return { gears: parsed.gears as GearInstance[], remoteLinks: remoteLinks as RemoteLink[] };
 }
