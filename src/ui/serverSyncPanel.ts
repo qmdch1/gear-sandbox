@@ -1,4 +1,4 @@
-import type { GearInstance } from "../sim/types";
+import type { LayoutState } from "../sim/types";
 import {
   listServerLayouts,
   saveNewServerLayout,
@@ -8,8 +8,8 @@ import {
 } from "../persistence/serverClient";
 
 export interface ServerSyncApi {
-  getGears(): GearInstance[];
-  applyLoadedGears(gears: GearInstance[]): void;
+  getLayout(): LayoutState;
+  applyLoadedLayout(layout: LayoutState): void;
 }
 
 export class ServerSyncPanel {
@@ -64,7 +64,7 @@ export class ServerSyncPanel {
     const name = this.nameInput.value.trim();
     if (!name) return;
     try {
-      const summary = await saveNewServerLayout(name, this.api.getGears());
+      const summary = await saveNewServerLayout(name, this.api.getLayout());
       this.currentId = summary.id;
       await this.refresh();
     } catch (err) {
@@ -75,7 +75,7 @@ export class ServerSyncPanel {
   private async overwrite(): Promise<void> {
     if (!this.currentId) return;
     try {
-      await updateServerLayout(this.currentId, this.nameInput.value.trim() || "이름 없음", this.api.getGears());
+      await updateServerLayout(this.currentId, this.nameInput.value.trim() || "이름 없음", this.api.getLayout());
       await this.refresh();
     } catch (err) {
       console.error("Failed to overwrite server layout", err);
@@ -87,7 +87,7 @@ export class ServerSyncPanel {
       const detail = await fetchServerLayout(id);
       this.currentId = detail.id;
       this.nameInput.value = detail.name;
-      this.api.applyLoadedGears(detail.gears);
+      this.api.applyLoadedLayout(detail); // LayoutDetail structurally contains {gears, remoteLinks}
     } catch (err) {
       console.error("Failed to load server layout", err);
     }

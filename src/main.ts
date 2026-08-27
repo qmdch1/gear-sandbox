@@ -85,9 +85,10 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
 });
 
 new ServerSyncPanel(document.querySelector("#server-sync")!, {
-  getGears: () => gears,
-  applyLoadedGears: (loaded) => {
-    gears = loaded;
+  getLayout: () => ({ gears, remoteLinks }),
+  applyLoadedLayout: (loaded) => {
+    gears = loaded.gears;
+    remoteLinks = loaded.remoteLinks;
   },
 });
 

@@ -10,7 +10,7 @@ describe("ServerSyncPanel", () => {
 
   it("renders the server layout list on construction", async () => {
     const container = document.createElement("div");
-    new ServerSyncPanel(container, { getGears: () => [], applyLoadedGears: () => {} });
+    new ServerSyncPanel(container, { getLayout: () => ({ gears: [], remoteLinks: [] }), applyLoadedLayout: () => {} });
     await Promise.resolve();
     await Promise.resolve();
     expect(container.textContent).toContain("saved-a");
@@ -18,16 +18,16 @@ describe("ServerSyncPanel", () => {
 
   it("applies the fetched gears when a saved layout's load button is clicked", async () => {
     vi.spyOn(serverClient, "fetchServerLayout").mockResolvedValue({
-      id: "1", name: "saved-a", updatedAt: "t1", gears: [{ id: "g" } as unknown as import("../../src/sim/types").GearInstance],
+      id: "1", name: "saved-a", updatedAt: "t1", gears: [{ id: "g" } as unknown as import("../../src/sim/types").GearInstance], remoteLinks: [],
     });
-    const applyLoadedGears = vi.fn();
+    const applyLoadedLayout = vi.fn();
     const container = document.createElement("div");
-    new ServerSyncPanel(container, { getGears: () => [], applyLoadedGears });
+    new ServerSyncPanel(container, { getLayout: () => ({ gears: [], remoteLinks: [] }), applyLoadedLayout });
     await Promise.resolve();
     await Promise.resolve();
     (container.querySelector("li button") as HTMLElement).click();
     await Promise.resolve();
     await Promise.resolve();
-    expect(applyLoadedGears).toHaveBeenCalledWith([{ id: "g" }]);
+    expect(applyLoadedLayout).toHaveBeenCalledWith({ id: "1", name: "saved-a", updatedAt: "t1", gears: [{ id: "g" }], remoteLinks: [] });
   });
 });

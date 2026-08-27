@@ -1,4 +1,4 @@
-import type { GearInstance } from "../sim/types";
+import type { LayoutState } from "../sim/types";
 
 export interface LayoutSummary {
   id: string;
@@ -6,9 +6,7 @@ export interface LayoutSummary {
   updatedAt: string;
 }
 
-export interface LayoutDetail extends LayoutSummary {
-  gears: GearInstance[];
-}
+export interface LayoutDetail extends LayoutSummary, LayoutState {}
 
 async function parseOrThrow(res: Response): Promise<any> {
   const body = await res.json().catch(() => ({}));
@@ -24,22 +22,22 @@ export async function fetchServerLayout(id: string): Promise<LayoutDetail> {
   return parseOrThrow(await fetch(`/api/layouts/${id}`));
 }
 
-export async function saveNewServerLayout(name: string, gears: GearInstance[]): Promise<LayoutSummary> {
+export async function saveNewServerLayout(name: string, layout: LayoutState): Promise<LayoutSummary> {
   return parseOrThrow(
     await fetch("/api/layouts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, gears }),
+      body: JSON.stringify({ name, gears: layout.gears, remoteLinks: layout.remoteLinks }),
     }),
   );
 }
 
-export async function updateServerLayout(id: string, name: string, gears: GearInstance[]): Promise<LayoutSummary> {
+export async function updateServerLayout(id: string, name: string, layout: LayoutState): Promise<LayoutSummary> {
   return parseOrThrow(
     await fetch(`/api/layouts/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, gears }),
+      body: JSON.stringify({ name, gears: layout.gears, remoteLinks: layout.remoteLinks }),
     }),
   );
 }

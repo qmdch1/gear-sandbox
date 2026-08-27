@@ -9,7 +9,7 @@ export function createApp(db: Database.Database): express.Express {
   app.use(express.json({ limit: "5mb" }));
 
   app.post("/api/layouts", (req, res) => {
-    const { name, gears } = req.body ?? {};
+    const { name, gears, remoteLinks } = req.body ?? {};
     if (typeof name !== "string" || !name.trim() || !Array.isArray(gears)) {
       res.status(400).json({ error: "name (string) and gears (array) are required" });
       return;
@@ -18,7 +18,7 @@ export function createApp(db: Database.Database): express.Express {
     const now = new Date().toISOString();
     db.prepare(
       "INSERT INTO layouts (id, name, user_id, gears_json, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)",
-    ).run(id, name, JSON.stringify(gears), now, now);
+    ).run(id, name, JSON.stringify({ gears, remoteLinks: remoteLinks ?? [] }), now, now);
     res.status(201).json({ id, name, updatedAt: now });
   });
 
@@ -35,7 +35,11 @@ export function createApp(db: Database.Database): express.Express {
       res.status(404).json({ error: "layout not found" });
       return;
     }
-    res.json({ id: row.id, name: row.name, gears: JSON.parse(row.gearsJson), updatedAt: row.updatedAt });
+    const stored = JSON.parse(row.gearsJson);
+    // `stored` is either a v1 plain gears array (pre-remoteLinks) or a v2 { gears, remoteLinks } object.
+    const gears = Array.isArray(stored) ? stored : stored.gears;
+    const remoteLinks = Array.isArray(stored) ? [] : (stored.remoteLinks ?? []);
+    res.json({ id: row.id, name: row.name, gears, remoteLinks, updatedAt: row.updatedAt });
   });
 
   app.put("/api/layouts/:id", (req, res) => {
@@ -44,20 +48,17 @@ export function createApp(db: Database.Database): express.Express {
       res.status(404).json({ error: "layout not found" });
       return;
     }
-    const { name, gears } = req.body ?? {};
+    const { name, gears, remoteLinks } = req.body ?? {};
     if (!Array.isArray(gears)) {
       res.status(400).json({ error: "gears (array) is required" });
       return;
     }
     const now = new Date().toISOString();
+    const payload = JSON.stringify({ gears, remoteLinks: remoteLinks ?? [] });
     if (typeof name === "string" && name.trim()) {
-      db.prepare("UPDATE layouts SET name = ?, gears_json = ?, updated_at = ? WHERE id = ?").run(
-        name, JSON.stringify(gears), now, req.params.id,
-      );
+      db.prepare("UPDATE layouts SET name = ?, gears_json = ?, updated_at = ? WHERE id = ?").run(name, payload, now, req.params.id);
     } else {
-      db.prepare("UPDATE layouts SET gears_json = ?, updated_at = ? WHERE id = ?").run(
-        JSON.stringify(gears), now, req.params.id,
-      );
+      db.prepare("UPDATE layouts SET gears_json = ?, updated_at = ? WHERE id = ?").run(payload, now, req.params.id);
     }
     const row = db.prepare("SELECT name FROM layouts WHERE id = ?").get(req.params.id) as { name: string };
     res.json({ id: req.params.id, name: row.name, updatedAt: now });

@@ -14,7 +14,7 @@ describe("serverClient", () => {
     const summary = { id: "1", name: "a", updatedAt: "now" };
     const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => summary });
     vi.stubGlobal("fetch", fetchMock);
-    expect(await saveNewServerLayout("a", [])).toEqual(summary);
+    expect(await saveNewServerLayout("a", { gears: [], remoteLinks: [] })).toEqual(summary);
     expect(fetchMock).toHaveBeenCalledWith("/api/layouts", expect.objectContaining({ method: "POST" }));
   });
 

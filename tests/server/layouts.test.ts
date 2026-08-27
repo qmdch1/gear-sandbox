@@ -3,12 +3,15 @@ import request from "supertest";
 import { openDb } from "../../server/db";
 import { createApp } from "../../server/app";
 import type express from "express";
+import type Database from "better-sqlite3";
 
 describe("layouts API", () => {
   let app: express.Express;
+  let db: Database.Database;
 
   beforeEach(() => {
-    app = createApp(openDb(":memory:"));
+    db = openDb(":memory:");
+    app = createApp(db);
   });
 
   it("creates a layout and returns its id", async () => {
@@ -57,5 +60,23 @@ describe("layouts API", () => {
   it("404s when updating a layout that doesn't exist", async () => {
     const res = await request(app).put("/api/layouts/does-not-exist").send({ gears: [] });
     expect(res.status).toBe(404);
+  });
+
+  it("round-trips remoteLinks through save and load, alongside gears", async () => {
+    const created = await request(app)
+      .post("/api/layouts")
+      .send({ name: "with-links", gears: [], remoteLinks: [{ a: "x", b: "y", kind: "chain" }] })
+      .expect(201);
+    const fetched = await request(app).get(`/api/layouts/${created.body.id}`).expect(200);
+    expect(fetched.body.remoteLinks).toEqual([{ a: "x", b: "y", kind: "chain" }]);
+  });
+
+  it("defaults remoteLinks to [] when loading a layout saved before this field existed", async () => {
+    // Simulates a pre-v2 row: gears_json is a bare array, not {gears, remoteLinks}.
+    db.prepare(
+      "INSERT INTO layouts (id, name, user_id, gears_json, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)",
+    ).run("legacy-1", "legacy", JSON.stringify([]), "2020-01-01", "2020-01-01");
+    const fetched = await request(app).get("/api/layouts/legacy-1").expect(200);
+    expect(fetched.body.remoteLinks).toEqual([]);
   });
 });
