@@ -78,3 +78,39 @@ describe("propagateRotation", () => {
     expect(angularVelocities.get("end")).toBe(0);
   });
 });
+
+describe("v2 propagation rules", () => {
+  it("transmits chain rotation in the SAME direction (not reversed, unlike a direct gear mesh)", () => {
+    const gears = [
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
+      makeGear({ id: "sprocket", type: "sprocket", teeth: 10, module: 1, position: [500, 0, 0] }),
+    ];
+    // manually construct the chain edge the way buildEdges(gears, remoteLinks) would
+    const edges = [{ a: "crank", b: "sprocket", kind: "chain" as const, ratio: 2, oneWay: "none" as const }];
+    const { angularVelocities } = propagateRotation(gears, edges);
+    expect(angularVelocities.get("sprocket")).toBeCloseTo(2); // same sign as the crank, scaled by ratio
+  });
+
+  it("converts a driving pinion's angular velocity into a rack's linear velocity", () => {
+    const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 });
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
+    const gears = [pinion, rack];
+    const { angularVelocities, linearVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("rack")).toBe(0); // a rack never has an angular velocity
+    expect(linearVelocities.get("rack")).toBeCloseTo(2 * 10); // omega * pinion pitch radius (teeth=20,module=1 -> r=10)
+  });
+
+  it("gives a differential's two coupled output shafts the same speed as the input (locked-differential simplification, spec §3.6)", () => {
+    const diff = makeGear({ id: "diff", type: "differential", teeth: 30, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const inputBevel = makeGear({
+      id: "in", type: "crank", teeth: 15, module: 1, position: [22.5, 0, 0], axis: [1, 0, 0], angularVelocity: 4,
+    });
+    const outputA = makeGear({ id: "outA", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const outputB = makeGear({ id: "outB", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const gears = [diff, inputBevel, outputA, outputB];
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    const diffSpeed = angularVelocities.get("diff")!;
+    expect(angularVelocities.get("outA")).toBeCloseTo(diffSpeed);
+    expect(angularVelocities.get("outB")).toBeCloseTo(diffSpeed);
+  });
+});
