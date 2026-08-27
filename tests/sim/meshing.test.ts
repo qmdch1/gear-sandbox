@@ -90,6 +90,62 @@ describe("evaluatePair", () => {
   });
 });
 
+describe("v2 object types", () => {
+  it("meshes a planetary set with a spur gear using the same parallel-axis rule as spur-to-spur", () => {
+    const planetary = makeGear({ id: "p", type: "planetary", teeth: 40, module: 1, position: [0, 0, 0] });
+    const spur = makeGear({ id: "s", teeth: 10, module: 1, position: [25, 0, 0] }); // (40+10)/2=25
+    const edge = evaluatePair(planetary, spur);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+  });
+
+  it("lets a driving gear turn a ratchet but marks the edge one-way so the ratchet can't back-drive it", () => {
+    const driver = makeGear({ id: "d", teeth: 20, module: 1, position: [0, 0, 0] });
+    const ratchet = makeGear({ id: "r", type: "ratchet", teeth: 10, module: 1, position: [15, 0, 0] });
+    const edge = evaluatePair(driver, ratchet)!;
+    expect(edge.oneWay).toBe("aToB"); // a=driver, b=ratchet: only a->b allowed
+  });
+
+  it("does not mesh two ratchets with each other", () => {
+    const r1 = makeGear({ id: "r1", type: "ratchet", teeth: 10, module: 1, position: [0, 0, 0] });
+    const r2 = makeGear({ id: "r2", type: "ratchet", teeth: 10, module: 1, position: [15, 0, 0] });
+    expect(evaluatePair(r1, r2)).toBeNull();
+  });
+
+  it("meshes a rack with a perpendicular-axis pinion at the correct line distance, one-way from the pinion", () => {
+    const pinion = makeGear({ id: "pin", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    // pinion pitch radius = 10; rack's travel line runs along x=[1,0,0]... place the rack so
+    // its axis (travel direction) is perpendicular to the pinion's rotation axis, offset by
+    // the pinion's pitch radius along z.
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
+    const edge = evaluatePair(pinion, rack)!;
+    expect(edge).not.toBeNull();
+    expect(edge.oneWay).toBe("aToB"); // a=pinion drives b=rack
+  });
+
+  it("does not mesh two racks with each other", () => {
+    const r1 = makeGear({ id: "r1", type: "rack", teeth: 8, module: 1, position: [0, 0, 0], axis: [1, 0, 0] });
+    const r2 = makeGear({ id: "r2", type: "rack", teeth: 8, module: 1, position: [5, 0, 0], axis: [1, 0, 0] });
+    expect(evaluatePair(r1, r2)).toBeNull();
+  });
+
+  it("meshes a differential's input like a bevel gear (perpendicular axis, pitch-radius-sum distance)", () => {
+    const diff = makeGear({ id: "diff", type: "differential", teeth: 30, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const inputBevel = makeGear({ id: "in", type: "bevel", teeth: 15, module: 1, position: [22.5, 0, 0], axis: [1, 0, 0] });
+    const edge = evaluatePair(diff, inputBevel);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+  });
+
+  it("couples a differential's two output shafts as coincident 1:1 couplings, same as a load object", () => {
+    const diff = makeGear({ id: "diff", type: "differential", teeth: 30, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const outputA = makeGear({ id: "outA", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const edge = evaluatePair(diff, outputA)!;
+    expect(edge.kind).toBe("coupling");
+    expect(edge.ratio).toBe(1);
+  });
+});
+
 describe("isOverlapping", () => {
   it("flags two gears placed closer than a valid mesh distance", () => {
     const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });

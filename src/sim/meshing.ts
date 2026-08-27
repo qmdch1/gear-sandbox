@@ -5,7 +5,7 @@ const PARALLEL_DOT_THRESHOLD = 0.98;  // |axis dot| above this => parallel axes
 const PERP_DOT_THRESHOLD = 0.1;       // |axis dot| below this => perpendicular axes
 const COUPLING_DISTANCE_TOLERANCE = 0.05;
 
-const PARALLEL_FAMILY = new Set<GearInstance["type"]>(["spur", "helical", "crank"]);
+const PARALLEL_FAMILY = new Set<GearInstance["type"]>(["spur", "helical", "crank", "planetary"]);
 
 function dist(a: [number, number, number], b: [number, number, number]): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -13,6 +13,14 @@ function dist(a: [number, number, number], b: [number, number, number]): number 
 
 function dot(a: [number, number, number], b: [number, number, number]): number {
   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+/** Perpendicular distance from point `p` to the infinite line through `origin` in direction `dir` (unit vector). */
+function distanceToLine(p: [number, number, number], origin: [number, number, number], dir: [number, number, number]): number {
+  const rel: [number, number, number] = [p[0] - origin[0], p[1] - origin[1], p[2] - origin[2]];
+  const along = dot(rel, dir);
+  const closest: [number, number, number] = [origin[0] + dir[0] * along, origin[1] + dir[1] * along, origin[2] + dir[2] * along];
+  return dist(p, closest);
 }
 
 function pitchRadius(g: GearInstance): number {
@@ -98,14 +106,35 @@ export function computeMeshPhaseOffset(a: GearInstance, b: GearInstance, edge: M
 
 /** Returns the mesh/coupling edge between two gears, or null if they don't connect. */
 export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null {
-  if (a.type === "load" || b.type === "load") {
-    if (a.type === "load" && b.type === "load") return null; // two load objects never couple
-    if (dist(a.position, b.position) > COUPLING_DISTANCE_TOLERANCE) return null;
-    if (Math.abs(dot(a.axis, b.axis)) < PARALLEL_DOT_THRESHOLD) return null;
-    return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+  // (1) Rack check first: a rack that happens to be coincident with a load/differential
+  // must not be wrongly matched as a coincident coupling by step (2) below.
+  const rackInvolved = a.type === "rack" || b.type === "rack";
+  if (rackInvolved) {
+    if (a.type === "rack" && b.type === "rack") return null; // two racks don't mesh with each other
+    const [rack, pinion] = a.type === "rack" ? [a, b] : [b, a];
+    if (pinion.type === "load" || pinion.type === "rack") return null; // only a toothed pinion can drive a rack
+    const perpendicular = Math.abs(dot(rack.axis, pinion.axis)) < PERP_DOT_THRESHOLD;
+    const linePitchDistance = Math.abs(distanceToLine(pinion.position, rack.position, rack.axis) - pitchRadius(pinion));
+    if (!perpendicular || linePitchDistance > pitchRadius(pinion) * MESH_TOLERANCE) return null;
+    const oneWay: MeshEdge["oneWay"] = rack === a ? "bToA" : "aToB"; // only the pinion drives the rack
+    return { a: a.id, b: b.id, kind: "mesh", ratio: 1, oneWay };
   }
 
-  // A worm's driving shaft attaches directly (coincident position, same axis) to
+  // (2) Generalized load/differential coincident-coupling block: both resolve as 1:1
+  // couplings when coincident (same position and axis).
+  if (a.type === "load" || b.type === "load" || a.type === "differential" || b.type === "differential") {
+    const bothNonMeshing = (a.type === "load" || a.type === "differential") && (b.type === "load" || b.type === "differential");
+    if (bothNonMeshing) return null;
+    if (Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD && dist(a.position, b.position) <= COUPLING_DISTANCE_TOLERANCE) {
+      return { a: a.id, b: b.id, kind: "coupling", ratio: 1, oneWay: "none" };
+    }
+    // Loads can only couple, not mesh; if they're not coincident, they can't interact.
+    const loadsInvolved = a.type === "load" || b.type === "load";
+    if (loadsInvolved && dist(a.position, b.position) > COUPLING_DISTANCE_TOLERANCE) return null;
+    // Differentials can mesh even if not coincident for coupling; fall through to mesh checks.
+  }
+
+  // (3) A worm's driving shaft attaches directly (coincident position, same axis) to
   // whatever powers it -- in this simplified model a worm has no separate "input
   // tooth mesh," so without this it could never receive rotation at all (its only
   // other rule, below, is a ONE-WAY mesh *out* toward its wheel). This coupling
@@ -121,6 +150,8 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
     // one-way mesh check below, which covers the worm-to-wheel case.
   }
 
+  // (4) Compute distance and axis metrics for all remaining parallel-family and
+  // one-way checks below.
   const centerDistance = dist(a.position, b.position);
   const axisDot = dot(a.axis, b.axis);
   const expected = pitchRadius(a) + pitchRadius(b);
@@ -132,8 +163,19 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
     return { a: a.id, b: b.id, kind: "mesh", ratio: a.teeth / b.teeth, oneWay: "none" };
   }
 
+  const ratchetInvolved = a.type === "ratchet" || b.type === "ratchet";
+  if (ratchetInvolved && !bothParallelFamily) {
+    const bothRatchet = a.type === "ratchet" && b.type === "ratchet";
+    if (bothRatchet) return null; // two ratchets never usefully mesh with each other
+    if (Math.abs(axisDot) < PARALLEL_DOT_THRESHOLD || !withinDistance) return null;
+    const oneWay: MeshEdge["oneWay"] = a.type === "ratchet" ? "bToA" : "aToB"; // the non-ratchet side can drive; the ratchet cannot back-drive it
+    return { a: a.id, b: b.id, kind: "mesh", ratio: a.teeth / b.teeth, oneWay };
+  }
+
+  // (5) Perpendicular-axis meshes: worm-to-wheel (one-way) and bevel/differential
+  // (both directions).
   const wormPair = (a.type === "worm") !== (b.type === "worm");
-  const bevelInvolved = a.type === "bevel" || b.type === "bevel";
+  const bevelInvolved = a.type === "bevel" || b.type === "bevel" || a.type === "differential" || b.type === "differential";
   if (wormPair || bevelInvolved) {
     if (Math.abs(axisDot) > PERP_DOT_THRESHOLD || !withinDistance) return null;
     const oneWay: MeshEdge["oneWay"] = wormPair ? (a.type === "worm" ? "aToB" : "bToA") : "none";
