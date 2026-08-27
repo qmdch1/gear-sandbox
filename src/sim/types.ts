@@ -31,4 +31,5 @@ export interface SimDiagnostics {
 export interface SimTickResult {
   gears: GearInstance[];
   diagnostics: SimDiagnostics;
+  edgeKeys: Set<string>; // pass back into the next tick() call's `previousEdgeKeys`
 }

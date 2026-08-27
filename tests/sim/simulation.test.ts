@@ -16,7 +16,8 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
-    const result = tick(gears, 1, 1);
+    // Pass in previousEdgeKeys that already includes the crank-b edge, so phase offset isn't applied on this tick
+    const result = tick(gears, 1, 1, new Set(["b:crank"]));
     const b = result.gears.find((g) => g.id === "b")!;
     expect(b.angularVelocity).toBeCloseTo(-2);
     expect(b.rotation).toBeCloseTo(-2);
@@ -35,8 +36,8 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
-    const rWith = tick(withLoad, 1, 1).gears.find((g) => g.id === "b")!;
-    const rWithout = tick(withoutLoad, 1, 1).gears.find((g) => g.id === "b")!;
+    const rWith = tick(withLoad, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
+    const rWithout = tick(withoutLoad, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
     expect(rWith.durabilityCurrent).toBeLessThan(rWithout.durabilityCurrent);
   });
 
@@ -45,8 +46,22 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "lonely", teeth: 20, module: 1, position: [1000, 0, 0] }),
     ];
-    const result = tick(gears, 1, 1);
+    const result = tick(gears, 1, 1, new Set());
     expect(result.diagnostics.unconnectedIds.sort()).toEqual(["crank", "lonely"]);
     expect(result.gears.find((g) => g.id === "lonely")!.angularVelocity).toBe(0);
+  });
+
+  it("phase-aligns a gear pair only on the tick where they first become meshed, not on later ticks", () => {
+    const gears = [
+      makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.7 }),
+      makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: 0 }),
+    ];
+    const first = tick(gears, 0, 1, new Set()); // dt=0: isolate the phase-offset jump from the rotation-integration step
+    const bAfterFirst = first.gears.find((g) => g.id === "b")!;
+    expect(bAfterFirst.rotation).not.toBe(0); // the phase offset moved it even with zero elapsed time
+
+    const second = tick(first.gears, 0, 1, first.edgeKeys); // edge already in previousEdgeKeys -> no further jump
+    const bAfterSecond = second.gears.find((g) => g.id === "b")!;
+    expect(bAfterSecond.rotation).toBeCloseTo(bAfterFirst.rotation);
   });
 });

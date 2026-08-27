@@ -1,7 +1,8 @@
 import type { GearInstance, SimTickResult } from "./types";
-import { buildEdges, classify } from "./graph";
+import { buildEdges, classify, edgeKey } from "./graph";
 import { propagateRotation } from "./rotation";
 import { applyWear } from "./wear";
+import { computeMeshPhaseOffset } from "./meshing";
 
 function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }[]): Map<string, boolean> {
   const adjacency = new Map<string, string[]>();
@@ -35,8 +36,23 @@ function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }
   return result;
 }
 
-export function tick(gears: GearInstance[], dt: number, timeScale: number): SimTickResult {
+export function tick(
+  gears: GearInstance[],
+  dt: number,
+  timeScale: number,
+  previousEdgeKeys: ReadonlySet<string>,
+): SimTickResult {
   const edges = buildEdges(gears);
+  const byId = new Map(gears.map((g) => [g.id, g] as const));
+
+  const phaseAdjustments = new Map<string, number>();
+  for (const edge of edges) {
+    if (edge.kind !== "mesh" || previousEdgeKeys.has(edgeKey(edge))) continue;
+    const a = byId.get(edge.a)!;
+    const b = byId.get(edge.b)!;
+    phaseAdjustments.set(b.id, computeMeshPhaseOffset(a, b, edge));
+  }
+
   const diagnostics = classify(gears, edges);
   const { angularVelocities } = propagateRotation(gears, edges);
   const loadPresence = componentHasLoad(gears, edges);
@@ -50,9 +66,10 @@ export function tick(gears: GearInstance[], dt: number, timeScale: number): SimT
       dt,
       timeScale,
     });
-    const rotation = broken ? g.rotation : g.rotation + angularVelocity * dt;
+    const phaseAdjustment = phaseAdjustments.get(g.id) ?? 0;
+    const rotation = broken ? g.rotation : g.rotation + phaseAdjustment + angularVelocity * dt;
     return { ...g, durabilityCurrent, broken, rotation, angularVelocity };
   });
 
-  return { gears: updatedGears, diagnostics };
+  return { gears: updatedGears, diagnostics, edgeKeys: new Set(edges.map(edgeKey)) };
 }

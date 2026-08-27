@@ -39,6 +39,7 @@ try {
   gears = [];
 }
 let timeScale = 1;
+let previousEdgeKeys = new Set<string>();
 
 function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
@@ -108,8 +109,9 @@ function animate(): void {
   const dt = Math.min(0.1, (now - lastTime) / 1000);
   lastTime = now;
 
-  const result = tick(gears, dt, timeScale);
+  const result = tick(gears, dt, timeScale, previousEdgeKeys);
   gears = result.gears;
+  previousEdgeKeys = result.edgeKeys;
   sceneSync.sync(gears, result.diagnostics);
   diagnosticsPanel.render(result.diagnostics);
 
