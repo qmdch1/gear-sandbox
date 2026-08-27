@@ -51,17 +51,24 @@ describe("tick", () => {
     expect(result.gears.find((g) => g.id === "lonely")!.angularVelocity).toBe(0);
   });
 
-  it("phase-aligns a gear pair only on the tick where they first become meshed, not on later ticks", () => {
+  it("does not re-apply the phase offset to an already-tracked edge, even if its rotation has since drifted out of alignment", () => {
     const gears = [
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.7 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: 0 }),
     ];
-    const first = tick(gears, 0, 1, new Set()); // dt=0: isolate the phase-offset jump from the rotation-integration step
+    const first = tick(gears, 0, 1, new Set());
     const bAfterFirst = first.gears.find((g) => g.id === "b")!;
-    expect(bAfterFirst.rotation).not.toBe(0); // the phase offset moved it even with zero elapsed time
 
-    const second = tick(first.gears, 0, 1, first.edgeKeys); // edge already in previousEdgeKeys -> no further jump
-    const bAfterSecond = second.gears.find((g) => g.id === "b")!;
-    expect(bAfterSecond.rotation).toBeCloseTo(bAfterFirst.rotation);
+    // Simulate "b" having drifted out of phase alignment since the edge was first tracked
+    // (e.g. a stale localStorage load) -- perturb its rotation away from the aligned value.
+    const perturbedGears = first.gears.map((g) => (g.id === "b" ? { ...g, rotation: g.rotation + 1.0 } : g));
+
+    const knownEdgeTick = tick(perturbedGears, 0, 1, first.edgeKeys); // edge already known -> gate should skip re-alignment
+    const bKnown = knownEdgeTick.gears.find((g) => g.id === "b")!;
+    expect(bKnown.rotation).toBeCloseTo(bAfterFirst.rotation + 1.0); // untouched -- the perturbation survives
+
+    const newEdgeTick = tick(perturbedGears, 0, 1, new Set()); // edge treated as new -> gate should re-align
+    const bNew = newEdgeTick.gears.find((g) => g.id === "b")!;
+    expect(bNew.rotation).not.toBeCloseTo(bAfterFirst.rotation + 1.0); // corrected -- proves the offset actually applies when ungated
   });
 });
