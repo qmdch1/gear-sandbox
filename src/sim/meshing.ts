@@ -23,7 +23,7 @@ function distanceToLine(p: [number, number, number], origin: [number, number, nu
   return dist(p, closest);
 }
 
-function pitchRadius(g: GearInstance): number {
+export function pitchRadius(g: GearInstance): number {
   return (g.module * g.teeth) / 2;
 }
 

@@ -1,5 +1,5 @@
-import type { GearInstance, MeshEdge, SimDiagnostics } from "./types";
-import { evaluatePair, isOverlapping } from "./meshing";
+import type { GearInstance, MeshEdge, RemoteLink, SimDiagnostics } from "./types";
+import { evaluatePair, isOverlapping, pitchRadius } from "./meshing";
 
 /** Order-independent identity for an edge -- used to diff "which edges are new this
  *  tick" without caring which gear ended up as `.a` vs `.b`. */
@@ -7,13 +7,21 @@ export function edgeKey(edge: MeshEdge): string {
   return [edge.a, edge.b].sort().join(":");
 }
 
-export function buildEdges(gears: GearInstance[]): MeshEdge[] {
+export function buildEdges(gears: GearInstance[], remoteLinks: RemoteLink[] = []): MeshEdge[] {
   const edges: MeshEdge[] = [];
   for (let i = 0; i < gears.length; i++) {
     for (let j = i + 1; j < gears.length; j++) {
       const edge = evaluatePair(gears[i], gears[j]);
       if (edge) edges.push(edge);
     }
+  }
+  const byId = new Map(gears.map((g) => [g.id, g] as const));
+  for (const link of remoteLinks) {
+    const a = byId.get(link.a);
+    const b = byId.get(link.b);
+    if (!a || !b) continue; // a linked gear was deleted -- drop the stale link rather than crash
+    const ratio = link.kind === "chain" ? a.teeth / b.teeth : pitchRadius(a) / pitchRadius(b);
+    edges.push({ a: a.id, b: b.id, kind: link.kind, ratio, oneWay: "none" });
   }
   return edges;
 }
