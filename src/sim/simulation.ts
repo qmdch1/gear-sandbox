@@ -41,6 +41,10 @@ export function tick(layout: LayoutState, dt: number, timeScale: number): SimTic
   const edges = buildEdges(gears, remoteLinks);
   const byId = new Map(gears.map((g) => [g.id, g] as const));
 
+  const diagnostics = classify(gears, edges);
+  const { angularVelocities, linearVelocities } = propagateRotation(gears, edges);
+  const loadPresence = componentHasLoad(gears, edges);
+
   // Re-derive the tooth phase for every mesh edge on EVERY tick, not just the tick an
   // edge first appears. `computeMeshPhaseOffset` returns exactly 0 for a pair that is
   // already aligned and turning at the ratio `propagateRotation` enforces, so this is
@@ -49,17 +53,39 @@ export function tick(layout: LayoutState, dt: number, timeScale: number): SimTic
   // only" gate could never correct it; and when several edges appear on the same tick
   // (loading a layout) each was computed against the others' pre-adjustment rotations,
   // freezing a residual misalignment down the chain. Both now self-correct.
+  //
+  // That "free in steady state" guarantee only holds on an edge whose two ends actually
+  // ARE conjugate -- the offset formula treats `a`'s rotation as the reference and solves
+  // for `b`'s, so it is a no-op only while `b` turns at exactly the rate `a` implies.
+  // Across an edge where that does not hold (a rack, whose angularVelocity is always 0
+  // because it travels linearly instead; a broken gear, which absorbs rotation rather
+  // than relaying it; the blocked side of a one-way worm or ratchet edge) recomputing it
+  // every tick does not settle -- it re-snaps `b` onto a fixed tooth lattice every tick
+  // and `b` visibly freezes. Since `buildEdges` assigns `a`/`b` purely by array index --
+  // i.e. by the order the user happened to add the gears -- that made the freeze a coin
+  // flip on layouts as ordinary as rack + pinion. So gate the offset on the pair really
+  // being conjugate.
   const phaseAdjustments = new Map<string, number>();
   for (const edge of edges) {
     if (edge.kind !== "mesh") continue;
     const a = byId.get(edge.a)!;
     const b = byId.get(edge.b)!;
+    // A rack has no meaningful rotational phase to align, and a broken gear's rotation is
+    // frozen by design (see the `broken ? g.rotation : ...` branch below). Both are also
+    // caught by the velocity check underneath, but naming them is clearer and cheaper.
+    if (a.type === "rack" || b.type === "rack") continue;
+    if (a.broken || b.broken) continue;
+    // `propagateRotation` drives a "mesh" edge with sign = -1 and ratio = edge.ratio in
+    // the a->b direction (1 / edge.ratio in the b->a direction, which rearranges to the
+    // same thing), i.e. it enforces wB = -edge.ratio * wA. Only apply the offset while
+    // that relation actually holds. A pair at rest satisfies it trivially, which is what
+    // lets an unpowered or freshly-placed pair still settle onto its tooth lattice.
+    const wA = angularVelocities.get(a.id) ?? 0;
+    const wB = angularVelocities.get(b.id) ?? 0;
+    const tolerance = 1e-6 * Math.max(1, Math.abs(wA), Math.abs(wB));
+    if (Math.abs(wB + edge.ratio * wA) > tolerance) continue;
     phaseAdjustments.set(b.id, computeMeshPhaseOffset(a, b, edge));
   }
-
-  const diagnostics = classify(gears, edges);
-  const { angularVelocities, linearVelocities } = propagateRotation(gears, edges);
-  const loadPresence = componentHasLoad(gears, edges);
 
   const updatedGears = gears.map((g) => {
     const angularVelocity = angularVelocities.get(g.id) ?? 0;

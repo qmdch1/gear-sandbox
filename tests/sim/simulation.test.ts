@@ -127,6 +127,62 @@ describe("tick", () => {
     expect(offLattice(correctedB.rotation - alignedB.rotation, periodB)).toBeLessThan(1e-9);
   });
 
+  it("keeps the pinion turning whichever array order the rack was placed in", () => {
+    // Regression guard. `buildEdges` picks an edge's `a`/`b` purely by array index, and
+    // that index is just the order the user clicked the gears into the palette. A rack's
+    // angularVelocity is always 0 (it moves linearly), so with the rack at `a` the
+    // per-tick phase offset was being derived against a stationary reference: instead of
+    // being the no-op it is for a genuinely co-rotating pair, it snapped the pinion back
+    // onto a fixed tooth lattice every tick and the pinion visually froze.
+    const dt = 1 / 60;
+    const steps = 600; // 10 simulated seconds
+
+    function runRackPinion(rackFirst: boolean) {
+      const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 });
+      const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
+      let state = rackFirst ? [rack, pinion] : [pinion, rack];
+      const start = state.find((g) => g.id === "pinion")!.rotation;
+      for (let i = 0; i < steps; i++) state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+      const after = state.find((g) => g.id === "pinion")!;
+      return { rotationDelta: after.rotation - start, linearPosition: state.find((g) => g.id === "rack")!.linearPosition! };
+    }
+
+    const pinionFirst = runRackPinion(false);
+    const rackFirst = runRackPinion(true);
+    // omega(1) * elapsed(10) -- pure integration, no phase snapping in either direction.
+    expect(pinionFirst.rotationDelta).toBeCloseTo(10, 9);
+    expect(rackFirst.rotationDelta).toBeCloseTo(10, 9);
+    // and the rack still travels the same distance either way: omega * pitchRadius * elapsed
+    expect(pinionFirst.linearPosition).toBeCloseTo(100, 9);
+    expect(rackFirst.linearPosition).toBeCloseTo(-100, 9); // opposite edge direction => opposite sign
+  });
+
+  it("does not disturb a still-spinning gear meshed with a broken one, in either array order", () => {
+    // A broken gear absorbs rotation (`propagateRotation` refuses to relay through it) and
+    // its own rotation is frozen, so the pair is never co-rotating -- deriving a phase
+    // offset across that edge is the same non-conjugate-reference bug as the rack case.
+    const dt = 1 / 60;
+    const steps = 120;
+
+    function runBrokenPair(brokenFirst: boolean) {
+      const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.3 });
+      const dead = makeGear({ id: "dead", teeth: 10, module: 1, position: [15, 0, 0], rotation: 0.9, broken: true, durabilityCurrent: 0 });
+      let state = brokenFirst ? [dead, crank] : [crank, dead];
+      const start = state.find((g) => g.id === "crank")!.rotation;
+      for (let i = 0; i < steps; i++) state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+      return {
+        crankDelta: state.find((g) => g.id === "crank")!.rotation - start,
+        deadRotation: state.find((g) => g.id === "dead")!.rotation,
+      };
+    }
+
+    for (const brokenFirst of [false, true]) {
+      const r = runBrokenPair(brokenFirst);
+      expect(r.crankDelta).toBeCloseTo(steps * dt, 9); // the crank keeps its own speed
+      expect(r.deadRotation).toBe(0.9);                // the broken gear stays frozen
+    }
+  });
+
   it("accumulates a rack's linearPosition over time and leaves other gears' linearPosition undefined", () => {
     const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 });
     const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
