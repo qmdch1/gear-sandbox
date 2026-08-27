@@ -172,5 +172,12 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       loadGeometry.rotateX(Math.PI / 2);
       return loadGeometry;
     }
+    case "rack":
+    case "planetary":
+    case "ratchet":
+    case "sprocket":
+    case "pulley":
+    case "differential":
+      throw new Error(`Geometry for gear type "${type}" not yet implemented`);
   }
 }
