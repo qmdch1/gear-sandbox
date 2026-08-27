@@ -177,7 +177,14 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
     case "ratchet":
     case "sprocket":
     case "pulley":
-    case "differential":
-      throw new Error(`Geometry for gear type "${type}" not yet implemented`);
+    case "differential": {
+      // TEMPORARY placeholder -- Task 12 replaces these cases with real geometry
+      // (rack/planetary/ratchet/sprocket/pulley/differential). Task 12: REPLACE these
+      // case labels, do not add new ones alongside them -- duplicate `case` labels in
+      // a switch are not a TypeScript error (first match wins silently), so appending
+      // instead of replacing would leave this placeholder permanently shadowing the
+      // real geometry.
+      return new THREE.BoxGeometry(module, module, module);
+    }
   }
 }
