@@ -1,4 +1,4 @@
-import type { GearInstance, GearType } from "./sim/types";
+import type { GearInstance, GearType, RemoteLink } from "./sim/types";
 import { createGear } from "./sim/gearFactory";
 import { tick } from "./sim/simulation";
 import { createScene } from "./render/scene";
@@ -32,6 +32,7 @@ const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnosti
 const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-panel")!);
 
 let gears: GearInstance[] = [];
+let remoteLinks: RemoteLink[] = [];
 try {
   gears = loadFromLocalStorage() ?? [];
 } catch (err) {
@@ -109,7 +110,7 @@ function animate(): void {
   const dt = Math.min(0.1, (now - lastTime) / 1000);
   lastTime = now;
 
-  const result = tick(gears, dt, timeScale, previousEdgeKeys);
+  const result = tick({ gears, remoteLinks }, dt, timeScale, previousEdgeKeys);
   gears = result.gears;
   previousEdgeKeys = result.edgeKeys;
   sceneSync.sync(gears, result.diagnostics);

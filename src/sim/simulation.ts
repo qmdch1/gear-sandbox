@@ -1,4 +1,4 @@
-import type { GearInstance, SimTickResult } from "./types";
+import type { GearInstance, LayoutState, SimTickResult } from "./types";
 import { buildEdges, classify, edgeKey } from "./graph";
 import { propagateRotation } from "./rotation";
 import { applyWear } from "./wear";
@@ -37,12 +37,13 @@ function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }
 }
 
 export function tick(
-  gears: GearInstance[],
+  layout: LayoutState,
   dt: number,
   timeScale: number,
   previousEdgeKeys: ReadonlySet<string>,
 ): SimTickResult {
-  const edges = buildEdges(gears);
+  const { gears, remoteLinks } = layout;
+  const edges = buildEdges(gears, remoteLinks);
   const byId = new Map(gears.map((g) => [g.id, g] as const));
 
   const phaseAdjustments = new Map<string, number>();
@@ -54,7 +55,7 @@ export function tick(
   }
 
   const diagnostics = classify(gears, edges);
-  const { angularVelocities } = propagateRotation(gears, edges);
+  const { angularVelocities, linearVelocities } = propagateRotation(gears, edges);
   const loadPresence = componentHasLoad(gears, edges);
 
   const updatedGears = gears.map((g) => {
@@ -68,7 +69,9 @@ export function tick(
     });
     const phaseAdjustment = phaseAdjustments.get(g.id) ?? 0;
     const rotation = broken ? g.rotation : g.rotation + phaseAdjustment + angularVelocity * dt;
-    return { ...g, durabilityCurrent, broken, rotation, angularVelocity };
+    const linearPosition =
+      g.type === "rack" ? (g.linearPosition ?? 0) + (linearVelocities.get(g.id) ?? 0) * dt : g.linearPosition;
+    return { ...g, durabilityCurrent, broken, rotation, angularVelocity, linearPosition };
   });
 
   return { gears: updatedGears, diagnostics, edgeKeys: new Set(edges.map(edgeKey)) };

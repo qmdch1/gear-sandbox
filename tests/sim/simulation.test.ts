@@ -17,7 +17,7 @@ describe("tick", () => {
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
     // Pass in previousEdgeKeys that already includes the crank-b edge, so phase offset isn't applied on this tick
-    const result = tick(gears, 1, 1, new Set(["b:crank"]));
+    const result = tick({ gears, remoteLinks: [] }, 1, 1, new Set(["b:crank"]));
     const b = result.gears.find((g) => g.id === "b")!;
     expect(b.angularVelocity).toBeCloseTo(-2);
     expect(b.rotation).toBeCloseTo(-2);
@@ -36,8 +36,8 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0] }),
     ];
-    const rWith = tick(withLoad, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
-    const rWithout = tick(withoutLoad, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
+    const rWith = tick({ gears: withLoad, remoteLinks: [] }, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
+    const rWithout = tick({ gears: withoutLoad, remoteLinks: [] }, 1, 1, new Set(["b:crank"])).gears.find((g) => g.id === "b")!;
     expect(rWith.durabilityCurrent).toBeLessThan(rWithout.durabilityCurrent);
   });
 
@@ -46,7 +46,7 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 }),
       makeGear({ id: "lonely", teeth: 20, module: 1, position: [1000, 0, 0] }),
     ];
-    const result = tick(gears, 1, 1, new Set());
+    const result = tick({ gears, remoteLinks: [] }, 1, 1, new Set());
     expect(result.diagnostics.unconnectedIds.sort()).toEqual(["crank", "lonely"]);
     expect(result.gears.find((g) => g.id === "lonely")!.angularVelocity).toBe(0);
   });
@@ -56,19 +56,29 @@ describe("tick", () => {
       makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, rotation: 0.7 }),
       makeGear({ id: "b", teeth: 10, module: 1, position: [15, 0, 0], rotation: 0 }),
     ];
-    const first = tick(gears, 0, 1, new Set());
+    const first = tick({ gears, remoteLinks: [] }, 0, 1, new Set());
     const bAfterFirst = first.gears.find((g) => g.id === "b")!;
 
     // Simulate "b" having drifted out of phase alignment since the edge was first tracked
     // (e.g. a stale localStorage load) -- perturb its rotation away from the aligned value.
     const perturbedGears = first.gears.map((g) => (g.id === "b" ? { ...g, rotation: g.rotation + 1.0 } : g));
 
-    const knownEdgeTick = tick(perturbedGears, 0, 1, first.edgeKeys); // edge already known -> gate should skip re-alignment
+    const knownEdgeTick = tick({ gears: perturbedGears, remoteLinks: [] }, 0, 1, first.edgeKeys); // edge already known -> gate should skip re-alignment
     const bKnown = knownEdgeTick.gears.find((g) => g.id === "b")!;
     expect(bKnown.rotation).toBeCloseTo(bAfterFirst.rotation + 1.0); // untouched -- the perturbation survives
 
-    const newEdgeTick = tick(perturbedGears, 0, 1, new Set()); // edge treated as new -> gate should re-align
+    const newEdgeTick = tick({ gears: perturbedGears, remoteLinks: [] }, 0, 1, new Set()); // edge treated as new -> gate should re-align
     const bNew = newEdgeTick.gears.find((g) => g.id === "b")!;
     expect(bNew.rotation).not.toBeCloseTo(bAfterFirst.rotation + 1.0); // corrected -- proves the offset actually applies when ungated
+  });
+
+  it("accumulates a rack's linearPosition over time and leaves other gears' linearPosition undefined", () => {
+    const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 });
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
+    const result = tick({ gears: [pinion, rack], remoteLinks: [] }, 1, 1, new Set());
+    const rackAfter = result.gears.find((g) => g.id === "rack")!;
+    const pinionAfter = result.gears.find((g) => g.id === "pinion")!;
+    expect(rackAfter.linearPosition).toBeCloseTo(10); // omega(1) * pitchRadius(10) * dt(1)
+    expect(pinionAfter.linearPosition).toBeUndefined();
   });
 });
