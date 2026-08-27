@@ -158,7 +158,16 @@ function rackGeometry(teethCount: number, module: number): THREE.BufferGeometry 
   }
   points.push(new THREE.Vector2(teeth * pitch - pitch / 2, -dedendum));
   const shape = new THREE.Shape(points);
-  return new THREE.ExtrudeGeometry(shape, { depth: GEAR_THICKNESS, bevelEnabled: false, curveSegments: 1 });
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: GEAR_THICKNESS, bevelEnabled: false, curveSegments: 1 });
+  // The profile above runs along local X and is extruded for thickness along local Z.
+  // But GearMeshObject aligns local Z to gear.axis and then slides a rack along that
+  // axis by linearPosition, so leaving the bar on X makes it travel dead perpendicular
+  // to its own body. Rotate the bar's length onto Z. The sign matters: THREE's
+  // makeRotationY sends (1,0,0) to (0,0,-1) for +PI/2 but to (0,0,+1) for -PI/2, so
+  // -PI/2 is the one that maps local +X to local +Z and keeps the bar extending in the
+  // +axis direction it originally pointed.
+  geometry.rotateY(-Math.PI / 2);
+  return geometry;
 }
 
 function pulleyGeometry(teeth: number, module: number): THREE.BufferGeometry {

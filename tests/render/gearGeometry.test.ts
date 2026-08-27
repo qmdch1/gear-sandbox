@@ -184,8 +184,25 @@ describe("buildGeometryForType", () => {
     const long = buildGeometryForType("rack", 12, 1);
     short.computeBoundingBox();
     long.computeBoundingBox();
-    const shortLength = short.boundingBox!.max.x - short.boundingBox!.min.x;
-    const longLength = long.boundingBox!.max.x - long.boundingBox!.min.x;
+    const shortLength = short.boundingBox!.max.z - short.boundingBox!.min.z;
+    const longLength = long.boundingBox!.max.z - long.boundingBox!.min.z;
     expect(longLength).toBeGreaterThan(shortLength);
+  });
+
+  it("runs the rack's length along local Z -- the same axis GearMeshObject slides it along", () => {
+    // GearMeshObject.update() aligns local Z to gear.axis (quaternion from (0,0,1)) and
+    // then translates a rack along that axis by linearPosition. The raw extrusion lays
+    // the bar out along local X instead, which makes the rack slide dead perpendicular
+    // to its own body (axis . lengthDirection === 0). Its longest dimension must be Z.
+    for (const teeth of [4, 8, 12]) {
+      const geometry = buildGeometryForType("rack", teeth, 1);
+      geometry.computeBoundingBox();
+      const box = geometry.boundingBox!;
+      const sizeX = box.max.x - box.min.x;
+      const sizeY = box.max.y - box.min.y;
+      const sizeZ = box.max.z - box.min.z;
+      expect(sizeZ).toBeGreaterThan(sizeX);
+      expect(sizeZ).toBeGreaterThan(sizeY);
+    }
   });
 });
