@@ -1,4 +1,5 @@
 // tests/render/gearGeometry.test.ts
+import * as THREE from "three";
 import { describe, it, expect } from "vitest";
 import { computeSpurProfilePoints, buildGeometryForType } from "../../src/render/gearGeometry";
 
