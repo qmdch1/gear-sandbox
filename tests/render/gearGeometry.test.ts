@@ -48,4 +48,32 @@ describe("buildGeometryForType", () => {
       expect(geometry.attributes.position.count).toBeGreaterThan(0);
     }
   });
+
+  it("gives the bevel gear a smaller cross-section near the apex than at the base (real taper, not a smooth cone)", () => {
+    const geometry = buildGeometryForType("bevel", 20, 1);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox!;
+    // The taper is along Z (pre-quaternion-alignment local axis); the XY extent at
+    // z-min (base) should exceed the XY extent at z-max (apex).
+    const position = geometry.attributes.position;
+    let maxRadiusNearBase = 0;
+    let maxRadiusNearApex = 0;
+    for (let i = 0; i < position.count; i++) {
+      const z = position.getZ(i);
+      const r = Math.hypot(position.getX(i), position.getY(i));
+      if (z < box.min.z + 0.01) maxRadiusNearBase = Math.max(maxRadiusNearBase, r);
+      if (z > box.max.z - 0.01) maxRadiusNearApex = Math.max(maxRadiusNearApex, r);
+    }
+    expect(maxRadiusNearApex).toBeLessThan(maxRadiusNearBase);
+  });
+
+  it("gives the worm a thread that stands off from a central core (not a smooth cylinder)", () => {
+    const geometry = buildGeometryForType("worm", 2, 1);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox!;
+    const maxRadius = Math.max(
+      Math.hypot(box.max.x, 0), Math.hypot(box.max.y, 0),
+    );
+    expect(maxRadius).toBeGreaterThan(1 * 0.9); // exceeds the plain core radius
+  });
 });

@@ -85,6 +85,28 @@ function extrudedGearGeometry(teeth: number, module: number, twistPerUnit = 0): 
   return geometry;
 }
 
+/** Extrudes the involute tooth profile and then scales each cross-section toward the
+ *  apex as z increases -- an approximation of real bevel-gear tooth taper (true bevel
+ *  teeth are generated on a cone via Tredgold's approximation; this project's procedural
+ *  geometry uses the simpler linear taper, consistent with the sandbox's existing
+ *  approach of visual-approximation-over-CAD-precision). */
+function taperedGearGeometry(teeth: number, module: number, coneHeight: number, taperRatio: number): THREE.BufferGeometry {
+  const points = computeSpurProfilePoints(teeth, module);
+  const shape = new THREE.Shape(points);
+  const geometry = new THREE.ExtrudeGeometry(shape, { depth: coneHeight, bevelEnabled: false, curveSegments: 2 });
+  const position = geometry.attributes.position;
+  for (let i = 0; i < position.count; i++) {
+    const z = position.getZ(i);
+    const t = z / coneHeight;
+    const scale = 1 - t * (1 - taperRatio);
+    position.setX(i, position.getX(i) * scale);
+    position.setY(i, position.getY(i) * scale);
+  }
+  position.needsUpdate = true;
+  geometry.computeVertexNormals();
+  return geometry;
+}
+
 function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
   const base = extrudedGearGeometry(teeth, module);
   const pitchRadius = (module * teeth) / 2;
@@ -122,16 +144,28 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
     case "crank":
       return crankGeometry(teeth, module);
     case "bevel": {
-      const pitchRadius = (module * teeth) / 2;
-      const bevelGeometry = new THREE.ConeGeometry(pitchRadius + module * ADDENDUM_FACTOR, GEAR_THICKNESS * 3, teeth);
-      bevelGeometry.rotateX(Math.PI / 2);
-      return bevelGeometry;
+      const coneHeight = GEAR_THICKNESS * 3;
+      return taperedGearGeometry(teeth, module, coneHeight, 0.15);
     }
     case "worm": {
       const length = module * 6;
-      const wormGeometry = new THREE.CylinderGeometry(module * 1.2, module * 1.2, length, 16, 1, false);
-      wormGeometry.rotateX(Math.PI / 2);
-      return wormGeometry;
+      const coreRadius = module * 0.9;
+      const threadRadius = module * 1.3;
+      const threadPitch = module * 1.5;
+      const turns = length / threadPitch;
+      const segments = 120;
+      const helixPoints: THREE.Vector3[] = [];
+      for (let i = 0; i <= segments; i++) {
+        const t = i / segments;
+        const angle = t * turns * Math.PI * 2;
+        const z = -length / 2 + t * length;
+        helixPoints.push(new THREE.Vector3(Math.cos(angle) * threadRadius, Math.sin(angle) * threadRadius, z));
+      }
+      const curve = new THREE.CatmullRomCurve3(helixPoints);
+      const thread = new THREE.TubeGeometry(curve, segments, module * 0.35, 8, false);
+      const core = new THREE.CylinderGeometry(coreRadius, coreRadius, length, 16);
+      core.rotateX(Math.PI / 2);
+      return mergeGeometries([core, thread]);
     }
     case "load": {
       const loadGeometry = new THREE.CylinderGeometry(module * 2, module * 2, GEAR_THICKNESS * 2, 24);
