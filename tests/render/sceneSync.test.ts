@@ -44,7 +44,7 @@ describe("SceneSync", () => {
     const ctx = createScene(document.createElement("canvas"));
     const sync = new SceneSync(ctx);
     const gears = [makeGear({ id: "a" }), makeGear({ id: "b", position: [5, 0, 0] })];
-    sync.sync(gears, { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
     const gearMeshes = ctx.scene.children.filter((c) => c.name === "a" || c.name === "b");
     expect(gearMeshes.length).toBe(2);
   });
@@ -52,8 +52,20 @@ describe("SceneSync", () => {
   it("removes a mesh once its gear disappears from the list", () => {
     const ctx = createScene(document.createElement("canvas"));
     const sync = new SceneSync(ctx);
-    sync.sync([makeGear({ id: "a" })], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
-    sync.sync([], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    sync.sync([makeGear({ id: "a" })], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    sync.sync([], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
     expect(ctx.scene.children.some((c) => c.name === "a")).toBe(false);
+  });
+
+  it("adds a ribbon mesh for a remote link and removes it once the link disappears", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    const gears = [makeGear({ id: "a", type: "sprocket" }), makeGear({ id: "b", type: "sprocket", position: [500, 0, 0] })];
+    const link = { a: "a", b: "b", kind: "chain" as const };
+    sync.sync(gears, [link], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    const meshCountWithLink = ctx.scene.children.length;
+
+    sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+    expect(ctx.scene.children.length).toBe(meshCountWithLink - 1);
   });
 });
