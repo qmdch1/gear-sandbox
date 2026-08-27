@@ -76,4 +76,22 @@ describe("buildGeometryForType", () => {
     );
     expect(maxRadius).toBeGreaterThan(1 * 0.9); // exceeds the plain core radius
   });
+
+  it("builds a non-empty geometry for every v2 gear type too", () => {
+    const types = ["rack", "planetary", "ratchet", "sprocket", "pulley", "differential"] as const;
+    for (const t of types) {
+      const geometry = buildGeometryForType(t, 20, 1);
+      expect(geometry.attributes.position.count).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives the rack a length that grows with its tooth count", () => {
+    const short = buildGeometryForType("rack", 4, 1);
+    const long = buildGeometryForType("rack", 12, 1);
+    short.computeBoundingBox();
+    long.computeBoundingBox();
+    const shortLength = short.boundingBox!.max.x - short.boundingBox!.min.x;
+    const longLength = long.boundingBox!.max.x - long.boundingBox!.min.x;
+    expect(longLength).toBeGreaterThan(shortLength);
+  });
 });

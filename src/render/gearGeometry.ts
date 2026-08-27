@@ -116,6 +116,67 @@ function crankGeometry(teeth: number, module: number): THREE.BufferGeometry {
   return mergeGeometries([base, handle]);
 }
 
+function planetaryGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const ringPitchRadius = (module * teeth) / 2;
+  const sunTeeth = Math.max(6, Math.round(teeth / 3));
+  const planetTeeth = Math.max(6, Math.round((teeth - sunTeeth) / 2));
+  const sun = extrudedGearGeometry(sunTeeth, module);
+  const ring = new THREE.TorusGeometry(ringPitchRadius, module * 1.5, 8, Math.max(16, teeth));
+  const planetOrbitRadius = (module * (sunTeeth + planetTeeth)) / 2;
+  const geometries = [sun, ring];
+  for (let i = 0; i < 3; i++) {
+    const angle = (i / 3) * Math.PI * 2;
+    const planet = extrudedGearGeometry(planetTeeth, module);
+    planet.translate(Math.cos(angle) * planetOrbitRadius, Math.sin(angle) * planetOrbitRadius, 0);
+    geometries.push(planet);
+  }
+  return mergeGeometries(geometries);
+}
+
+function rackGeometry(teethCount: number, module: number): THREE.BufferGeometry {
+  const teeth = Math.max(4, Math.round(teethCount) || 8);
+  const addendum = module * ADDENDUM_FACTOR;
+  const dedendum = module * DEDENDUM_FACTOR;
+  const pitch = Math.PI * module;
+  const halfToothWidth = pitch / 4;
+  const slope = Math.tan(PRESSURE_ANGLE);
+  const points: THREE.Vector2[] = [];
+  for (let k = 0; k < teeth; k++) {
+    const cx = k * pitch;
+    points.push(new THREE.Vector2(cx - pitch / 2, -dedendum));
+    points.push(new THREE.Vector2(cx - halfToothWidth - slope * dedendum, -dedendum));
+    points.push(new THREE.Vector2(cx - halfToothWidth + slope * addendum, addendum));
+    points.push(new THREE.Vector2(cx + halfToothWidth - slope * addendum, addendum));
+    points.push(new THREE.Vector2(cx + halfToothWidth + slope * dedendum, -dedendum));
+  }
+  points.push(new THREE.Vector2(teeth * pitch - pitch / 2, -dedendum));
+  const shape = new THREE.Shape(points);
+  return new THREE.ExtrudeGeometry(shape, { depth: GEAR_THICKNESS, bevelEnabled: false, curveSegments: 1 });
+}
+
+function pulleyGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const pitchRadius = (module * teeth) / 2;
+  const points = [
+    new THREE.Vector2(pitchRadius * 0.9, -GEAR_THICKNESS),
+    new THREE.Vector2(pitchRadius, -GEAR_THICKNESS * 0.3),
+    new THREE.Vector2(pitchRadius * 0.85, 0),
+    new THREE.Vector2(pitchRadius, GEAR_THICKNESS * 0.3),
+    new THREE.Vector2(pitchRadius * 0.9, GEAR_THICKNESS),
+  ];
+  const lathe = new THREE.LatheGeometry(points, 24);
+  lathe.rotateX(Math.PI / 2);
+  return lathe;
+}
+
+function differentialGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const pitchRadius = (module * teeth) / 2;
+  const housing = new THREE.SphereGeometry(pitchRadius * 0.8, 16, 12);
+  const inputGear = new THREE.ConeGeometry(pitchRadius, GEAR_THICKNESS * 2, teeth);
+  inputGear.rotateX(Math.PI / 2);
+  inputGear.translate(0, 0, pitchRadius * 0.9);
+  return mergeGeometries([housing, inputGear]);
+}
+
 function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   const merged = new THREE.BufferGeometry();
@@ -172,19 +233,17 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       loadGeometry.rotateX(Math.PI / 2);
       return loadGeometry;
     }
-    case "rack":
-    case "planetary":
     case "ratchet":
+      return extrudedGearGeometry(teeth, module); // v1 note: pawl mechanism is not modeled visually (spec §3.2) -- same visual as a spur gear
     case "sprocket":
+      return extrudedGearGeometry(teeth, module); // v1 note: true ANSI chain-sprocket tooth profile is out of scope (spec §3.3) -- same visual as a spur gear
+    case "planetary":
+      return planetaryGeometry(teeth, module);
+    case "rack":
+      return rackGeometry(teeth, module);
     case "pulley":
-    case "differential": {
-      // TEMPORARY placeholder -- Task 12 replaces these cases with real geometry
-      // (rack/planetary/ratchet/sprocket/pulley/differential). Task 12: REPLACE these
-      // case labels, do not add new ones alongside them -- duplicate `case` labels in
-      // a switch are not a TypeScript error (first match wins silently), so appending
-      // instead of replacing would leave this placeholder permanently shadowing the
-      // real geometry.
-      return new THREE.BoxGeometry(module, module, module);
-    }
+      return pulleyGeometry(teeth, module);
+    case "differential":
+      return differentialGeometry(teeth, module);
   }
 }
