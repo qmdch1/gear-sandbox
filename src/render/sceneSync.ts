@@ -3,6 +3,7 @@ import type { GearInstance, RemoteLink, SimDiagnostics } from "../sim/types";
 import type { SceneContext } from "./scene";
 import { GearMeshObject } from "./gearMesh";
 import { buildLinkRibbon } from "./chainGeometry";
+import { findMeshPartner } from "../sim/meshing";
 
 const PROBLEM_HIGHLIGHT = new THREE.Color(0xff3b30);
 const PREVIEW_HIGHLIGHT = new THREE.Color(0x2ecc71);
@@ -58,7 +59,8 @@ export class SceneSync {
 
     for (const gear of gears) {
       const obj = this.objects.get(gear.id)!;
-      obj.update(gear);
+      const facePinionPosition = gear.type === "rack" ? findMeshPartner(gear, gears)?.position : undefined;
+      obj.update(gear, facePinionPosition);
       const material = obj.mesh.material as THREE.MeshStandardMaterial;
       if (this.previewId === gear.id) {
         material.emissive = PREVIEW_HIGHLIGHT.clone();

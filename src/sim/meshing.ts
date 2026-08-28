@@ -207,6 +207,19 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
   return null;
 }
 
+/** The first gear in `others` that forms a genuine tooth-mesh edge with `gear` (not a
+ *  shaft coupling). Used by the render layer to find which gear a rack should visually
+ *  face -- a rack has no rotation of its own to derive a facing direction from, so it
+ *  needs to look up its actual meshing partner's position instead. */
+export function findMeshPartner(gear: GearInstance, others: GearInstance[]): GearInstance | null {
+  for (const other of others) {
+    if (other.id === gear.id) continue;
+    const edge = evaluatePair(gear, other);
+    if (edge && edge.kind === "mesh") return other;
+  }
+  return null;
+}
+
 /** True when two gears geometrically overlap (closer than a valid mesh distance allows,
  *  and NOT already a legitimate connection -- a load or worm coupling is intentionally
  *  coincident with its host gear, so a valid `evaluatePair` result is never an overlap). */

@@ -1,6 +1,6 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
-import { evaluatePair, isOverlapping, computeMeshPhaseOffset } from "../../src/sim/meshing";
+import { evaluatePair, isOverlapping, computeMeshPhaseOffset, findMeshPartner } from "../../src/sim/meshing";
 import type { GearInstance } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -247,5 +247,26 @@ describe("computeMeshPhaseOffset", () => {
     const edge = evaluatePair(a, b)!;
     const offset = computeMeshPhaseOffset(a, b, edge);
     expect(Math.abs(offset)).toBeLessThanOrEqual((Math.PI * 2) / b.teeth);
+  });
+});
+
+describe("findMeshPartner", () => {
+  it("finds the pinion a rack meshes with, ignoring unrelated gears", () => {
+    const pinion = makeGear({ id: "pinion", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
+    const unrelated = makeGear({ id: "unrelated", teeth: 20, module: 1, position: [500, 0, 0] });
+    const partner = findMeshPartner(rack, [pinion, unrelated]);
+    expect(partner?.id).toBe("pinion");
+  });
+
+  it("returns null when the gear has no valid mesh partner", () => {
+    const lonely = makeGear({ id: "lonely", teeth: 20, module: 1, position: [0, 0, 0] });
+    const farAway = makeGear({ id: "far", teeth: 20, module: 1, position: [500, 0, 0] });
+    expect(findMeshPartner(lonely, [farAway])).toBeNull();
+  });
+
+  it("does not return the gear itself even if the caller includes it in the candidate list", () => {
+    const gear = makeGear({ id: "self", teeth: 20, module: 1, position: [0, 0, 0] });
+    expect(findMeshPartner(gear, [gear])).toBeNull();
   });
 });

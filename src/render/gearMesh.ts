@@ -30,11 +30,28 @@ export class GearMeshObject {
     this.update(gear);
   }
 
-  update(gear: GearInstance): void {
+  /** `facePinionPosition`: for a rack only, the world position of the pinion it should
+   *  visually face (its teeth run along local Y, and a rack has no rotation of its own
+   *  to derive that facing from -- unlike every other gear type, whose radial symmetry
+   *  makes the roll around `axis` irrelevant). Omit it (or pass it for a non-rack gear)
+   *  to fall back to the axis-only alignment, which is correct for every other type and
+   *  a harmless default for an unmeshed rack. */
+  update(gear: GearInstance, facePinionPosition?: [number, number, number]): void {
     this.mesh.position.set(...gear.position);
     this.mesh.rotation.set(0, 0, 0);
     const axis = new THREE.Vector3(...gear.axis).normalize();
-    this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+    const towardPinion =
+      gear.type === "rack" && facePinionPosition
+        ? new THREE.Vector3(...facePinionPosition).sub(this.mesh.position)
+        : null;
+    const up = towardPinion?.addScaledVector(axis, -towardPinion.dot(axis)) ?? null;
+    if (up && up.lengthSq() > 1e-8) {
+      up.normalize();
+      const right = new THREE.Vector3().crossVectors(up, axis);
+      this.mesh.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(right, up, axis));
+    } else {
+      this.mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), axis);
+    }
     if (gear.type === "rack") {
       this.mesh.position.addScaledVector(axis, gear.linearPosition ?? 0);
     } else {
