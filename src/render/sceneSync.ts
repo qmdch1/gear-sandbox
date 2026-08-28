@@ -85,7 +85,7 @@ export class SceneSync {
       if (!a || !b) continue;
       const key = remoteLinkKey(link);
       const width = link.kind === "chain" ? 0.15 : 0.25;
-      const geometry = buildLinkRibbon(a.position, b.position, width);
+      const geometry = buildLinkRibbon(a.position, b.position, width, link.kind);
       const existing = this.linkMeshes.get(key);
       if (existing) {
         existing.geometry.dispose();
