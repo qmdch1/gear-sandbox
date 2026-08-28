@@ -3,6 +3,28 @@ import cors from "cors";
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 
+/** Same shape check `src/persistence/serialize.ts`'s `isValidRemoteLink` does on the
+ *  client -- kept as a small self-contained copy here rather than a cross-import
+ *  (`server/` and `src/` are separate build/type-check contexts in this project; see
+ *  tsconfig.json's `include`). The client already refuses to save a malformed
+ *  `RemoteLink`, but the server had no check of its own -- a save request that skipped
+ *  the client's validator (a hand-crafted request, a future/other client) could still
+ *  reach the database, where it would sit until some future GET's `deserializeLayout`
+ *  rejected the whole layout as unloadable. Reject it here instead, at write time. */
+function isValidRemoteLinksArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (link) =>
+        typeof link === "object" &&
+        link !== null &&
+        typeof (link as Record<string, unknown>).a === "string" &&
+        typeof (link as Record<string, unknown>).b === "string" &&
+        ((link as Record<string, unknown>).kind === "chain" || (link as Record<string, unknown>).kind === "belt"),
+    )
+  );
+}
+
 export function createApp(db: Database.Database): express.Express {
   const app = express();
   app.use(cors());
@@ -12,6 +34,10 @@ export function createApp(db: Database.Database): express.Express {
     const { name, gears, remoteLinks } = req.body ?? {};
     if (typeof name !== "string" || !name.trim() || !Array.isArray(gears)) {
       res.status(400).json({ error: "name (string) and gears (array) are required" });
+      return;
+    }
+    if (remoteLinks !== undefined && !isValidRemoteLinksArray(remoteLinks)) {
+      res.status(400).json({ error: "remoteLinks, if present, must be an array of {a, b, kind: 'chain'|'belt'}" });
       return;
     }
     const id = randomUUID();
@@ -51,6 +77,10 @@ export function createApp(db: Database.Database): express.Express {
     const { name, gears, remoteLinks } = req.body ?? {};
     if (!Array.isArray(gears)) {
       res.status(400).json({ error: "gears (array) is required" });
+      return;
+    }
+    if (remoteLinks !== undefined && !isValidRemoteLinksArray(remoteLinks)) {
+      res.status(400).json({ error: "remoteLinks, if present, must be an array of {a, b, kind: 'chain'|'belt'}" });
       return;
     }
     const now = new Date().toISOString();

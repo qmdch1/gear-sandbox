@@ -79,4 +79,29 @@ describe("layouts API", () => {
     const fetched = await request(app).get("/api/layouts/legacy-1").expect(200);
     expect(fetched.body.remoteLinks).toEqual([]);
   });
+
+  it("rejects a POST whose remoteLinks entries are malformed", async () => {
+    const res = await request(app)
+      .post("/api/layouts")
+      .send({ name: "bad-links", gears: [], remoteLinks: [{ a: "x" }] }); // missing b/kind
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a POST whose remoteLinks is not an array at all", async () => {
+    const res = await request(app).post("/api/layouts").send({ name: "bad-links", gears: [], remoteLinks: "nope" });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a PUT whose remoteLinks entries have an unknown kind", async () => {
+    const created = await request(app).post("/api/layouts").send({ name: "v1", gears: [] }).expect(201);
+    const res = await request(app)
+      .put(`/api/layouts/${created.body.id}`)
+      .send({ gears: [], remoteLinks: [{ a: "x", b: "y", kind: "rope" }] });
+    expect(res.status).toBe(400);
+  });
+
+  it("still accepts a POST with no remoteLinks field at all (defaults to [])", async () => {
+    const res = await request(app).post("/api/layouts").send({ name: "no-links", gears: [] });
+    expect(res.status).toBe(201);
+  });
 });
