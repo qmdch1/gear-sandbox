@@ -36,4 +36,33 @@ describe("PaletteUI", () => {
     expect(onPick).toHaveBeenCalledWith("differential" satisfies GearType);
     expect(onPick).toHaveBeenCalledTimes(1);
   });
+
+  it("setActive highlights the given type's button and reveals a placement hint", () => {
+    const container = document.createElement("div");
+    const palette = new PaletteUI(container, () => {});
+    const rackButton = container.querySelector('button[data-gear-type="rack"]') as HTMLButtonElement;
+    const spurButton = container.querySelector('button[data-gear-type="spur"]') as HTMLButtonElement;
+    const hint = container.querySelector(".palette-hint") as HTMLElement;
+    expect(hint.hidden).toBe(true);
+
+    palette.setActive("rack" satisfies GearType);
+    expect(rackButton.classList.contains("active")).toBe(true);
+    expect(rackButton.getAttribute("aria-pressed")).toBe("true");
+    expect(spurButton.classList.contains("active")).toBe(false);
+    expect(spurButton.getAttribute("aria-pressed")).toBe("false");
+    expect(hint.hidden).toBe(false);
+  });
+
+  it("setActive(null) clears any highlighted button and hides the hint", () => {
+    const container = document.createElement("div");
+    const palette = new PaletteUI(container, () => {});
+    const rackButton = container.querySelector('button[data-gear-type="rack"]') as HTMLButtonElement;
+    const hint = container.querySelector(".palette-hint") as HTMLElement;
+
+    palette.setActive("rack" satisfies GearType);
+    palette.setActive(null);
+    expect(rackButton.classList.contains("active")).toBe(false);
+    expect(rackButton.getAttribute("aria-pressed")).toBe("false");
+    expect(hint.hidden).toBe(true);
+  });
 });
