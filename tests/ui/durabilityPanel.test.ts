@@ -39,4 +39,68 @@ describe("DurabilityPanel", () => {
     expect(container.textContent).toContain("40.0 / 80");
     expect(container.textContent).toContain("파손됨");
   });
+
+  it("renders three labeled axis buttons", () => {
+    const container = document.createElement("div");
+    const panel = new DurabilityPanel(container);
+    panel.show(makeGear({}));
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>(".axis-btn"));
+    expect(buttons).toHaveLength(3);
+    expect(buttons.map((b) => b.textContent)).toEqual(["X축", "Y축", "Z축"]);
+  });
+
+  it("invokes the axis-change callback with the gear's id and the clicked axis", () => {
+    const container = document.createElement("div");
+    const clicks: Array<{ id: string; axis: [number, number, number] }> = [];
+    const panel = new DurabilityPanel(container, (id, axis) => clicks.push({ id, axis }));
+    panel.show(makeGear({ id: "gear-7", axis: [0, 1, 0] }));
+
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>(".axis-btn"));
+    buttons[0].click(); // X축
+
+    expect(clicks).toEqual([{ id: "gear-7", axis: [1, 0, 0] }]);
+  });
+
+  it("visually marks the gear's current axis button as active, and no other", () => {
+    const container = document.createElement("div");
+    const panel = new DurabilityPanel(container);
+    panel.show(makeGear({ axis: [0, 0, 1] }));
+
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>(".axis-btn"));
+    const active = buttons.filter((b) => b.classList.contains("active"));
+    expect(active).toHaveLength(1);
+    expect(active[0].textContent).toBe("Z축");
+    expect(active[0].getAttribute("aria-pressed")).toBe("true");
+
+    const inactive = buttons.filter((b) => b !== active[0]);
+    for (const btn of inactive) {
+      expect(btn.getAttribute("aria-pressed")).toBe("false");
+    }
+  });
+
+  it("re-showing the gear after an axis change updates which button is active", () => {
+    const container = document.createElement("div");
+    let axis: [number, number, number] = [0, 1, 0];
+    const panel = new DurabilityPanel(container, (_id, newAxis) => {
+      axis = newAxis;
+      panel.show(makeGear({ axis }));
+    });
+    panel.show(makeGear({ axis }));
+
+    const zButton = Array.from(container.querySelectorAll<HTMLButtonElement>(".axis-btn")).find(
+      (b) => b.textContent === "Z축",
+    )!;
+    zButton.click();
+
+    const activeAfter = container.querySelector(".axis-btn.active");
+    expect(activeAfter?.textContent).toBe("Z축");
+  });
+
+  it("works with just a container argument, matching existing call sites", () => {
+    const container = document.createElement("div");
+    const panel = new DurabilityPanel(container);
+    panel.show(makeGear({}));
+    const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>(".axis-btn"));
+    expect(() => buttons[0].click()).not.toThrow();
+  });
 });
