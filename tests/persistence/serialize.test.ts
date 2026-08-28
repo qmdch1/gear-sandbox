@@ -48,6 +48,24 @@ describe("serialize/deserialize round-trip", () => {
     expect(() => deserializeLayout(bad)).toThrow();
   });
 
+  it("drops duplicate remoteLinks -- same unordered pair and kind, in either a/b order", () => {
+    const payload = JSON.stringify({
+      version: 2,
+      gears: [],
+      remoteLinks: [
+        { a: "x", b: "y", kind: "chain" },
+        { a: "y", b: "x", kind: "chain" }, // same pair, reversed order
+        { a: "x", b: "y", kind: "chain" }, // exact duplicate
+        { a: "x", b: "y", kind: "belt" }, // same pair, different kind -- kept
+      ],
+    });
+    const restored = deserializeLayout(payload);
+    expect(restored.remoteLinks).toEqual([
+      { a: "x", b: "y", kind: "chain" },
+      { a: "x", b: "y", kind: "belt" },
+    ]);
+  });
+
   it("rejects a gear array containing an element with a missing required field", () => {
     // The bad element is second, so this also pins that validation covers every element
     // rather than only the first.
