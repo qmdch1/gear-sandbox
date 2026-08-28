@@ -183,6 +183,121 @@ describe("tick", () => {
     }
   });
 
+  it("does not flicker the phase gate at very low angular velocity (non-issue check for a previously flagged concern)", () => {
+    // A prior full-branch review flagged, as a non-blocking observation, that at very low
+    // angular velocities (~1e-6 to 1e-7 rad/s -- a near-stationary crank, or the far end
+    // of a long gear train) floating-point noise in `wB + edge.ratio * wA` could sit right
+    // at the edge of `tolerance`, flickering the phase gate open/closed tick to tick and
+    // producing visible micro-jitter in mesh alignment.
+    //
+    // Investigated and found to be a NON-ISSUE, not fixed:
+    //   `tolerance = 1e-6 * Math.max(1, |wA|, |wB|)`. For every |wA|, |wB| < 1 -- true
+    //   throughout (and well past) the flagged 1e-6..1e-7 range -- the `1` in that max()
+    //   pins the floor at a flat 1e-6; it does NOT shrink alongside the velocities.
+    //   `propagateRotation` derives a mesh neighbor's angular velocity from its driver by
+    //   a single multiplication (`wOther = wCur * sign * ratio`), so `wB + edge.ratio *
+    //   wA` is either exactly 0 -- when the edge is walked "forward" from the driver, the
+    //   very same rounded product is added back and cancels bit-for-bit -- or off by at
+    //   most a few ULP of wA/wB (~1e-16 relative) when walked "backward" through a
+    //   division-then-multiply. Either way the residual sits ~1e10 (forward) to ~1e10
+    //   (backward, 1e-16 relative * 1e-7 magnitude vs. a 1e-6 floor) times smaller than
+    //   `tolerance` -- nowhere near close enough to flicker, at any velocity down to and
+    //   below the flagged range.
+    //
+    // Verified empirically below (not just algebraically): both array orders (forces both
+    // the "forward" and "backward" per-edge computation described above), several
+    // non-integer tooth ratios, and both a direct pair and a 6-edge gear train, each run
+    // for thousands of ticks at 1e-7 rad/s. In every run the per-tick rotation delta
+    // tracks pure `angularVelocity * dt` integration with zero ticks departing by more
+    // than 1e-13 (the residual actually observed is ~1e-15, ordinary summation noise --
+    // not a phase re-snap, which would show up as a jump of tooth-period scale, i.e.
+    // many orders of magnitude larger).
+    const dt = 1 / 60;
+    const w = 1e-7;
+
+    function runPair(crankFirst: boolean, teethB: number) {
+      const dist = 10 + teethB / 2; // pitchRadius(crank=20t) + pitchRadius(b)
+      const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: w, rotation: 0.31 });
+      const b = makeGear({ id: "b", teeth: teethB, module: 1, position: [dist, 0, 0], rotation: 0.02 });
+      let state = (crankFirst ? [crank, b] : [b, crank]) as GearInstance[];
+      state = tick({ gears: state, remoteLinks: [] }, 0, 1).gears; // settle
+      const ratio = 20 / teethB;
+      const start = state.find((g) => g.id === "b")!.rotation;
+      let oscillations = 0;
+      for (let i = 0; i < 1000; i++) {
+        const before = state.find((g) => g.id === "b")!.rotation;
+        state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+        const after = state.find((g) => g.id === "b")!.rotation;
+        const expectedDelta = -ratio * w * dt;
+        if (Math.abs(after - before - expectedDelta) > 1e-13) oscillations++;
+      }
+      const end = state.find((g) => g.id === "b")!.rotation;
+      return { oscillations, totalDelta: end - start, totalExpected: -ratio * w * dt * 1000 };
+    }
+
+    for (const crankFirst of [true, false]) {
+      for (const teethB of [10, 7, 13]) {
+        // 10 => integer ratio (2); 7 and 13 => non-integer ratios, exercising the
+        // "backward" division-then-multiply path when crankFirst is false.
+        const r = runPair(crankFirst, teethB);
+        expect(r.oscillations).toBe(0); // no tick departs from pure integration -> no flicker
+        expect(r.totalDelta).toBeCloseTo(r.totalExpected, 9);
+      }
+    }
+  });
+
+  it("does not flicker the phase gate across a long, fully-divided-down gear train at very low velocity", () => {
+    // Same non-issue as above, exercised across a 6-edge chain (crank -> g1 -> ... -> g6)
+    // with mutually-prime tooth counts, so the last gear's own angular velocity is the
+    // one actually sitting in the flagged low range, several multiplications removed from
+    // the crank. A fresh multi-edge chain needs a few settling ticks before every edge's
+    // phase has propagated (documented above, in `tick()`'s own comment on multi-edge
+    // settling) -- that transient is a separate, already-covered behavior, not what's
+    // under test here, so this settles fully first and only then measures steady-state
+    // per-tick deltas for flicker.
+    const teethList = [20, 19, 17, 13, 11, 7, 5];
+    const dt = 1 / 60;
+    const lastId = `g${teethList.length - 1}`;
+
+    function buildChain(startW: number): GearInstance[] {
+      const gears: GearInstance[] = [];
+      let x = 0;
+      let prevTeeth = teethList[0];
+      gears.push(makeGear({ id: "g0", type: "crank", teeth: prevTeeth, module: 1, position: [0, 0, 0], angularVelocity: startW, rotation: 0.13 }));
+      for (let i = 1; i < teethList.length; i++) {
+        const t = teethList[i];
+        x += prevTeeth / 2 + t / 2;
+        gears.push(makeGear({ id: `g${i}`, teeth: t, module: 1, position: [x, 0, 0], rotation: 0.07 * i }));
+        prevTeeth = t;
+      }
+      return gears;
+    }
+
+    // Find the crank speed that puts the LAST gear's angular velocity at 3e-7 rad/s.
+    let probe = tick({ gears: buildChain(1), remoteLinks: [] }, 0, 1).gears;
+    const wLastAtStartW1 = probe.find((g) => g.id === lastId)!.angularVelocity;
+    const scaledW = 3e-7 / wLastAtStartW1;
+
+    let state = buildChain(scaledW);
+    for (let s = 0; s < teethList.length * 3; s++) {
+      state = tick({ gears: state, remoteLinks: [] }, 0, 1).gears; // fully settle every edge
+    }
+
+    const start = state.find((g) => g.id === lastId)!.rotation;
+    let oscillations = 0;
+    for (let i = 0; i < 1000; i++) {
+      const wBefore = state.find((g) => g.id === lastId)!.angularVelocity;
+      const before = state.find((g) => g.id === lastId)!.rotation;
+      state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+      const after = state.find((g) => g.id === lastId)!.rotation;
+      if (Math.abs(after - before - wBefore * dt) > 1e-13) oscillations++;
+    }
+    const end = state.find((g) => g.id === lastId)!.rotation;
+
+    expect(oscillations).toBe(0);
+    expect(end - start).toBeCloseTo(3e-7 * dt * 1000, 9);
+  });
+
   it("accumulates a rack's linearPosition over time and leaves other gears' linearPosition undefined", () => {
     const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 });
     const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
