@@ -1,5 +1,6 @@
 import type { GearInstance, GearType, RemoteLink } from "./sim/types";
 import { createGear } from "./sim/gearFactory";
+import { createDefaultLayout } from "./sim/defaultLayout";
 import { tick } from "./sim/simulation";
 import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
@@ -43,6 +44,12 @@ try {
   if (loaded) {
     gears = loaded.gears;
     remoteLinks = loaded.remoteLinks;
+  } else {
+    // First-ever visit (or cleared storage): seed a working showcase layout instead of
+    // an empty canvas, so a new user sees gears actually meshing before they place any.
+    const seeded = createDefaultLayout();
+    gears = seeded.gears;
+    remoteLinks = seeded.remoteLinks;
   }
 } catch (err) {
   console.error("Failed to load saved layout from localStorage; starting with an empty layout.", err);
