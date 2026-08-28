@@ -6,7 +6,13 @@ import { GEAR_DEFS } from "./gearDefs";
  *  the difference here is a caller-supplied, stable `id` (so the layout is reproducible
  *  and testable) and explicit `teeth`/`axis`/`angularVelocity`, since a showcase gear
  *  train needs specific tooth counts and axis directions to actually mesh, not the
- *  palette's one-size-fits-all defaults. */
+ *  palette's one-size-fits-all defaults.
+ *
+ *  `wearRatio` (0-1, default 1) starts the gear partway through its durability instead
+ *  of fully healthy -- every gear in this sandbox starts at 100% otherwise, so a
+ *  first-time visitor would never see the green-to-yellow-to-red wear gradient
+ *  (`colorForDurabilityRatio`) at all without first waiting for real wear to accumulate.
+ *  A couple of gears seeded partway through show it off immediately. */
 function seedGear(
   id: string,
   type: GearType,
@@ -14,6 +20,7 @@ function seedGear(
   axis: [number, number, number],
   teeth: number,
   angularVelocity = 0,
+  wearRatio = 1,
 ): GearInstance {
   const def = GEAR_DEFS[type];
   return {
@@ -24,7 +31,7 @@ function seedGear(
     teeth,
     module: 1,
     durabilityMax: def.durabilityMax,
-    durabilityCurrent: def.durabilityMax,
+    durabilityCurrent: def.durabilityMax * wearRatio,
     broken: false,
     rotation: 0,
     angularVelocity,
@@ -58,7 +65,11 @@ const pitchRadius = (teeth: number, module = 1) => (module * teeth) / 2;
  *     (spec §3.3) to a second sprocket far away, which drives a load.
  *  6. Pulley + belt: the same idea as (5) with pulleys and a belt link (spec §3.4).
  *  7. Ratchet: a crank driving a ratchet -- the ratchet turns with it but (unlike a
- *     normal gear pair) could never back-drive the crank. */
+ *     normal gear pair) could never back-drive the crank.
+ *
+ *  A few gears (the worm, the worm wheel, the ratchet) start partway worn instead of at
+ *  100%, so the green-to-yellow-to-red durability gradient is visible immediately
+ *  instead of only after real wear accumulates. */
 export function createDefaultLayout(): LayoutState {
   const spurX = pitchRadius(20) + pitchRadius(10);
   const helicalX = spurX + pitchRadius(10) + pitchRadius(16);
@@ -92,8 +103,8 @@ export function createDefaultLayout(): LayoutState {
     seedGear("seed-helical", "helical", [helicalX, 0, 0], [0, 1, 0], 16),
     seedGear("seed-bevel", "bevel", [helicalX, 0, bevelZ], [1, 0, 0], 16),
     seedGear("seed-idler", "spur", [helicalX, 0, connZ], [0, 0, 1], 3),
-    seedGear("seed-worm", "worm", [helicalX, 0, connZ], [0, 0, 1], 2),
-    seedGear("seed-wheel", "spur", [helicalX, 0, wheelZ], [0, 1, 0], 20),
+    seedGear("seed-worm", "worm", [helicalX, 0, connZ], [0, 0, 1], 2, 0, 0.25), // pre-worn (red) -- the load branch's heaviest-loaded gear
+    seedGear("seed-wheel", "spur", [helicalX, 0, wheelZ], [0, 1, 0], 20, 0, 0.6), // pre-worn (yellow)
     seedGear("seed-load", "load", [helicalX, 0.02, wheelZ], [0, 1, 0], 0),
 
     // 2. Differential demo
@@ -125,7 +136,7 @@ export function createDefaultLayout(): LayoutState {
 
     // 7. Ratchet
     seedGear("seed-ratchet-crank", "crank", [0, 0, ratchetZ], [0, 1, 0], 16, 1),
-    seedGear("seed-ratchet", "ratchet", [ratchetX, 0, ratchetZ], [0, 1, 0], 10),
+    seedGear("seed-ratchet", "ratchet", [ratchetX, 0, ratchetZ], [0, 1, 0], 10, 0, 0.4), // pre-worn (yellow-red)
   ];
 
   const remoteLinks: RemoteLink[] = [

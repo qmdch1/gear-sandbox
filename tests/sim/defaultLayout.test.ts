@@ -59,6 +59,16 @@ describe("createDefaultLayout", () => {
     expect(Math.abs(rack.linearPosition ?? 0)).toBeGreaterThan(0); // reports progress via linearPosition, not rotation
   });
 
+  it("starts a few gears partway worn so the durability color gradient is visible immediately, without waiting for real wear", () => {
+    const layout = createDefaultLayout();
+    const preWorn = layout.gears.filter((g) => g.durabilityCurrent < g.durabilityMax);
+    expect(preWorn.length).toBeGreaterThan(0);
+    for (const gear of preWorn) {
+      expect(gear.durabilityCurrent).toBeGreaterThan(0); // pre-worn, not pre-broken
+      expect(gear.broken).toBe(false);
+    }
+  });
+
   it("demonstrates the differential's locked-output behaviour with two output shafts spinning at the same speed", () => {
     let layout = createDefaultLayout();
     for (let i = 0; i < 60; i++) {
