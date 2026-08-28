@@ -25,6 +25,56 @@ function isValidRemoteLinksArray(value: unknown): boolean {
   );
 }
 
+const GEAR_TYPES = new Set([
+  "spur", "helical", "crank", "bevel", "worm", "load",
+  "rack", "planetary", "ratchet", "sprocket", "pulley", "differential",
+]);
+
+function isFiniteNumber(value: unknown): boolean {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isVec3(value: unknown): boolean {
+  return Array.isArray(value) && value.length === 3 && value.every(isFiniteNumber);
+}
+
+/** Same shape check `src/persistence/serialize.ts`'s `isValidGear` does on the client --
+ *  kept as a small self-contained copy here rather than a cross-import, for the same
+ *  reason `isValidRemoteLinksArray` above is: `server/` and `src/` are separate
+ *  build/type-check contexts (see tsconfig.json's `include`). Only `gears`' own POST/PUT
+ *  route previously fell back to a shallow `Array.isArray(gears)` check -- a malformed
+ *  element (missing field, wrong type, an object where a tuple was expected, an unknown
+ *  `type` string) would be accepted here and only fail much later, deep inside client
+ *  code that assumes well-formed `GearInstance` objects. Reject it here instead, at write
+ *  time. Deliberately does NOT check cross-field invariants like `durabilityCurrent <=
+ *  durabilityMax` -- the client's `isValidGear` doesn't either; this is a shape/type
+ *  validator, not a business-rule validator, and the two should keep agreeing. */
+function isValidGearsArray(value: unknown): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((gear) => {
+      if (typeof gear !== "object" || gear === null) return false;
+      const g = gear as Record<string, unknown>;
+      return (
+        typeof g.id === "string" &&
+        g.id.length > 0 &&
+        typeof g.type === "string" &&
+        GEAR_TYPES.has(g.type) &&
+        isVec3(g.position) &&
+        isVec3(g.axis) &&
+        isFiniteNumber(g.teeth) &&
+        isFiniteNumber(g.module) &&
+        isFiniteNumber(g.durabilityMax) &&
+        isFiniteNumber(g.durabilityCurrent) &&
+        typeof g.broken === "boolean" &&
+        isFiniteNumber(g.rotation) &&
+        isFiniteNumber(g.angularVelocity) &&
+        (g.linearPosition === undefined || isFiniteNumber(g.linearPosition))
+      );
+    })
+  );
+}
+
 export function createApp(db: Database.Database): express.Express {
   const app = express();
   app.use(cors());
@@ -34,6 +84,13 @@ export function createApp(db: Database.Database): express.Express {
     const { name, gears, remoteLinks } = req.body ?? {};
     if (typeof name !== "string" || !name.trim() || !Array.isArray(gears)) {
       res.status(400).json({ error: "name (string) and gears (array) are required" });
+      return;
+    }
+    if (!isValidGearsArray(gears)) {
+      res.status(400).json({
+        error:
+          "gears must be an array of well-formed GearInstance objects (id, type, position, axis, teeth, module, durabilityMax, durabilityCurrent, broken, rotation, angularVelocity)",
+      });
       return;
     }
     if (remoteLinks !== undefined && !isValidRemoteLinksArray(remoteLinks)) {
@@ -77,6 +134,13 @@ export function createApp(db: Database.Database): express.Express {
     const { name, gears, remoteLinks } = req.body ?? {};
     if (!Array.isArray(gears)) {
       res.status(400).json({ error: "gears (array) is required" });
+      return;
+    }
+    if (!isValidGearsArray(gears)) {
+      res.status(400).json({
+        error:
+          "gears must be an array of well-formed GearInstance objects (id, type, position, axis, teeth, module, durabilityMax, durabilityCurrent, broken, rotation, angularVelocity)",
+      });
       return;
     }
     if (remoteLinks !== undefined && !isValidRemoteLinksArray(remoteLinks)) {

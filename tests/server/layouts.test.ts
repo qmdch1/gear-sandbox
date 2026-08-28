@@ -5,6 +5,26 @@ import { createApp } from "../../server/app";
 import type express from "express";
 import type Database from "better-sqlite3";
 
+/** A well-formed `GearInstance` (see `src/sim/types.ts`), for tests that need the deep
+ *  `isValidGearsArray` check on the server to accept the payload -- unlike the bare
+ *  `{ id, type }` shorthand this file used before that check existed. */
+function makeGear(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+  return {
+    id: "a",
+    type: "spur",
+    position: [0, 0, 0],
+    axis: [0, 1, 0],
+    teeth: 12,
+    module: 1,
+    durabilityMax: 100,
+    durabilityCurrent: 100,
+    broken: false,
+    rotation: 0,
+    angularVelocity: 0,
+    ...overrides,
+  };
+}
+
 describe("layouts API", () => {
   let app: express.Express;
   let db: Database.Database;
@@ -34,7 +54,7 @@ describe("layouts API", () => {
   });
 
   it("round-trips gears through save and fetch", async () => {
-    const gears = [{ id: "a", type: "spur" }];
+    const gears = [makeGear()];
     const created = await request(app).post("/api/layouts").send({ name: "roundtrip", gears });
     const fetched = await request(app).get(`/api/layouts/${created.body.id}`);
     expect(fetched.status).toBe(200);
@@ -48,13 +68,14 @@ describe("layouts API", () => {
 
   it("overwrites an existing layout via PUT", async () => {
     const created = await request(app).post("/api/layouts").send({ name: "v1", gears: [] });
+    const updatedGears = [makeGear({ type: "crank" })];
     const updated = await request(app)
       .put(`/api/layouts/${created.body.id}`)
-      .send({ name: "v2", gears: [{ id: "a", type: "crank" }] });
+      .send({ name: "v2", gears: updatedGears });
     expect(updated.status).toBe(200);
     expect(updated.body.name).toBe("v2");
     const fetched = await request(app).get(`/api/layouts/${created.body.id}`);
-    expect(fetched.body.gears).toEqual([{ id: "a", type: "crank" }]);
+    expect(fetched.body.gears).toEqual(updatedGears);
   });
 
   it("404s when updating a layout that doesn't exist", async () => {
@@ -103,5 +124,55 @@ describe("layouts API", () => {
   it("still accepts a POST with no remoteLinks field at all (defaults to [])", async () => {
     const res = await request(app).post("/api/layouts").send({ name: "no-links", gears: [] });
     expect(res.status).toBe(201);
+  });
+
+  it("accepts a POST whose gears is a well-formed GearInstance array", async () => {
+    const res = await request(app)
+      .post("/api/layouts")
+      .send({ name: "good-gears", gears: [makeGear(), makeGear({ id: "b", type: "load" })] });
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects a POST whose gears entries are missing a required field", async () => {
+    const gear = makeGear() as Record<string, unknown>;
+    delete gear.durabilityCurrent;
+    const res = await request(app).post("/api/layouts").send({ name: "bad-gears", gears: [gear] });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a POST whose gears entries have the wrong type for a field", async () => {
+    const res = await request(app)
+      .post("/api/layouts")
+      .send({ name: "bad-gears", gears: [makeGear({ teeth: "12" })] });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a POST whose gears entries have an unknown type string", async () => {
+    const res = await request(app)
+      .post("/api/layouts")
+      .send({ name: "bad-gears", gears: [makeGear({ type: "cog" })] });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a POST whose gears entries have a malformed position (wrong length)", async () => {
+    const res = await request(app)
+      .post("/api/layouts")
+      .send({ name: "bad-gears", gears: [makeGear({ position: [0, 0] })] });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a POST whose gears entries have a malformed axis (non-number element)", async () => {
+    const res = await request(app)
+      .post("/api/layouts")
+      .send({ name: "bad-gears", gears: [makeGear({ axis: [0, "1", 0] })] });
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects a PUT whose gears entries are malformed the same way", async () => {
+    const created = await request(app).post("/api/layouts").send({ name: "v1", gears: [] }).expect(201);
+    const res = await request(app)
+      .put(`/api/layouts/${created.body.id}`)
+      .send({ gears: [makeGear({ broken: "no" })] });
+    expect(res.status).toBe(400);
   });
 });
