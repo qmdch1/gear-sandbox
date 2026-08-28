@@ -205,4 +205,24 @@ describe("buildGeometryForType", () => {
       expect(sizeZ).toBeGreaterThan(sizeY);
     }
   });
+
+  it("gives a ratchet a pawl arm that reaches further out than a plain spur gear's addendum circle", () => {
+    const spur = buildGeometryForType("spur", 20, 1);
+    const ratchet = buildGeometryForType("ratchet", 20, 1);
+    spur.computeBoundingSphere();
+    ratchet.computeBoundingSphere();
+    expect(ratchet.boundingSphere!.radius).toBeGreaterThan(spur.boundingSphere!.radius);
+  });
+
+  it("gives a sprocket a visibly different vertex count than a plain spur gear (square teeth, not full involute flanks)", () => {
+    const spur = buildGeometryForType("spur", 20, 1);
+    const sprocket = buildGeometryForType("sprocket", 20, 1);
+    expect(sprocket.attributes.position.count).not.toBe(spur.attributes.position.count);
+  });
+
+  it("gives a sprocket one tooth spike per requested tooth count -- more teeth means more merged geometry", () => {
+    const fewTeeth = buildGeometryForType("sprocket", 8, 1);
+    const manyTeeth = buildGeometryForType("sprocket", 24, 1);
+    expect(manyTeeth.attributes.position.count).toBeGreaterThan(fewTeeth.attributes.position.count);
+  });
 });

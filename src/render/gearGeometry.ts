@@ -193,6 +193,44 @@ function differentialGeometry(teeth: number, module: number): THREE.BufferGeomet
   return mergeGeometries([housing, inputGear]);
 }
 
+/** A spur-gear body plus a single angled pawl arm sticking out past the rim -- the
+ *  pawl mechanism itself isn't simulated (spec §3.2's one-way behaviour comes purely
+ *  from `evaluatePair`'s `oneWay` field), but a plain involute gear is otherwise visually
+ *  indistinguishable from a spur gear, which undersells that this is a different object
+ *  entirely. The arm is the one visual cue a ratchet actually has in reality. */
+function ratchetGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const base = extrudedGearGeometry(teeth, module);
+  const addendumRadius = (module * teeth) / 2 + module * ADDENDUM_FACTOR;
+  const pawlLength = module * 1.8;
+  const pawl = new THREE.BoxGeometry(module * 0.35, pawlLength, GEAR_THICKNESS * 1.5);
+  // Anchor the pawl's inner edge at the tooth tips (addendum circle) and let it extend
+  // further out from there -- anything shorter is hidden inside the gear's own teeth.
+  pawl.translate(0, addendumRadius + pawlLength / 2, 0);
+  pawl.rotateZ(Math.PI / 7); // angled, not a straight radial spoke -- reads as a catch, not a handle
+  return mergeGeometries([base, pawl]);
+}
+
+/** A thin hub disk ringed with small square teeth, rather than full involute flanks --
+ *  the real distinguishing silhouette of a chain sprocket (spec §3.3) against a normal
+ *  gear. A true ANSI chain-sprocket tooth profile is out of scope; this reads as
+ *  visually distinct without deriving a whole new curve. */
+function sprocketGeometry(teeth: number, module: number): THREE.BufferGeometry {
+  const pitchRadius = (module * teeth) / 2;
+  const hub = new THREE.CylinderGeometry(pitchRadius * 0.85, pitchRadius * 0.85, GEAR_THICKNESS, 24);
+  hub.rotateX(Math.PI / 2);
+  const toothWidth = module * 0.5;
+  const toothHeight = module * 0.9;
+  const geometries: THREE.BufferGeometry[] = [hub];
+  for (let i = 0; i < teeth; i++) {
+    const angle = (i / teeth) * Math.PI * 2;
+    const tooth = new THREE.BoxGeometry(toothWidth, toothHeight, GEAR_THICKNESS);
+    tooth.translate(0, pitchRadius * 0.85 + toothHeight / 2, 0);
+    tooth.rotateZ(-angle); // translate first, then rotate about the hub's centre -- spaces each tooth radially
+    geometries.push(tooth);
+  }
+  return mergeGeometries(geometries);
+}
+
 function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
   // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   const merged = new THREE.BufferGeometry();
@@ -250,9 +288,9 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       return loadGeometry;
     }
     case "ratchet":
-      return extrudedGearGeometry(teeth, module); // v1 note: pawl mechanism is not modeled visually (spec §3.2) -- same visual as a spur gear
+      return ratchetGeometry(teeth, module);
     case "sprocket":
-      return extrudedGearGeometry(teeth, module); // v1 note: true ANSI chain-sprocket tooth profile is out of scope (spec §3.3) -- same visual as a spur gear
+      return sprocketGeometry(teeth, module);
     case "planetary":
       return planetaryGeometry(teeth, module);
     case "rack":
