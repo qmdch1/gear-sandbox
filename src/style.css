@@ -6,3 +6,4 @@ html, body { margin: 0; height: 100%; background: #1a1d22; color: #eee; font-fam
 #palette button { display: block; width: 100%; margin-bottom: 6px; }
 #durability-panel { margin-top: 12px; padding: 8px; background: #2f333b; border-radius: 4px; }
 #durability-panel[hidden] { display: none; }
+.gear-note { margin: 6px 0 0; font-size: 0.85em; color: #aab; }
