@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import * as THREE from "three";
 import { describe, it, expect } from "vitest";
-import { colorForDurabilityRatio, GearMeshObject } from "../../src/render/gearMesh";
-import type { GearInstance } from "../../src/sim/types";
+import { colorForDurabilityRatio, colorForGear, GEAR_TYPE_COLOR, GearMeshObject } from "../../src/render/gearMesh";
+import type { GearInstance, GearType } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
   return {
@@ -21,6 +21,60 @@ describe("colorForDurabilityRatio", () => {
   });
 });
 
+describe("GEAR_TYPE_COLOR", () => {
+  it("defines a distinct color for every gear type", () => {
+    const types = Object.keys(GEAR_TYPE_COLOR) as GearType[];
+    expect(types.length).toBe(12); // one per GearType -- fails loudly if a type is ever added and forgotten here
+    const hexes = new Set(types.map((t) => GEAR_TYPE_COLOR[t].getHexString()));
+    expect(hexes.size).toBe(types.length); // no two types share a base color
+  });
+});
+
+describe("colorForGear", () => {
+  it("returns each type's own base color at full health", () => {
+    const spur = colorForGear("spur", 1, false);
+    const worm = colorForGear("worm", 1, false);
+    expect(spur.equals(GEAR_TYPE_COLOR.spur)).toBe(true);
+    expect(worm.equals(GEAR_TYPE_COLOR.worm)).toBe(true);
+    expect(spur.equals(worm)).toBe(false); // the two types must actually look different
+  });
+
+  it("converges toward the same damage colors regardless of type once badly worn", () => {
+    // Two different types, both nearly destroyed: the durability gradient should
+    // dominate and pull both toward the same red, overriding their distinct base colors.
+    const spurNearDead = colorForGear("spur", 0.02, false);
+    const wormNearDead = colorForGear("worm", 0.02, false);
+    expect(spurNearDead.r).toBeGreaterThan(spurNearDead.g); // reads as damaged (red-leaning)
+    expect(wormNearDead.r).toBeGreaterThan(wormNearDead.g);
+    // Close to each other despite very different healthy base colors.
+    expect(Math.abs(spurNearDead.r - wormNearDead.r)).toBeLessThan(0.05);
+    expect(Math.abs(spurNearDead.g - wormNearDead.g)).toBeLessThan(0.05);
+    expect(Math.abs(spurNearDead.b - wormNearDead.b)).toBeLessThan(0.05);
+  });
+
+  it("returns the same gray broken color for every type, ignoring durability ratio", () => {
+    const brokenSpur = colorForGear("spur", 0.9, true); // high ratio, but broken=true wins
+    const brokenWorm = colorForGear("worm", 0.9, true);
+    expect(brokenSpur.equals(brokenWorm)).toBe(true);
+    expect(brokenSpur.r).toBeCloseTo(brokenSpur.g, 5);
+    expect(brokenSpur.g).toBeCloseTo(brokenSpur.b, 5);
+  });
+
+  it("blends smoothly from a type's base color toward yellow as it first wears past full health", () => {
+    const full = colorForGear("pulley", 1, false);
+    const halfway = colorForGear("pulley", 0.75, false); // partway between 1.0 and the 0.5 yellow point
+    const atYellow = colorForGear("pulley", 0.5, false);
+    // halfway should sit strictly between the pure type color and pure yellow on each channel
+    // (or be flat if that channel doesn't change between the two endpoints).
+    for (const channel of ["r", "g", "b"] as const) {
+      const lo = Math.min(full[channel], atYellow[channel]);
+      const hi = Math.max(full[channel], atYellow[channel]);
+      expect(halfway[channel]).toBeGreaterThanOrEqual(lo - 1e-6);
+      expect(halfway[channel]).toBeLessThanOrEqual(hi + 1e-6);
+    }
+  });
+});
+
 describe("GearMeshObject", () => {
   it("positions the mesh at the gear's position", () => {
     const gear = makeGear({ position: [3, 0, 5] });
@@ -33,6 +87,20 @@ describe("GearMeshObject", () => {
     const obj = new GearMeshObject(gear);
     const material = obj.mesh.material as THREE.MeshStandardMaterial;
     expect(material.color.r).toBeCloseTo(material.color.g, 1); // gray, not red or green
+  });
+
+  it("colors a fully healthy gear's material with its type's base color", () => {
+    const spur = new GearMeshObject(makeGear({ type: "spur" }));
+    const worm = new GearMeshObject(makeGear({ type: "worm" }));
+    const spurMaterial = spur.mesh.material as THREE.MeshStandardMaterial;
+    const wormMaterial = worm.mesh.material as THREE.MeshStandardMaterial;
+    expect(spurMaterial.color.equals(GEAR_TYPE_COLOR.spur)).toBe(true);
+    expect(wormMaterial.color.equals(GEAR_TYPE_COLOR.worm)).toBe(true);
+  });
+
+  it("uses MeshStandardMaterial so scene lighting actually shades the gear", () => {
+    const obj = new GearMeshObject(makeGear({}));
+    expect(obj.mesh.material).toBeInstanceOf(THREE.MeshStandardMaterial);
   });
 
   it("translates a rack along its axis by linearPosition instead of rotating it", () => {
