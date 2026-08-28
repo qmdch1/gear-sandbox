@@ -5,6 +5,7 @@ import { tick } from "./sim/simulation";
 import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
 import { DragControls } from "./interaction/dragControls";
+import { PlacementControls } from "./interaction/placementControls";
 import { PaletteUI } from "./ui/paletteUI";
 import { LinkModeUI } from "./ui/linkModeUI";
 import { DiagnosticsPanel } from "./ui/diagnosticsPanel";
@@ -65,9 +66,20 @@ function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
 }
 
-new PaletteUI(document.querySelector("#palette")!, (type) =>
-  addGear(type, [(gears.length % 5) * 3, 0, Math.floor(gears.length / 5) * 3]),
-);
+// Rigid grid-slot formula, kept as the fallback placement when a placement click's raycast
+// doesn't hit the ground plane (see PlacementControls' fallbackPosition option).
+function gridSlotPosition(): [number, number, number] {
+  return [(gears.length % 5) * 3, 0, Math.floor(gears.length / 5) * 3];
+}
+
+const paletteUI = new PaletteUI(document.querySelector("#palette")!, (type) => placementControls.handlePick(type));
+
+const placementControls = new PlacementControls({
+  ctx,
+  onPlace: (type, position) => addGear(type, position),
+  onModeChange: (activeType) => paletteUI.setActive(activeType),
+  fallbackPosition: () => gridSlotPosition(),
+});
 
 function addRemoteLink(a: string, b: string, kind: "chain" | "belt"): void {
   // A link is an unordered pair, so connecting the same two objects again -- in either
