@@ -158,7 +158,7 @@ function animate(): void {
   const result = tick({ gears, remoteLinks }, dt, timeScale);
   gears = result.gears;
   sceneSync.sync(gears, remoteLinks, result.diagnostics);
-  diagnosticsPanel.render(result.diagnostics);
+  diagnosticsPanel.render(result.diagnostics, gears);
 
   ctx.controls.update();
   ctx.renderer.render(ctx.scene, ctx.camera);
