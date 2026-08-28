@@ -34,17 +34,23 @@ function seedGear(
 
 const pitchRadius = (teeth: number, module = 1) => (module * teeth) / 2;
 
-/** The layout a first-time visitor sees instead of an empty canvas: three independent,
+/** The layout a first-time visitor sees instead of an empty canvas: independent,
  *  fully-powered gear trains that each demonstrate a different mechanism this sandbox
  *  supports, laid out so every mesh/coupling distance is exact and no two unrelated
  *  gears sit close enough to misread as a collision (verified by `buildEdges`+`classify`
- *  reporting zero unconnected/no-power/overlap gears -- see the accompanying test).
+ *  reporting zero unconnected/no-power gears and exactly one -- expected, see (2) below
+ *  -- overlap pair; see the accompanying test).
  *
  *  1. Main drivetrain: crank -> spur -> helical -> bevel (90-degree turn) -> a small
  *     idler spur coincident with a worm (shaft coupling) -> worm wheel (large one-way
  *     reduction) -> a load, so durability visibly depletes faster on this branch.
- *  2. Differential demo: its own crank -> input bevel -> differential -> one output
- *     shaft, showing the "locked" output behaviour (spec §3.6).
+ *  2. Differential demo: its own crank -> input bevel -> differential -> two output
+ *     shafts, both spinning at the same speed -- the "locked" output behaviour
+ *     (spec §3.6) is only visible with two outputs to compare against each other.
+ *     The two outputs necessarily sit close enough to each other to also trip the
+ *     overlap diagnostic (both are legitimately coincident-coupled to the same
+ *     differential hub, which `isOverlapping` has no way to tell apart from two
+ *     gears crowding each other) -- the one expected exception noted above.
  *  3. A standalone planetary set, powered by its own small crank, off to one side.
  *  4. Rack & pinion: its own small crank turning a pinion that drives a rack along a
  *     straight line.
@@ -94,11 +100,13 @@ export function createDefaultLayout(): LayoutState {
     seedGear("seed-diff-crank", "crank", [diffCrankX, 0, 0], [0, 1, 0], 16, 1),
     seedGear("seed-diff-input", "bevel", [diffInputX, 0, 0], [1, 0, 0], 14),
     seedGear("seed-differential", "differential", [diffInputX, 0, differentialZ], [0, 1, 0], 20),
-    seedGear("seed-diff-output", "spur", [diffInputX, 0.02, differentialZ], [0, 1, 0], 12),
+    seedGear("seed-diff-output-a", "spur", [diffInputX, 0.02, differentialZ], [0, 1, 0], 12),
+    seedGear("seed-diff-output-b", "spur", [diffInputX, -0.02, differentialZ], [0, 1, 0], 12),
 
     // 3. Standalone planetary set
     seedGear("seed-planetary", "planetary", [0, 0, planetaryZ], [0, 1, 0], 40),
     seedGear("seed-planetary-crank", "crank", [planCrankX, 0, planetaryZ], [0, 1, 0], 10, 1),
+    seedGear("seed-planetary-load", "load", [0, 0.02, planetaryZ], [0, 1, 0], 0),
 
     // 4. Rack & pinion
     seedGear("seed-rack-crank", "crank", [rackPinionX, 0, 0], [0, 1, 0], 14, 1),

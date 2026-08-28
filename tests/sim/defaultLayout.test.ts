@@ -5,13 +5,18 @@ import { tick } from "../../src/sim/simulation";
 import type { GearType } from "../../src/sim/types";
 
 describe("createDefaultLayout", () => {
-  it("places every gear so it meshes/couples cleanly -- no unconnected, unpowered, or overlapping gears", () => {
+  it("places every gear so it meshes/couples cleanly -- no unconnected or unpowered gears, and only the one expected overlap", () => {
     const layout = createDefaultLayout();
     const edges = buildEdges(layout.gears, layout.remoteLinks);
     const diagnostics = classify(layout.gears, edges);
     expect(diagnostics.unconnectedIds).toEqual([]);
     expect(diagnostics.noPowerIds).toEqual([]);
-    expect(diagnostics.overlapPairs).toEqual([]);
+    // The differential's two output shafts are both coincidentally coupled to the same
+    // hub (that's what makes them "locked" together -- see spec §3.6), which puts them
+    // within each other's overlap-distance too: `isOverlapping` has no way to know two
+    // gears are each legitimately coupled to a shared third gear rather than to each
+    // other. This is the one inherent, understood exception -- not a placement mistake.
+    expect(diagnostics.overlapPairs).toEqual([["seed-diff-output-a", "seed-diff-output-b"]]);
   });
 
   it("includes at least one of every object type this sandbox supports", () => {
@@ -52,5 +57,17 @@ describe("createDefaultLayout", () => {
     const rack = layout.gears.find((g) => g.type === "rack")!;
     expect(rack.broken).toBe(false);
     expect(Math.abs(rack.linearPosition ?? 0)).toBeGreaterThan(0); // reports progress via linearPosition, not rotation
+  });
+
+  it("demonstrates the differential's locked-output behaviour with two output shafts spinning at the same speed", () => {
+    let layout = createDefaultLayout();
+    for (let i = 0; i < 60; i++) {
+      const result = tick(layout, 1 / 60, 1);
+      layout = { gears: result.gears, remoteLinks: layout.remoteLinks };
+    }
+    const outputA = layout.gears.find((g) => g.id === "seed-diff-output-a")!;
+    const outputB = layout.gears.find((g) => g.id === "seed-diff-output-b")!;
+    expect(outputA.angularVelocity).not.toBe(0);
+    expect(outputB.angularVelocity).toBeCloseTo(outputA.angularVelocity);
   });
 });
