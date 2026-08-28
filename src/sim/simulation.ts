@@ -71,8 +71,12 @@ export function tick(layout: LayoutState, dt: number, timeScale: number): SimTic
     const a = byId.get(edge.a)!;
     const b = byId.get(edge.b)!;
     // A rack has no meaningful rotational phase to align, and a broken gear's rotation is
-    // frozen by design (see the `broken ? g.rotation : ...` branch below). Both are also
-    // caught by the velocity check underneath, but naming them is clearer and cheaper.
+    // frozen by design (see the `broken ? g.rotation : ...` branch below). These checks are
+    // NOT redundant with the velocity check below: a rack or a broken gear sitting at rest
+    // next to an also-stationary partner satisfies `wB + ratio*wA == 0` trivially (0 == 0),
+    // so the velocity check alone would still re-align them. Skipping by type/broken status
+    // first is what keeps an at-rest rack (whose phase is meaningless) or an already-settled
+    // broken pair from being nudged for no reason.
     if (a.type === "rack" || b.type === "rack") continue;
     if (a.broken || b.broken) continue;
     // `propagateRotation` drives a "mesh" edge with sign = -1 and ratio = edge.ratio in
