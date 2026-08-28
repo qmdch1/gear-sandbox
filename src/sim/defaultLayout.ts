@@ -10,9 +10,10 @@ import { GEAR_DEFS } from "./gearDefs";
  *
  *  `wearRatio` (0-1, default 1) starts the gear partway through its durability instead
  *  of fully healthy -- every gear in this sandbox starts at 100% otherwise, so a
- *  first-time visitor would never see the green-to-yellow-to-red wear gradient
- *  (`colorForDurabilityRatio`) at all without first waiting for real wear to accumulate.
- *  A couple of gears seeded partway through show it off immediately. */
+ *  first-time visitor would never see the yellow-to-red wear gradient (`colorForGear`,
+ *  which fades each type's own healthy color to yellow then red as it wears) at all
+ *  without first waiting for real wear to accumulate. A couple of gears seeded
+ *  partway through show it off immediately. */
 function seedGear(
   id: string,
   type: GearType,

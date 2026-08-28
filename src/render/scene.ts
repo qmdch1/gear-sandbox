@@ -25,10 +25,18 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   controls.minDistance = 5;
   controls.maxDistance = 300; // enables the requested zoom-in/zoom-out range
 
-  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
-  const directional = new THREE.DirectionalLight(0xffffff, 0.8);
-  directional.position.set(20, 40, 20);
-  scene.add(ambient, directional);
+  // Ambient is kept low -- it's just a floor so nothing goes pure black -- with most of
+  // the shading coming from the two directional lights below, so tooth flanks and
+  // gear-face depth actually read instead of the scene looking flat/shadeless.
+  const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+  // Key light: the dominant, brighter source: casts the primary highlight/shadow side.
+  const key = new THREE.DirectionalLight(0xffffff, 1.1);
+  key.position.set(20, 40, 20);
+  // Fill light: dim, from roughly the opposite side, so the side facing away from the
+  // key isn't crushed to black -- a cheap way to add depth without shadow maps.
+  const fill = new THREE.DirectionalLight(0xdbe6ff, 0.35);
+  fill.position.set(-25, 15, -15);
+  scene.add(ambient, key, fill);
 
   const groundPlane = new THREE.Mesh(
     new THREE.PlaneGeometry(500, 500),
