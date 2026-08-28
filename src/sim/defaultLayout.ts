@@ -46,10 +46,8 @@ const pitchRadius = (teeth: number, module = 1) => (module * teeth) / 2;
  *  2. Differential demo: its own crank -> input bevel -> differential -> one output
  *     shaft, showing the "locked" output behaviour (spec §3.6).
  *  3. A standalone planetary set, powered by its own small crank, off to one side.
- *
- *  Rack & pinion is intentionally not included here yet -- its tooth geometry doesn't
- *  yet face the pinion correctly (a known, tracked follow-up), so a showcase default
- *  should not lead with a combination that still looks wrong. */
+ *  4. Rack & pinion: its own small crank turning a pinion that drives a rack along a
+ *     straight line. */
 export function createDefaultLayout(): LayoutState {
   const spurX = pitchRadius(20) + pitchRadius(10);
   const helicalX = spurX + pitchRadius(10) + pitchRadius(16);
@@ -63,6 +61,9 @@ export function createDefaultLayout(): LayoutState {
 
   const planetaryZ = -90;
   const planCrankX = pitchRadius(40) + pitchRadius(10);
+
+  const rackPinionX = 60;
+  const rackY = pitchRadius(14); // perpendicular offset from the pinion's line = pinion's own pitch radius
 
   const gears: GearInstance[] = [
     // 1. Main drivetrain
@@ -84,6 +85,10 @@ export function createDefaultLayout(): LayoutState {
     // 3. Standalone planetary set
     seedGear("seed-planetary", "planetary", [0, 0, planetaryZ], [0, 1, 0], 40),
     seedGear("seed-planetary-crank", "crank", [planCrankX, 0, planetaryZ], [0, 1, 0], 10, 1),
+
+    // 4. Rack & pinion
+    seedGear("seed-rack-crank", "crank", [rackPinionX, 0, 0], [0, 1, 0], 14, 1),
+    seedGear("seed-rack", "rack", [rackPinionX, rackY, 0], [0, 0, 1], 8),
   ];
 
   return { gears, remoteLinks: [] };
