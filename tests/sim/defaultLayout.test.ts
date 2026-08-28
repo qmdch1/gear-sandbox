@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { createDefaultLayout } from "../../src/sim/defaultLayout";
 import { buildEdges, classify } from "../../src/sim/graph";
 import { tick } from "../../src/sim/simulation";
+import type { GearType } from "../../src/sim/types";
 
 describe("createDefaultLayout", () => {
   it("places every gear so it meshes/couples cleanly -- no unconnected, unpowered, or overlapping gears", () => {
@@ -13,16 +14,22 @@ describe("createDefaultLayout", () => {
     expect(diagnostics.overlapPairs).toEqual([]);
   });
 
-  it("includes at least one of each showcased mechanism (bevel turn, worm reduction, differential, planetary, rack)", () => {
+  it("includes at least one of every object type this sandbox supports", () => {
     const layout = createDefaultLayout();
     const types = new Set(layout.gears.map((g) => g.type));
-    expect(types.has("crank")).toBe(true);
-    expect(types.has("bevel")).toBe(true);
-    expect(types.has("worm")).toBe(true);
-    expect(types.has("differential")).toBe(true);
-    expect(types.has("planetary")).toBe(true);
-    expect(types.has("load")).toBe(true);
-    expect(types.has("rack")).toBe(true);
+    const allTypes: GearType[] = [
+      "spur", "helical", "crank", "bevel", "worm", "load",
+      "rack", "planetary", "ratchet", "sprocket", "pulley", "differential",
+    ];
+    for (const type of allTypes) {
+      expect(types.has(type)).toBe(true);
+    }
+  });
+
+  it("includes both a chain link and a belt link", () => {
+    const layout = createDefaultLayout();
+    expect(layout.remoteLinks.some((l) => l.kind === "chain")).toBe(true);
+    expect(layout.remoteLinks.some((l) => l.kind === "belt")).toBe(true);
   });
 
   it("has all gear ids unique", () => {

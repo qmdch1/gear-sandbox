@@ -1,4 +1,4 @@
-import type { GearInstance, GearType, LayoutState } from "./types";
+import type { GearInstance, GearType, LayoutState, RemoteLink } from "./types";
 import { GEAR_DEFS } from "./gearDefs";
 
 /** Builds one gear instance for the default showcase layout. Durability/broken/rotation
@@ -47,7 +47,12 @@ const pitchRadius = (teeth: number, module = 1) => (module * teeth) / 2;
  *     shaft, showing the "locked" output behaviour (spec §3.6).
  *  3. A standalone planetary set, powered by its own small crank, off to one side.
  *  4. Rack & pinion: its own small crank turning a pinion that drives a rack along a
- *     straight line. */
+ *     straight line.
+ *  5. Sprocket + chain: a crank coincident-coupled onto one sprocket, chain-linked
+ *     (spec §3.3) to a second sprocket far away, which drives a load.
+ *  6. Pulley + belt: the same idea as (5) with pulleys and a belt link (spec §3.4).
+ *  7. Ratchet: a crank driving a ratchet -- the ratchet turns with it but (unlike a
+ *     normal gear pair) could never back-drive the crank. */
 export function createDefaultLayout(): LayoutState {
   const spurX = pitchRadius(20) + pitchRadius(10);
   const helicalX = spurX + pitchRadius(10) + pitchRadius(16);
@@ -64,6 +69,15 @@ export function createDefaultLayout(): LayoutState {
 
   const rackPinionX = 60;
   const rackY = pitchRadius(14); // perpendicular offset from the pinion's line = pinion's own pitch radius
+
+  const sprocketX = 100;
+  const sprocketChainSpan = 30;
+
+  const pulleyX = -100;
+  const pulleyBeltSpan = 30;
+
+  const ratchetZ = 60;
+  const ratchetX = pitchRadius(16) + pitchRadius(10);
 
   const gears: GearInstance[] = [
     // 1. Main drivetrain
@@ -89,7 +103,27 @@ export function createDefaultLayout(): LayoutState {
     // 4. Rack & pinion
     seedGear("seed-rack-crank", "crank", [rackPinionX, 0, 0], [0, 1, 0], 14, 1),
     seedGear("seed-rack", "rack", [rackPinionX, rackY, 0], [0, 0, 1], 8),
+
+    // 5. Sprocket + chain
+    seedGear("seed-sprocket-crank", "crank", [sprocketX, 0, 0], [0, 1, 0], 16, 1),
+    seedGear("seed-sprocket-a", "sprocket", [sprocketX, 0, 0], [0, 1, 0], 16),
+    seedGear("seed-sprocket-b", "sprocket", [sprocketX + sprocketChainSpan, 0, 0], [0, 1, 0], 10),
+    seedGear("seed-sprocket-load", "load", [sprocketX + sprocketChainSpan, 0.02, 0], [0, 1, 0], 0),
+
+    // 6. Pulley + belt
+    seedGear("seed-pulley-crank", "crank", [pulleyX, 0, 0], [0, 1, 0], 20, 1),
+    seedGear("seed-pulley-a", "pulley", [pulleyX, 0, 0], [0, 1, 0], 20),
+    seedGear("seed-pulley-b", "pulley", [pulleyX - pulleyBeltSpan, 0, 0], [0, 1, 0], 12),
+
+    // 7. Ratchet
+    seedGear("seed-ratchet-crank", "crank", [0, 0, ratchetZ], [0, 1, 0], 16, 1),
+    seedGear("seed-ratchet", "ratchet", [ratchetX, 0, ratchetZ], [0, 1, 0], 10),
   ];
 
-  return { gears, remoteLinks: [] };
+  const remoteLinks: RemoteLink[] = [
+    { a: "seed-sprocket-a", b: "seed-sprocket-b", kind: "chain" },
+    { a: "seed-pulley-a", b: "seed-pulley-b", kind: "belt" },
+  ];
+
+  return { gears, remoteLinks };
 }
