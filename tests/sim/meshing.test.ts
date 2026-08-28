@@ -129,6 +129,28 @@ describe("v2 object types", () => {
     expect(evaluatePair(r1, r2)).toBeNull();
   });
 
+  it("couples a sprocket onto a coincident driving shaft, so it can receive power before a chain carries it further", () => {
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const sprocket = makeGear({ id: "s", type: "sprocket", teeth: 12, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const edge = evaluatePair(crank, sprocket)!;
+    expect(edge.kind).toBe("coupling");
+    expect(edge.ratio).toBe(1);
+  });
+
+  it("does not mesh a sprocket with a non-coincident gear at pitch-radius-sum distance -- only a coincident shaft or a chain link can power it", () => {
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0] });
+    const sprocket = makeGear({ id: "s", type: "sprocket", teeth: 10, module: 1, position: [15, 0, 0] }); // (20+10)/2=15, a valid gear-mesh distance
+    expect(evaluatePair(crank, sprocket)).toBeNull();
+  });
+
+  it("couples a pulley onto a coincident driving shaft the same way a sprocket does", () => {
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const pulley = makeGear({ id: "p", type: "pulley", teeth: 12, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const edge = evaluatePair(crank, pulley)!;
+    expect(edge.kind).toBe("coupling");
+    expect(edge.ratio).toBe(1);
+  });
+
   it("meshes a differential's input like a bevel gear (perpendicular axis, pitch-radius-sum distance)", () => {
     const diff = makeGear({ id: "diff", type: "differential", teeth: 30, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
     const inputBevel = makeGear({ id: "in", type: "bevel", teeth: 15, module: 1, position: [22.5, 0, 0], axis: [1, 0, 0] });

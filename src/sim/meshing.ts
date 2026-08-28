@@ -7,6 +7,18 @@ const COUPLING_DISTANCE_TOLERANCE = 0.05;
 
 const PARALLEL_FAMILY = new Set<GearInstance["type"]>(["spur", "helical", "crank", "planetary"]);
 
+/** Types with no direct tooth-mesh rule of their own -- they only ever receive rotation
+ *  by sharing a shaft (coincident position + axis) with whatever drives them. "sprocket"
+ *  and "pulley" are chain-/belt-driven wheels (spec §3.3/§3.4): a real chainring or
+ *  pulley is bolted straight onto a power shaft, not meshed tooth-to-tooth with an
+ *  adjacent gear, so a coincident coupling -- the same mechanism already used for a
+ *  worm's driving shaft and a load's mounting -- is the correct (and only) way for them
+ *  to receive power before a chain/belt `RemoteLink` carries it further. Without this,
+ *  a sprocket or pulley has no path to a crank at all: `evaluatePair` gives them no
+ *  other rule, and a `RemoteLink` only relates two already-placed gears to each other,
+ *  never to a power source. */
+const COINCIDENT_ONLY = new Set<GearInstance["type"]>(["load", "differential", "sprocket", "pulley"]);
+
 function dist(a: [number, number, number], b: [number, number, number]): number {
   return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
@@ -142,9 +154,9 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
     return { a: a.id, b: b.id, kind: "mesh", ratio: 1, oneWay };
   }
 
-  // (2) Generalized load/differential coincident-coupling block: both resolve as 1:1
-  // couplings when coincident (same position and axis).
-  if (a.type === "load" || b.type === "load" || a.type === "differential" || b.type === "differential") {
+  // (2) Generalized coincident-coupling block: load, differential, sprocket, and pulley
+  // all resolve as 1:1 couplings when coincident (same position and axis).
+  if (COINCIDENT_ONLY.has(a.type) || COINCIDENT_ONLY.has(b.type)) {
     const bothNonMeshing = (a.type === "load" || a.type === "differential") && (b.type === "load" || b.type === "differential");
     if (bothNonMeshing) return null;
     if (Math.abs(dot(a.axis, b.axis)) >= PARALLEL_DOT_THRESHOLD && dist(a.position, b.position) <= COUPLING_DISTANCE_TOLERANCE) {
