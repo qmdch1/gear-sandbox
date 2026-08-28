@@ -35,7 +35,12 @@ const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
 const ctx = createScene(canvas);
 const sceneSync = new SceneSync(ctx);
 const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => sceneSync.focusOn(id));
-const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-panel")!);
+const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-panel")!, (id, axis) => {
+  const gear = gears.find((g) => g.id === id);
+  if (!gear) return;
+  gear.axis = axis;
+  durabilityPanel.show(gear);
+});
 
 let gears: GearInstance[] = [];
 let remoteLinks: RemoteLink[] = [];
