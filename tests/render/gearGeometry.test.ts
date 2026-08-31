@@ -132,6 +132,39 @@ describe("computeSpurProfilePoints", () => {
     const addendumRadius = pitchRadius + module * 1.0; // ADDENDUM_FACTOR
     expect(area).toBeLessThan(Math.PI * addendumRadius * addendumRadius);
   });
+
+  // The four checks above (point count, pitch-circle tooth thickness, monotonic taper,
+  // simple polygon, plausible area) were only ever exercised at teeth=20/module=1 -- the
+  // one size the original self-intersection (bow-tie) bug fix happened to test. Since the
+  // flank math (involuteAngleAtRadius, flankAngle) depends on teeth count (toothAngularPitch
+  // = 2*PI/teeth) and module (which sets addendum/dedendum radii relative to the pitch
+  // circle) in ways that don't simplify away, a fix verified at one size doesn't guarantee
+  // correctness at very few teeth (where the tooth is angularly wide and the dedendum
+  // circle sits closest to the base circle) or very many (where the tooth is angularly
+  // thin) -- covering the sandbox's realistic range here (spec'd range: 6-8 teeth on the
+  // low end, 60+ on the high end) as a regression guard. Confirmed by direct computation
+  // (see investigation) that no self-intersection or degenerate/negative area actually
+  // occurs anywhere in this range -- this is a coverage gap being closed, not a bug fix.
+  describe("across the sandbox's realistic teeth/module range", () => {
+    const teethCounts = [6, 7, 8, 20, 60, 80, 100];
+    const modules = [0.5, 1, 2, 5];
+
+    it.each(teethCounts.flatMap((teeth) => modules.map((module) => [teeth, module] as const)))(
+      "traces a simple, positively-wound, plausibly-sized polygon at teeth=%i module=%i",
+      (teeth, module) => {
+        const points = computeSpurProfilePoints(teeth, module);
+        expect(points.length).toBe(teeth * 13);
+        expect(selfIntersections(points)).toEqual([]);
+
+        const pitchRadius = (module * teeth) / 2;
+        const dedendumRadius = pitchRadius - module * 1.25;
+        const addendumRadius = pitchRadius + module * 1.0;
+        const area = signedArea(points);
+        expect(area).toBeGreaterThan(Math.PI * Math.max(dedendumRadius, 0) * Math.max(dedendumRadius, 0));
+        expect(area).toBeLessThan(Math.PI * addendumRadius * addendumRadius);
+      },
+    );
+  });
 });
 
 describe("buildGeometryForType", () => {

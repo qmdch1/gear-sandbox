@@ -39,6 +39,27 @@ describe("evaluatePair", () => {
     expect(evaluatePair(a, b)).toBeNull();
   });
 
+  // Unlike bevel/rack, spur only ever had a "clearly within" test (distance=15, no
+  // tolerance involved) and a "clearly too far" test (distance=50, nowhere near the
+  // boundary) above -- neither exercises MESH_TOLERANCE itself. teeth=20/module=1 and
+  // teeth=10/module=1 give expected = pitchRadius(a) + pitchRadius(b) = 10 + 5 = 15, so
+  // the tolerance band (|centerDistance - expected| <= expected * 0.05, inclusive) is
+  // exactly [14.25, 15.75] -- mirrored here in the same style as the bevel-focus track's
+  // boundary tests above for consistency.
+  it("meshes two spur gears at exactly the distance-tolerance boundary (15.75 = 15 + 15*0.05)", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15.75, 0, 0] });
+    const edge = evaluatePair(a, b);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+  });
+
+  it("rejects two spur gears just past the distance-tolerance boundary", () => {
+    const a = makeGear({ id: "a", teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", teeth: 10, module: 1, position: [15.7501, 0, 0] });
+    expect(evaluatePair(a, b)).toBeNull();
+  });
+
   it("rejects two spur gears with non-parallel axes", () => {
     const a = makeGear({ id: "a", axis: [0, 1, 0], position: [0, 0, 0] });
     const b = makeGear({ id: "b", axis: [1, 0, 0], position: [15, 0, 0] });
@@ -569,6 +590,54 @@ describe("computeMeshPhaseOffset", () => {
       const bRotation = bAligned.rotation - ratio * deltaA; // wB = -(aTeeth/bTeeth) * wA
       expect(contactPhase(PHI_A - aRotation, a.teeth)).toBeCloseTo(0, 9); // a: tooth centre
       expect(contactPhase(PHI_B - bRotation, b.teeth)).toBeCloseTo(0.5, 9); // b: gap centre
+    }
+  });
+
+  /** Distance from `phase` to `target`, treating both as points on a circle of
+   *  circumference 1 (i.e. the wraparound-safe version of `Math.abs(phase - target)`).
+   *  `contactPhase` above returns a value in [0, 1) from a `% period` computation, so a
+   *  true phase of (numerically) exactly 0 can just as easily land at ~0.999999999999997
+   *  as at ~0.0000000000000003 depending on which side of the modulus boundary float
+   *  rounding happens to fall -- a plain `toBeCloseTo(0, 9)` would spuriously fail on
+   *  the former even though the physical deviation is ~1e-15, not ~1. */
+  function circularDistance(phase: number, target: number): number {
+    const raw = Math.abs(phase - target);
+    return Math.min(raw, 1 - raw);
+  }
+
+  // The single existing interleave test above only ever used a 20:10 pair -- ratio 2,
+  // sharing a factor of 10. Real gear trains are deliberately built with COPRIME tooth
+  // counts (e.g. 7:13) specifically because it makes every tooth on one gear meet every
+  // tooth on the other before the pattern repeats, spreading wear evenly -- a physically
+  // different, and numerically different (see circularDistance's doc comment above),
+  // regime than a low-common-factor pair where the same few tooth pairs repeatedly
+  // re-contact. Confirm the interleaving invariant holds just as exactly across a spread
+  // of coprime AND common-factor ratios, not just the one pair already covered.
+  it.each([
+    [7, 13],   // coprime
+    [13, 7],   // coprime, reversed
+    [11, 17],  // coprime
+    [9, 4],    // coprime
+    [6, 60],   // ratio 10, large common factor
+    [30, 15],  // ratio 2, common factor 15
+  ])("interleaves a %i:%i tooth pair for every tooth, all the way round", (teethA, teethB) => {
+    const meshDistance = (teethA + teethB) / 2; // pitchRadius(a) + pitchRadius(b) at module=1
+    const a = makeGear({ id: "a", teeth: teethA, module: 1, position: [0, 0, 0], axis: [0, 1, 0], rotation: 0.4 });
+    const b = makeGear({ id: "b", teeth: teethB, module: 1, position: [meshDistance, 0, 0], axis: [0, 1, 0], rotation: -1.1 });
+    const edge = evaluatePair(a, b)!;
+    expect(edge).not.toBeNull();
+    const bAligned = { ...b, rotation: b.rotation + computeMeshPhaseOffset(a, b, edge) };
+
+    const ratio = a.teeth / b.teeth;
+    const periodA = (Math.PI * 2) / a.teeth;
+    const toFirstToothCentre = (((PHI_A - a.rotation) % periodA) + periodA) % periodA;
+
+    for (let k = 0; k < a.teeth * 2; k++) {
+      const deltaA = toFirstToothCentre + k * periodA;
+      const aRotation = a.rotation + deltaA;
+      const bRotation = bAligned.rotation - ratio * deltaA;
+      expect(circularDistance(contactPhase(PHI_A - aRotation, a.teeth), 0)).toBeLessThan(1e-9);
+      expect(circularDistance(contactPhase(PHI_B - bRotation, b.teeth), 0.5)).toBeLessThan(1e-9);
     }
   });
 
