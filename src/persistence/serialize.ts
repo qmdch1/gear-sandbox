@@ -1,4 +1,5 @@
 import type { GearInstance, GearType, LayoutState, RemoteLink } from "../sim/types";
+import { wouldDuplicateLink } from "../sim/remoteLinks";
 
 const SCHEMA_VERSION = 2;
 
@@ -48,12 +49,9 @@ function isValidRemoteLink(value: unknown): value is RemoteLink {
  *  or written by some future/other tool), and a duplicate isn't just inert: `sceneSync`
  *  would build and dispose the same ribbon mesh twice per frame for no reason. */
 function dedupeRemoteLinks(links: RemoteLink[]): RemoteLink[] {
-  const seen = new Set<string>();
   const result: RemoteLink[] = [];
   for (const link of links) {
-    const key = `${[link.a, link.b].sort().join(":")}:${link.kind}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+    if (wouldDuplicateLink(link, result)) continue;
     result.push(link);
   }
   return result;

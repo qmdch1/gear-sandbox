@@ -1,4 +1,5 @@
 import type { GearInstance, GearType, RemoteLink } from "./sim/types";
+import { wouldDuplicateLink } from "./sim/remoteLinks";
 import { createGear } from "./sim/gearFactory";
 import { createDefaultLayout } from "./sim/defaultLayout";
 import { removeGear } from "./sim/removeGear";
@@ -110,11 +111,9 @@ const placementControls = new PlacementControls({
 function addRemoteLink(a: string, b: string, kind: "chain" | "belt"): void {
   // A link is an unordered pair, so connecting the same two objects again -- in either
   // order -- must not stack up duplicate links (and duplicate ribbons) on the layout.
-  const alreadyLinked = remoteLinks.some(
-    (link) => link.kind === kind && ((link.a === a && link.b === b) || (link.a === b && link.b === a)),
-  );
-  if (alreadyLinked) return;
-  remoteLinks.push({ a, b, kind });
+  const link: RemoteLink = { a, b, kind };
+  if (wouldDuplicateLink(link, remoteLinks)) return;
+  remoteLinks.push(link);
 }
 
 // Tracks each link mode's pending first-pick, purely so the two independent LinkModeUI
