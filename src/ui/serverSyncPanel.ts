@@ -11,6 +11,9 @@ import {
 export interface ServerSyncApi {
   getLayout(): LayoutState;
   applyLoadedLayout(layout: LayoutState): void;
+  /** Called after a successful server save (new or overwrite), so the caller can treat the
+   *  just-persisted layout as a new "saved" baseline (e.g. clearing an unsaved-changes flag). */
+  onSaved?(): void;
 }
 
 export class ServerSyncPanel {
@@ -73,6 +76,7 @@ export class ServerSyncPanel {
     try {
       const summary = await saveNewServerLayout(name, this.api.getLayout());
       this.currentId = summary.id;
+      this.api.onSaved?.();
       await this.refresh();
     } catch (err) {
       console.error("Failed to save new server layout", err);
@@ -83,6 +87,7 @@ export class ServerSyncPanel {
     if (!this.currentId) return;
     try {
       await updateServerLayout(this.currentId, this.nameInput.value.trim() || "이름 없음", this.api.getLayout());
+      this.api.onSaved?.();
       await this.refresh();
     } catch (err) {
       console.error("Failed to overwrite server layout", err);

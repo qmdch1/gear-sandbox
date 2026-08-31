@@ -17,6 +17,7 @@ import { SaveLoadPanel } from "./ui/saveLoadPanel";
 import { ServerSyncPanel } from "./ui/serverSyncPanel";
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
 import { createFrameRunner } from "./runtime/frameSafety";
+import { createDirtyTracker } from "./runtime/dirtyTracker";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -49,6 +50,7 @@ const durabilityPanel = new DurabilityPanel(
     const gear = gears.find((g) => g.id === id);
     if (!gear) return;
     gear.axis = axis;
+    dirtyTracker.markDirty();
     durabilityPanel.show(gear);
   },
   (id) => deleteGear(id),
@@ -56,6 +58,12 @@ const durabilityPanel = new DurabilityPanel(
 
 let gears: GearInstance[] = [];
 let remoteLinks: RemoteLink[] = [];
+// True whenever the live layout has edits a save/export/server-sync would capture but hasn't
+// yet -- drives the "don't lose your work" beforeunload guard further down. See
+// `createDirtyTracker` for exactly which edits count (and, just as importantly, which don't --
+// the animate() loop's own per-tick physics update on `gears` must NOT mark this dirty, or the
+// warning would fire for a completely untouched layout that's simply sitting there spinning).
+const dirtyTracker = createDirtyTracker();
 // Tracks which gear (if any) is currently selected via DragControls' onSelect, so the
 // Delete/Backspace keyboard shortcut below knows what to remove -- kept in sync with the
 // durability panel's own show()/hide() lifecycle rather than duplicating selection state.
@@ -71,6 +79,7 @@ function deleteGear(id: string): void {
   remoteLinks = result.remoteLinks;
   if (selectedGearId === id) selectedGearId = null;
   durabilityPanel.hide();
+  dirtyTracker.markDirty();
 }
 try {
   const loaded = loadFromLocalStorage();
@@ -91,6 +100,7 @@ let timeScale = 1;
 
 function addGear(type: GearType, position: [number, number, number]): void {
   gears.push(createGear(type, position));
+  dirtyTracker.markDirty();
 }
 
 // Rigid grid-slot formula, kept as the fallback placement when a placement click's raycast
@@ -115,6 +125,7 @@ function addRemoteLink(a: string, b: string, kind: "chain" | "belt"): void {
   const link: RemoteLink = { a, b, kind };
   if (wouldDuplicateLink(link, remoteLinks)) return;
   remoteLinks.push(link);
+  dirtyTracker.markDirty();
 }
 
 // Tracks each link mode's pending first-pick, purely so the two independent LinkModeUI
@@ -170,12 +181,17 @@ document
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
 
 new SaveLoadPanel(document.querySelector("#save-load")!, {
-  save: () => saveToLocalStorage({ gears, remoteLinks }),
+  save: () => {
+    saveToLocalStorage({ gears, remoteLinks });
+    dirtyTracker.markClean();
+  },
   load: () => {
     const loaded = loadFromLocalStorage();
     if (loaded) {
       gears = loaded.gears;
       remoteLinks = loaded.remoteLinks;
+      // The loaded state IS the new "saved" baseline until the user edits it further.
+      dirtyTracker.markClean();
     }
   },
   exportFile: () => {
@@ -186,12 +202,15 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
     a.download = "gear-layout.json";
     a.click();
     URL.revokeObjectURL(url);
+    dirtyTracker.markClean();
   },
   importFile: async (file) => {
     try {
       const loaded = await importFromFile(file);
       gears = loaded.gears;
       remoteLinks = loaded.remoteLinks;
+      // Same reasoning as `load` above: an imported file is a new saved baseline.
+      dirtyTracker.markClean();
     } catch (err) {
       console.error("Failed to import gear layout file", err);
     }
@@ -203,7 +222,9 @@ new ServerSyncPanel(document.querySelector("#server-sync")!, {
   applyLoadedLayout: (loaded) => {
     gears = loaded.gears;
     remoteLinks = loaded.remoteLinks;
+    dirtyTracker.markClean();
   },
+  onSaved: () => dirtyTracker.markClean(),
 });
 
 new DragControls({
@@ -211,7 +232,10 @@ new DragControls({
   getGears: () => gears,
   onMove: (id, position) => {
     const gear = gears.find((g) => g.id === id);
-    if (gear) gear.position = position;
+    if (gear) {
+      gear.position = position;
+      dirtyTracker.markDirty();
+    }
   },
   onSelect: (id) => {
     if (chainLinkMode.handleSelect(id) || beltLinkMode.handleSelect(id)) return;
@@ -248,6 +272,18 @@ window.addEventListener("keydown", (event) => {
   if (!selectedGearId) return;
   if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
   deleteGear(selectedGearId);
+});
+
+// Warns before an accidental tab close/navigate-away while there are unsaved edits (see
+// `dirtyTracker` above for exactly what counts). `preventDefault()` + setting `returnValue` is
+// the standard, only-reliable-across-browsers way to trigger the browser's own native
+// "leave site?" confirmation -- modern browsers ignore any custom message text here, so the
+// dialog's wording itself isn't controllable, only whether it appears at all.
+window.addEventListener("beforeunload", (event) => {
+  if (dirtyTracker.isDirty()) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
 });
 
 window.addEventListener("resize", () => {
