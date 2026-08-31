@@ -23,6 +23,9 @@ app.innerHTML = `
       <button id="chain-link-mode">체인 연결 모드</button>
       <button id="belt-link-mode">벨트 연결 모드</button>
     </div>
+    <div id="view-controls">
+      <button id="fit-all-view">전체 보기 (카메라 리셋)</button>
+    </div>
     <div id="save-load"></div>
     <div id="server-sync"></div>
     <label>시간배율 <div id="time-scale"></div></label>
@@ -104,6 +107,13 @@ const beltLinkMode = new LinkModeUI(
   (id) => gears.find((g) => g.id === id)?.type,
   (a, b) => addRemoteLink(a, b, "belt"),
 );
+
+// "전체 보기": resets/fits the camera to frame every placed gear at once -- the counterpart to
+// DiagnosticsPanel's click-to-focus above, for when panning/zooming (or a far-off placement)
+// has wandered off the layout entirely.
+document
+  .querySelector<HTMLButtonElement>("#fit-all-view")!
+  .addEventListener("click", () => sceneSync.fitAll(gears));
 
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
 
