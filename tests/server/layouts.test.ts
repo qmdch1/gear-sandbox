@@ -196,4 +196,47 @@ describe("layouts API", () => {
     const res = await request(app).delete("/api/layouts/does-not-exist");
     expect(res.status).toBe(404);
   });
+
+  describe("centralized error handling", () => {
+    // supertest's `.send()` normally JSON.stringifies an object payload for us -- which
+    // makes it impossible to ever send genuinely invalid JSON syntax that way. To send a
+    // deliberately malformed JSON *string* on the wire, set the Content-Type first and
+    // `.send()` a raw string: superagent (supertest's HTTP client) only serializes
+    // non-string data, so a string body with an `application/json` Content-Type is sent
+    // through byte-for-byte, untouched (see node_modules/superagent/lib/node/index.js's
+    // `_end`: `if (typeof data !== 'string') { ...serialize... }`).
+    it("responds with a clean 400 JSON error for a malformed JSON body, not an HTML page", async () => {
+      const res = await request(app)
+        .post("/api/layouts")
+        .set("Content-Type", "application/json")
+        .send('{"name": "x", "gears": [}'); // invalid JSON syntax -- unbalanced/garbage token
+
+      expect(res.status).toBe(400);
+      expect(res.type).toBe("application/json");
+      expect(res.body).toEqual({ error: "malformed JSON body" });
+    });
+
+    it("responds with a clean 413 JSON error for a body over the size limit", async () => {
+      const res = await request(app)
+        .post("/api/layouts")
+        .set("Content-Type", "application/json")
+        .send(JSON.stringify({ name: "x", gears: [], padding: "y".repeat(6 * 1024 * 1024) })); // > 5mb limit
+
+      expect(res.status).toBe(413);
+      expect(res.type).toBe("application/json");
+      expect(res.body).toEqual({ error: "request body too large" });
+    });
+
+    it("still lets a route handler's own validation 400s through unchanged (no regression)", async () => {
+      const res = await request(app).post("/api/layouts").send({ gears: [] }); // missing name
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: "name (string) and gears (array) are required" });
+    });
+
+    it("still accepts a well-formed request unchanged (no regression)", async () => {
+      const res = await request(app).post("/api/layouts").send({ name: "test", gears: [] });
+      expect(res.status).toBe(201);
+      expect(res.body.name).toBe("test");
+    });
+  });
 });
