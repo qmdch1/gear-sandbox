@@ -259,7 +259,18 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
     case "crank":
       return crankGeometry(teeth, module);
     case "bevel": {
-      const coneHeight = GEAR_THICKNESS * 3;
+      // A real bevel gear's cone proportions are tied to its pitch radius (a bigger
+      // gear gets a proportionally taller cone), not a fixed axial thickness the way
+      // GEAR_THICKNESS works for a flat spur/helical gear body. Previously coneHeight
+      // was the constant GEAR_THICKNESS * 3 = 1.2 regardless of teeth/module, so a much
+      // larger or smaller bevel gear would render with the exact same tiny cone height --
+      // at large pitch radius that reads as a nearly-flat disc instead of a cone.
+      // Deriving it from pitchRadius instead keeps proportions sensible at any size;
+      // 0.15 is chosen so the showcase's actual bevel gear (defaultLayout.ts's
+      // "seed-bevel", teeth=16 module=1 -> pitchRadius=8) reproduces the exact same
+      // 1.2 cone height as before (8 * 0.15 = 1.2), so its visual size is unchanged.
+      const pitchRadius = (module * teeth) / 2;
+      const coneHeight = pitchRadius * 0.15;
       return taperedGearGeometry(teeth, module, coneHeight, 0.15);
     }
     case "worm": {

@@ -51,6 +51,74 @@ describe("evaluatePair", () => {
     expect(edge!.oneWay).toBe("none");
   });
 
+  // meshing.ts hard-codes PERP_DOT_THRESHOLD = 0.1: the perpendicular-axis mesh check
+  // (step 5) rejects a pair when |dot(a.axis, b.axis)| > PERP_DOT_THRESHOLD (equality
+  // still passes, since the reject condition is a strict `>`). Rotating b's axis by an
+  // angle `delta` away from perpendicular, within the plane spanned by a's and b's axes
+  // -- a = [0,1,0], b = [cos(delta), sin(delta), 0] -- gives dot(a.axis, b.axis) =
+  // sin(delta) EXACTLY (not just an approximation), so the boundary angle is precisely
+  // delta_max = asin(0.1) = 0.10016742116155944 rad = 5.739170477266787 deg.
+  it("meshes a bevel pair whose axes deviate from perpendicular by just inside the tolerance boundary", () => {
+    const boundary = Math.asin(0.1);
+    const delta = boundary - 1e-4; // ~5.7334 deg off perpendicular -- dot ~= 0.099900 < 0.1
+    const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({
+      id: "b", type: "bevel", teeth: 20, module: 1, position: [20, 0, 0],
+      axis: [Math.cos(delta), Math.sin(delta), 0],
+    });
+    const axisDot = a.axis[0] * b.axis[0] + a.axis[1] * b.axis[1] + a.axis[2] * b.axis[2];
+    expect(Math.abs(axisDot)).toBeLessThan(0.1); // confirms we're really testing the "just inside" side
+    const edge = evaluatePair(a, b);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+  });
+
+  it("rejects a bevel pair whose axes deviate from perpendicular by just outside the tolerance boundary", () => {
+    const boundary = Math.asin(0.1);
+    const delta = boundary + 1e-4; // ~5.7449 deg off perpendicular -- dot ~= 0.100099 > 0.1
+    const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({
+      id: "b", type: "bevel", teeth: 20, module: 1, position: [20, 0, 0],
+      axis: [Math.cos(delta), Math.sin(delta), 0],
+    });
+    const axisDot = a.axis[0] * b.axis[0] + a.axis[1] * b.axis[1] + a.axis[2] * b.axis[2];
+    expect(Math.abs(axisDot)).toBeGreaterThan(0.1); // confirms we're really testing the "just outside" side
+    expect(evaluatePair(a, b)).toBeNull();
+  });
+
+  // meshing.ts's MESH_TOLERANCE = 0.05: the distance check passes when
+  // |centerDistance - expected| <= expected * 0.05 (inclusive). For two 20-tooth,
+  // module-1 bevel gears, expected = pitchRadius(a) + pitchRadius(b) = 10 + 10 = 20,
+  // so the tolerance band is exactly [19, 21].
+  it("meshes a bevel pair at exactly the distance-tolerance boundary (21 = 20 + 20*0.05)", () => {
+    const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [21, 0, 0] });
+    expect(evaluatePair(a, b)).not.toBeNull();
+  });
+
+  it("rejects a bevel pair just past the distance-tolerance boundary", () => {
+    const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 20, module: 1, position: [21.0001, 0, 0] });
+    expect(evaluatePair(a, b)).toBeNull();
+  });
+
+  it("meshes a bevel pair consistently regardless of argument order (a,b vs b,a)", () => {
+    const a = makeGear({ id: "a", type: "bevel", axis: [0, 1, 0], teeth: 20, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "bevel", axis: [1, 0, 0], teeth: 12, module: 1, position: [16, 0, 0] }); // (10+6)=16
+    const ab = evaluatePair(a, b);
+    const ba = evaluatePair(b, a);
+    expect(ab).not.toBeNull();
+    expect(ba).not.toBeNull();
+    expect(ab!.kind).toBe(ba!.kind);
+    expect(ab!.oneWay).toBe(ba!.oneWay);
+    expect(ab!.oneWay).toBe("none");
+    // ratio is directional (a.teeth / b.teeth by design -- same convention as every other
+    // gear-type family in evaluatePair), so swapping the argument order must give the
+    // reciprocal ratio, not an inconsistent/broken value.
+    expect(ab!.ratio).toBeCloseTo(20 / 12);
+    expect(ba!.ratio).toBeCloseTo(12 / 20);
+  });
+
   it("marks a worm-to-wheel edge one-way from the worm", () => {
     const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 2, module: 1, position: [0, 0, 0] });
     const wheel = makeGear({ id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 20, module: 1, position: [11, 0, 0] });
