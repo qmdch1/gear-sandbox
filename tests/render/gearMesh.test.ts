@@ -158,6 +158,43 @@ describe("GearMeshObject", () => {
     expect(withFace.mesh.quaternion.equals(withoutFace.mesh.quaternion)).toBe(true);
   });
 
+  describe("planetary rendering (single rigid-body rotation baseline)", () => {
+    // `planetaryGeometry` (gearGeometry.ts) bakes the sun, ring, and all three orbiting
+    // planet sub-shapes into ONE merged BufferGeometry with no per-sub-shape grouping
+    // metadata, and `update()` above applies exactly one `rotateZ(gear.rotation)` to the
+    // whole mesh. This is today's known, intentional-for-now simplification (documented
+    // in GEAR_NOTES.planetary): the three "planets" do not spin independently of the
+    // assembly or of each other -- everything turns together as one rigid body. This test
+    // is a regression guard for that baseline, not an endorsement of it -- if a future
+    // change (e.g. an independent-planet-spin visual flourish) intentionally splits this
+    // apart, update this test's expectation to match the new intentional behavior.
+    it("rotates every vertex of the merged sun+ring+planets geometry by the exact same single angle -- gear.rotation -- with no independent sub-motion", () => {
+      const rotation = 0.73;
+      const gear = makeGear({ type: "planetary", teeth: 40, module: 1, axis: [0, 0, 1], position: [0, 0, 0], rotation });
+      const obj = new GearMeshObject(gear);
+      const position = obj.mesh.geometry.attributes.position;
+
+      // axis=[0,0,1] makes GearMeshObject's axis-alignment quaternion the identity, so the
+      // mesh's quaternion is purely the rotateZ(rotation) call -- isolating exactly the
+      // rotation under test.
+      let checked = 0;
+      for (let i = 0; i < position.count; i += 37) { // sample spread across sun, ring, and all three planets
+        const localX = position.getX(i);
+        const localY = position.getY(i);
+        const localR = Math.hypot(localX, localY);
+        if (localR < 1e-6) continue; // angle undefined at the axis itself
+        const world = new THREE.Vector3(localX, localY, 0).applyQuaternion(obj.mesh.quaternion);
+        expect(Math.hypot(world.x, world.y)).toBeCloseTo(localR, 5); // rigid: radius unchanged by rotation
+        const localAngle = Math.atan2(localY, localX);
+        const worldAngle = Math.atan2(world.y, world.x);
+        const diff = Math.atan2(Math.sin(worldAngle - localAngle - rotation), Math.cos(worldAngle - localAngle - rotation));
+        expect(diff).toBeCloseTo(0, 5); // this vertex -- wherever it sits in the merged buffer -- turned by exactly `rotation`, same as every other
+        checked++;
+      }
+      expect(checked).toBeGreaterThan(10); // sanity: actually sampled a meaningful spread of the assembly
+    });
+  });
+
   describe("color recompute skipping", () => {
     it("keeps the very same Color object across repeated updates with unchanged durability/broken", () => {
       const gear = makeGear({ durabilityCurrent: 100, durabilityMax: 100, broken: false });

@@ -1,6 +1,6 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
-import { evaluatePair, isOverlapping, computeMeshPhaseOffset, findMeshPartner } from "../../src/sim/meshing";
+import { evaluatePair, isOverlapping, computeMeshPhaseOffset, findMeshPartner, pitchRadius } from "../../src/sim/meshing";
 import type { GearInstance } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -97,6 +97,29 @@ describe("v2 object types", () => {
     const edge = evaluatePair(planetary, spur);
     expect(edge).not.toBeNull();
     expect(edge!.kind).toBe("mesh");
+  });
+
+  // Pins down the CURRENT physical treatment of "planetary" precisely, so a future change
+  // to what "planetary" means physically can't slip in silently: `evaluatePair` puts
+  // "planetary" in the same PARALLEL_FAMILY set as spur/helical/crank and applies the
+  // exact same formula (`pitchRadius = module*teeth/2`, `ratio = a.teeth/b.teeth`,
+  // `oneWay: "none"`) it would to a plain external spur gear -- it is NOT aware that
+  // `planetaryGeometry` (gearGeometry.ts) internally splits `teeth` into separate sun/
+  // planet tooth counts for the visual model; the raw `teeth` field is used as-is, as if
+  // the whole assembly were a single spur gear with that tooth count.
+  it("computes a planetary mesh's ratio straight from the assembly's raw `teeth` field -- exactly the plain-spur-gear formula, with no sun/planet/ring/carrier math involved", () => {
+    const planetary = makeGear({ id: "p", type: "planetary", teeth: 60, module: 1, position: [0, 0, 0] });
+    const spur = makeGear({ id: "s", teeth: 15, module: 1, position: [37.5, 0, 0] }); // (60+15)/2 = 37.5 -- same center-distance rule as spur-to-spur
+    const edge = evaluatePair(planetary, spur);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
+    expect(edge!.ratio).toBeCloseTo(4); // 60/15 = 4, the plain a.teeth/b.teeth formula -- planetaryGeometry's internal sun/planet split (13/24 teeth for this same input) plays no part
+    expect(edge!.oneWay).toBe("none"); // bidirectional like spur-to-spur, unlike a ratchet/worm edge
+  });
+
+  it("gives a planetary set the identical pitchRadius formula (module*teeth/2) as every other parallel-family type, not a reduced 'ring gear only' radius", () => {
+    const planetary = makeGear({ id: "p", type: "planetary", teeth: 40, module: 2, position: [0, 0, 0] });
+    expect(pitchRadius(planetary)).toBe(40); // module*teeth/2 = 2*40/2 = 40
   });
 
   it("lets a driving gear turn a ratchet but marks the edge one-way so the ratchet can't back-drive it", () => {
