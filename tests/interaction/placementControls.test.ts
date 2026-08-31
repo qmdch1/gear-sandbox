@@ -24,7 +24,9 @@ vi.mock("three", async (importOriginal) => {
 
 import { PlacementControls } from "../../src/interaction/placementControls";
 import type { SceneContext } from "../../src/render/scene";
-import type { GearType } from "../../src/sim/types";
+import type { GearInstance, GearType } from "../../src/sim/types";
+import { createGear } from "../../src/sim/gearFactory";
+import { isOverlapping } from "../../src/sim/meshing";
 
 function makeCtx(): SceneContext {
   const canvas = document.createElement("canvas");
@@ -43,6 +45,31 @@ function clickCanvas(ctx: SceneContext): void {
   ctx.renderer.domElement.dispatchEvent(
     new MouseEvent("click", { clientX: 50, clientY: 50, bubbles: true }),
   );
+}
+
+/** A fixed-id existing gear for overlap tests, matching the real `GearInstance` shape (same
+ *  conventions as `defaultLayout.ts`'s `seedGear`) rather than a partial stand-in. */
+function seedGear(
+  id: string,
+  type: GearInstance["type"],
+  position: [number, number, number],
+  axis: [number, number, number],
+  teeth: number,
+): GearInstance {
+  return {
+    id,
+    type,
+    position,
+    axis,
+    teeth,
+    module: 1,
+    durabilityMax: 100,
+    durabilityCurrent: 100,
+    broken: false,
+    rotation: 0,
+    angularVelocity: 0,
+    linearPosition: type === "rack" ? 0 : undefined,
+  };
 }
 
 describe("PlacementControls", () => {
@@ -193,5 +220,97 @@ describe("PlacementControls", () => {
 
     expect(onModeChange).not.toHaveBeenCalled();
     expect(controls.isActive).toBe(false);
+  });
+
+  describe("overlap avoidance", () => {
+    it("nudges a new gear clear of an existing gear it would otherwise land on top of", () => {
+      const ctx = makeCtx();
+      const onPlace = vi.fn();
+      const existing = seedGear("existing-spur", "spur", [5, 0, 7], [0, 1, 0], 20);
+      const controls = new PlacementControls({
+        ctx,
+        onPlace,
+        fallbackPosition: () => [0, 0, 0],
+        getGears: () => [existing],
+      });
+
+      controls.handlePick("spur" satisfies GearType);
+      nextHitPoint = { x: 5, y: 0, z: 7 }; // exactly on top of `existing`
+      clickCanvas(ctx);
+
+      expect(onPlace).toHaveBeenCalledTimes(1);
+      const [placedType, placedPosition] = onPlace.mock.calls[0] as [GearType, [number, number, number]];
+      expect(placedType).toBe("spur");
+      // The click "roughly worked" -- it wasn't rejected -- but the raw raycast point [5, 0, 7]
+      // must not be where the gear actually landed, since that would sit inside `existing`.
+      expect(placedPosition).not.toEqual([5, 0, 7]);
+      const placedGear = createGear("spur", placedPosition);
+      expect(isOverlapping(placedGear, existing)).toBe(false);
+    });
+
+    it("keeps nudging until clear of a second gear the first nudge would have landed on", () => {
+      const ctx = makeCtx();
+      const onPlace = vi.fn();
+      // `gearA` sits exactly at the click point; a single-pass nudge away from it (spur pitch
+      // radius 10 + 10, x1.02 clearance) lands at exactly [20.4, 0, 0] -- so `gearB` is planted
+      // right there to force a second nudge iteration.
+      const gearA = seedGear("gear-a", "spur", [0, 0, 0], [0, 1, 0], 20);
+      const gearB = seedGear("gear-b", "spur", [20.4, 0, 0], [0, 1, 0], 20);
+      const controls = new PlacementControls({
+        ctx,
+        onPlace,
+        fallbackPosition: () => [0, 0, 0],
+        getGears: () => [gearA, gearB],
+      });
+
+      controls.handlePick("spur" satisfies GearType);
+      nextHitPoint = { x: 0, y: 0, z: 0 };
+      clickCanvas(ctx);
+
+      expect(onPlace).toHaveBeenCalledTimes(1);
+      const [, placedPosition] = onPlace.mock.calls[0] as [GearType, [number, number, number]];
+      const placedGear = createGear("spur", placedPosition);
+      // A single-pass nudge (checking only the gear just avoided) would have stopped at
+      // [20.4, 0, 0], which still overlaps gearB -- so this is the real regression guard.
+      expect(isOverlapping(placedGear, gearA)).toBe(false);
+      expect(isOverlapping(placedGear, gearB)).toBe(false);
+    });
+
+    it("does not nudge a legitimate coincident placement (e.g. a load onto its crank)", () => {
+      const ctx = makeCtx();
+      const onPlace = vi.fn();
+      const crank = seedGear("existing-crank", "crank", [5, 0, 7], [0, 1, 0], 20);
+      const controls = new PlacementControls({
+        ctx,
+        onPlace,
+        fallbackPosition: () => [0, 0, 0],
+        getGears: () => [crank],
+      });
+
+      controls.handlePick("load" satisfies GearType);
+      nextHitPoint = { x: 5, y: 0, z: 7 }; // exactly on top of the crank -- the intended shaft coupling
+      clickCanvas(ctx);
+
+      expect(onPlace).toHaveBeenCalledTimes(1);
+      // Unlike the accidental-overlap cases above, this placement must land exactly where clicked --
+      // a load is *meant* to be coincident with the crank it couples to.
+      expect(onPlace).toHaveBeenCalledWith("load", [5, 0, 7]);
+    });
+
+    it("falls back to no-op overlap avoidance when getGears is not supplied", () => {
+      const ctx = makeCtx();
+      const onPlace = vi.fn();
+      const controls = new PlacementControls({
+        ctx,
+        onPlace,
+        fallbackPosition: () => [0, 0, 0],
+      });
+
+      controls.handlePick("spur" satisfies GearType);
+      nextHitPoint = { x: 5, y: 0, z: 7 };
+      clickCanvas(ctx);
+
+      expect(onPlace).toHaveBeenCalledWith("spur", [5, 0, 7]);
+    });
   });
 });
