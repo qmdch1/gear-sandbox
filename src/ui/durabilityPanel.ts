@@ -19,6 +19,7 @@ export class DurabilityPanel {
   constructor(
     private container: HTMLElement,
     private onAxisChange: (gearId: string, axis: Axis) => void = () => {},
+    private onDelete: (gearId: string) => void = () => {},
   ) {}
 
   show(gear: GearInstance): void {
@@ -58,6 +59,15 @@ export class DurabilityPanel {
       axisRow.appendChild(btn);
     }
     this.container.appendChild(axisRow);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "삭제";
+    deleteBtn.className = "delete-btn";
+    deleteBtn.addEventListener("click", () => {
+      if (this.currentGearId) this.onDelete(this.currentGearId);
+    });
+    this.container.appendChild(deleteBtn);
 
     this.container.hidden = false;
   }

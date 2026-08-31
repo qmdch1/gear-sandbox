@@ -103,4 +103,44 @@ describe("DurabilityPanel", () => {
     const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>(".axis-btn"));
     expect(() => buttons[0].click()).not.toThrow();
   });
+
+  it("renders a delete button labeled 삭제", () => {
+    const container = document.createElement("div");
+    const panel = new DurabilityPanel(container);
+    panel.show(makeGear({}));
+    const deleteBtn = container.querySelector<HTMLButtonElement>(".delete-btn");
+    expect(deleteBtn).not.toBeNull();
+    expect(deleteBtn?.textContent).toBe("삭제");
+  });
+
+  it("invokes the delete callback with the shown gear's exact id when clicked", () => {
+    const container = document.createElement("div");
+    const deleted: string[] = [];
+    const panel = new DurabilityPanel(container, undefined, (id) => deleted.push(id));
+    panel.show(makeGear({ id: "gear-42" }));
+
+    container.querySelector<HTMLButtonElement>(".delete-btn")!.click();
+
+    expect(deleted).toEqual(["gear-42"]);
+  });
+
+  it("clicking delete for one gear does not fire for a previously shown gear", () => {
+    const container = document.createElement("div");
+    const deleted: string[] = [];
+    const panel = new DurabilityPanel(container, undefined, (id) => deleted.push(id));
+    panel.show(makeGear({ id: "gear-1" }));
+    panel.show(makeGear({ id: "gear-2" }));
+
+    container.querySelector<HTMLButtonElement>(".delete-btn")!.click();
+
+    expect(deleted).toEqual(["gear-2"]);
+  });
+
+  it("no delete callback provided = safe no-op, matching the onAxisChange default convention", () => {
+    const container = document.createElement("div");
+    const panel = new DurabilityPanel(container);
+    panel.show(makeGear({}));
+    const deleteBtn = container.querySelector<HTMLButtonElement>(".delete-btn")!;
+    expect(() => deleteBtn.click()).not.toThrow();
+  });
 });
