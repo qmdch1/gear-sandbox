@@ -91,12 +91,42 @@ export class GearMeshObject {
   private lastColorRatio: number | null = null;
   private lastColorBroken: boolean | null = null;
 
+  /** The `type`/`teeth`/`module` this instance's `this.mesh.geometry` was actually built
+   *  from (post `|| 1` fallback, matching what was really handed to `buildGeometryForType`
+   *  below) -- `update()` only ever touches position/rotation/color, never the geometry, so
+   *  these three fields are frozen at construction time. `needsRebuild` compares a gear's
+   *  *current* values against these to tell whether the geometry on screen has silently
+   *  gone stale (e.g. a same-id gear re-imported with a different `type`/`teeth`/`module`)
+   *  and a fresh `GearMeshObject` -- not another `update()` -- is what's actually needed. */
+  private readonly builtType: GearType;
+  private readonly builtTeeth: number;
+  private readonly builtModule: number;
+
   constructor(gear: GearInstance) {
-    const geometry = buildGeometryForType(gear.type, gear.teeth || 1, gear.module || 1);
+    this.builtType = gear.type;
+    this.builtTeeth = gear.teeth || 1;
+    this.builtModule = gear.module || 1;
+    const geometry = buildGeometryForType(this.builtType, this.builtTeeth, this.builtModule);
     const material = new THREE.MeshStandardMaterial({ color: colorForGear(gear.type, 1, false) });
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.name = gear.id;
     this.update(gear);
+  }
+
+  /** True once `gear`'s shape-relevant fields (`type`/`teeth`/`module`, the only inputs
+   *  `buildGeometryForType` takes) have drifted from what this instance's geometry was
+   *  actually built with -- e.g. a same-id gear whose `type` or tooth count changed via a
+   *  re-import. `update()` never rebuilds `this.mesh.geometry`, so the caller (`sceneSync`)
+   *  must dispose this instance and construct a fresh one instead of calling `update()` on
+   *  a gear this returns true for. Compares against the post-`|| 1`-fallback values actually
+   *  used to build the geometry, not the raw gear fields, so e.g. `teeth: 0` and
+   *  `teeth: undefined` (both normalized to 1) never look like a spurious rebuild. */
+  needsRebuild(gear: GearInstance): boolean {
+    return (
+      gear.type !== this.builtType ||
+      (gear.teeth || 1) !== this.builtTeeth ||
+      (gear.module || 1) !== this.builtModule
+    );
   }
 
   /** `facePinionPosition`: for a rack only, the world position of the pinion it should

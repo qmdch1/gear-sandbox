@@ -58,7 +58,19 @@ export class SceneSync {
     ]);
 
     for (const gear of gears) {
-      const obj = this.objects.get(gear.id)!;
+      let obj = this.objects.get(gear.id)!;
+      if (obj.needsRebuild(gear)) {
+        // Same-id gear, but its type/teeth/module no longer match the geometry this
+        // GearMeshObject was built with (e.g. a re-imported layout that reused an id with
+        // a hand-edited type/tooth count) -- `update()` alone would leave the mesh showing
+        // its stale original shape forever, since it never touches `mesh.geometry`. Dispose
+        // and rebuild exactly like the toAdd/toRemove pair above does for a genuinely new id.
+        this.ctx.scene.remove(obj.mesh);
+        obj.dispose();
+        obj = new GearMeshObject(gear);
+        this.objects.set(gear.id, obj);
+        this.ctx.scene.add(obj.mesh);
+      }
       const facePinionPosition = gear.type === "rack" ? findMeshPartner(gear, gears)?.position : undefined;
       obj.update(gear, facePinionPosition);
       const material = obj.mesh.material as THREE.MeshStandardMaterial;

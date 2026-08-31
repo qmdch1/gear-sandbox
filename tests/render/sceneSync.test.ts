@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from "vitest";
+import type * as THREE from "three";
 
 vi.mock("three", async (importOriginal) => {
   const actual = await importOriginal<typeof import("three")>();
@@ -55,6 +56,114 @@ describe("SceneSync", () => {
     sync.sync([makeGear({ id: "a" })], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
     sync.sync([], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
     expect(ctx.scene.children.some((c) => c.name === "a")).toBe(false);
+  });
+
+  describe("stale geometry rebuild (same id, changed type/teeth/module)", () => {
+    // Regression coverage for the bug where a re-imported layout reuses a gear's id but
+    // changes its type/teeth/module: computeSyncActions only diffs by id, so the gear was
+    // never in toAdd/toRemoveIds, and the main sync() loop called obj.update() on the
+    // stale GearMeshObject -- which never touches mesh.geometry -- leaving the old shape
+    // on screen forever.
+
+    it("disposes and rebuilds the mesh (new instance, new geometry) when a gear's type changes under the same id", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gear = makeGear({ id: "a", type: "spur", teeth: 20, module: 1 });
+      sync.sync([gear], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshBefore = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+      const geometryBefore = meshBefore.geometry;
+      const vertexCountBefore = geometryBefore.attributes.position.count;
+
+      const changed = { ...gear, type: "worm" as const };
+      sync.sync([changed], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshAfter = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+
+      expect(meshAfter).not.toBe(meshBefore); // a genuinely new mesh object, not the same one mutated
+      expect(meshAfter.geometry).not.toBe(geometryBefore); // and a genuinely new geometry instance
+      expect(meshAfter.geometry.attributes.position.count).not.toBe(vertexCountBefore); // spur(20 teeth) vs worm actually differ in shape
+    });
+
+    it("disposes and rebuilds the mesh when a gear's teeth count changes under the same id", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gear = makeGear({ id: "a", type: "spur", teeth: 20, module: 1 });
+      sync.sync([gear], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshBefore = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+      const vertexCountBefore = meshBefore.geometry.attributes.position.count;
+
+      const changed = { ...gear, teeth: 8 };
+      sync.sync([changed], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshAfter = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+
+      expect(meshAfter).not.toBe(meshBefore);
+      expect(meshAfter.geometry.attributes.position.count).not.toBe(vertexCountBefore); // fewer teeth -> fewer vertices
+    });
+
+    it("disposes and rebuilds the mesh when a gear's module changes under the same id", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gear = makeGear({ id: "a", type: "spur", teeth: 20, module: 1 });
+      sync.sync([gear], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshBefore = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+
+      const changed = { ...gear, module: 2 };
+      sync.sync([changed], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshAfter = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+
+      expect(meshAfter).not.toBe(meshBefore);
+      expect(meshAfter.geometry).not.toBe(meshBefore.geometry);
+    });
+
+    it("re-applies the initial (not stale-cached) color on a rebuilt gear, same as a genuinely new gear", () => {
+      // A rebuild disposes and reconstructs, which resets lastColorRatio/lastColorBroken to
+      // null (see GearMeshObject) -- so the very next update() must re-paint the color from
+      // scratch instead of appearing to have "no meaningful change" against stale state.
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gear = makeGear({ id: "a", type: "spur", teeth: 20, module: 1, durabilityCurrent: 100, durabilityMax: 100 });
+      sync.sync([gear], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+
+      // Change both the shape (forces rebuild) and durability, in the same sync() call.
+      const changed = { ...gear, type: "worm" as const, durabilityCurrent: 0, broken: true };
+      sync.sync([changed], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshAfter = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+      const material = meshAfter.material as THREE.MeshStandardMaterial;
+      expect(material.color.r).toBeCloseTo(material.color.g, 1); // broken -> gray, not the type's healthy color
+    });
+
+    it("does NOT dispose/recreate the mesh when a gear's fields are unchanged across two sync() calls (fast path)", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gear = makeGear({ id: "a", type: "spur", teeth: 20, module: 1 });
+      sync.sync([gear], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshBefore = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+      const geometryBefore = meshBefore.geometry;
+
+      // A fresh object, numerically identical fields -- exactly what re-reading the same
+      // sim state on the next frame looks like.
+      sync.sync([{ ...gear }], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshAfter = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+
+      expect(meshAfter).toBe(meshBefore); // same mesh instance -- not disposed/recreated
+      expect(meshAfter.geometry).toBe(geometryBefore); // same geometry instance too
+    });
+
+    it("does not rebuild when only non-shape fields (position, rotation, durability) change", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gear = makeGear({ id: "a", type: "spur", teeth: 20, module: 1 });
+      sync.sync([gear], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshBefore = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+      const geometryBefore = meshBefore.geometry;
+
+      const moved = { ...gear, position: [9, 9, 9] as [number, number, number], rotation: 2, durabilityCurrent: 40 };
+      sync.sync([moved], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshAfter = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+
+      expect(meshAfter).toBe(meshBefore);
+      expect(meshAfter.geometry).toBe(geometryBefore);
+      expect(meshAfter.position.x).toBeCloseTo(9); // update() still did its job
+    });
   });
 
   it("adds a ribbon mesh for a remote link and removes it once the link disappears", () => {
