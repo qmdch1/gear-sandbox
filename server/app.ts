@@ -168,5 +168,46 @@ export function createApp(db: Database.Database): express.Express {
     res.json({ id: req.params.id, deleted: true });
   });
 
+  /** Centralized error handler -- an Express 4-arg middleware, which MUST be registered
+   *  last, after every route, so Express routes it any error thrown by body-parsing
+   *  middleware (the `express.json()` above) or by a route handler that throws
+   *  synchronously. Route handlers' own validation failures (e.g. `isValidGearsArray`
+   *  rejecting a bad payload) call `res.status(400).json(...)` directly and return --
+   *  those are normal responses, never thrown/passed-on errors, so they never reach here
+   *  and this handler doesn't need to (and doesn't) special-case them.
+   *
+   *  The two body-parser error shapes below were verified for real, not guessed: reading
+   *  node_modules/body-parser/lib/read.js and lib/types/json.js, then confirming with a
+   *  throwaway script that POSTed a genuinely malformed JSON body and a body over the
+   *  limit through a bare express.json() app and logged the caught error's own
+   *  properties. Both showed:
+   *    - malformed JSON body -> the native `JSON.parse` `SyntaxError` is rethrown by
+   *      body-parser with `.type = "entity.parse.failed"`, `.status = .statusCode = 400`.
+   *    - body over the configured `limit` -> a `raw-body` `PayloadTooLargeError` with
+   *      `.type = "entity.too.large"`, `.status = .statusCode = 413`.
+   *  `.type` is the more specific/stable signal (an internal body-parser/raw-body error
+   *  code), so it's checked first; the status code is not otherwise relied on to
+   *  distinguish the two, since it doesn't tell them apart on its own. */
+  app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) {
+      next(err);
+      return;
+    }
+    const shape = err as { type?: unknown } | null | undefined;
+    if (shape?.type === "entity.parse.failed") {
+      res.status(400).json({ error: "malformed JSON body" });
+      return;
+    }
+    if (shape?.type === "entity.too.large") {
+      res.status(413).json({ error: "request body too large" });
+      return;
+    }
+    // Anything else is an unexpected/genuine bug, not a client input problem -- log it
+    // server-side for whoever operates this locally, but don't leak the raw error/stack
+    // to the client.
+    console.error(err);
+    res.status(500).json({ error: "internal server error" });
+  });
+
   return app;
 }
