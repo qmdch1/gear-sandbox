@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { tick } from "../../src/sim/simulation";
-import type { GearInstance } from "../../src/sim/types";
+import type { GearInstance, RemoteLink } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
   return {
@@ -586,6 +586,157 @@ describe("ratchet one-way lock across many ticks", () => {
       expect(d.angularVelocity).toBeCloseTo(0, 9); // the driver genuinely stays stopped
       expect(r.angularVelocity).toBeCloseTo(0, 9); // the ratchet never starts coasting on its own
       expect(r.rotation).toBeCloseTo(settledRotation, 9); // and holds its position exactly -- no drift
+    }
+  });
+});
+
+describe("chain-linked sprockets, full end-to-end power path (crank -> coupling -> sprocketA -> chain -> sprocketB -> coupling -> load)", () => {
+  // crank(av=2) --coupling(coincident)--> sprocketA(16t) --chain(RemoteLink)--> sprocketB(8t) --coupling(coincident)--> load
+  // sprocketA and sprocketB are placed far apart (never within mesh distance of each
+  // other) -- the ONLY thing connecting them is the chain RemoteLink, exercising the
+  // full crossing between meshing.ts's COINCIDENT_ONLY coupling (spec §3.3: how a
+  // sprocket receives power at all) and graph.ts's remote-link edge (how it hands
+  // power to its chain partner), through one real `tick()` call, not two separate
+  // unit tests of each half.
+  const crankTeeth = 16;
+  const sprocketATeeth = 16;
+  const sprocketBTeeth = 8; // deliberately UNEQUAL to sprocketA -- see the ratio assertion below
+  const crankAV = 2;
+
+  function buildGears(order: "forward" | "reversed"): GearInstance[] {
+    const crank = makeGear({ id: "crank", type: "crank", teeth: crankTeeth, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: crankAV });
+    const sprocketA = makeGear({ id: "sprocketA", type: "sprocket", teeth: sprocketATeeth, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const sprocketB = makeGear({ id: "sprocketB", type: "sprocket", teeth: sprocketBTeeth, module: 1, position: [200, 0, 0], axis: [0, 1, 0] });
+    const load = makeGear({ id: "load", type: "load", teeth: 0, module: 1, position: [200, 0, 0], axis: [0, 1, 0] });
+    return order === "forward" ? [crank, sprocketA, sprocketB, load] : [load, sprocketB, sprocketA, crank];
+  }
+
+  it("propagates the crank's speed through the coincident coupling, the chain link, and the second coupling, with the chain ratio scaled by the two sprockets' tooth counts (NOT a flat 1:1)", () => {
+    const gears = buildGears("forward");
+    const links: RemoteLink[] = [{ a: "sprocketA", b: "sprocketB", kind: "chain" }];
+
+    const dt = 1 / 60;
+    const steps = 180; // 3 simulated seconds
+    let state = { gears, remoteLinks: links };
+    let result = tick(state, 0, 1); // no mesh edges anywhere in this graph, so dt=0 is not needed for phase settling -- kept only for symmetry with the rest of this file's convention
+
+    for (let i = 0; i < steps; i++) {
+      result = tick({ gears: result.gears, remoteLinks: links }, dt, 1);
+
+      const crank = result.gears.find((g) => g.id === "crank")!;
+      const sprocketA = result.gears.find((g) => g.id === "sprocketA")!;
+      const sprocketB = result.gears.find((g) => g.id === "sprocketB")!;
+      const load = result.gears.find((g) => g.id === "load")!;
+
+      // Read the actual code (graph.ts buildEdges, rotation.ts propagateRotation) rather
+      // than assuming: a "coupling" edge is sign=+1, ratio=1 (rigid shaft), and a "chain"
+      // edge is ALSO sign=+1 (a chain doesn't reverse direction the way a tooth mesh
+      // does) but ratio = drivingSprocket.teeth / drivenSprocket.teeth -- exactly the real
+      // bicycle-chain relationship (teethA * omegaA = teethB * omegaB), not a flat 1:1.
+      expect(crank.angularVelocity).toBe(crankAV); // never overwritten
+      expect(sprocketA.angularVelocity).toBeCloseTo(crankAV, 9); // coupling: same speed, same sign
+      expect(sprocketB.angularVelocity).toBeCloseTo(crankAV * (sprocketATeeth / sprocketBTeeth), 9); // 2 * (16/8) = 4
+      expect(load.angularVelocity).toBeCloseTo(sprocketB.angularVelocity, 9); // coupling: same speed, same sign
+    }
+
+    // Pure integration the whole way (no mesh edge anywhere in this graph means
+    // `computeMeshPhaseOffset` never applies to any of these four gears -- see tick()'s
+    // `edge.kind !== "mesh"` gate), so rotation should be exact constant-velocity
+    // integration from the very first real tick, no settling transient to account for.
+    const finalSprocketA = result.gears.find((g) => g.id === "sprocketA")!;
+    const finalSprocketB = result.gears.find((g) => g.id === "sprocketB")!;
+    const finalLoad = result.gears.find((g) => g.id === "load")!;
+    expect(finalSprocketA.rotation).toBeCloseTo(crankAV * dt * steps, 9);
+    expect(finalSprocketB.rotation).toBeCloseTo(crankAV * (sprocketATeeth / sprocketBTeeth) * dt * steps, 9);
+    expect(finalLoad.rotation).toBeCloseTo(finalSprocketB.rotation, 9);
+
+    // Diagnostics: the whole graph is one connected, powered component -- BFS in
+    // classify() walks the chain edge exactly like any other edge when deciding
+    // reachability from a crank.
+    expect(result.diagnostics.unconnectedIds).toEqual([]);
+    expect(result.diagnostics.noPowerIds).toEqual([]);
+  });
+
+  it("is NOT a bug that unequal sprocket teeth counts change the chain ratio -- this matches a real chain drive (a small sprocket driven by a big one speeds up), and is exercised here explicitly as a documented, intentional behavior rather than left implicit in the test above", () => {
+    // 3 teeth combinations, including sprocketA both bigger and smaller than sprocketB,
+    // plus the equal-teeth case (which must reduce to a plain 1:1).
+    const cases: Array<{ teethA: number; teethB: number; expectedRatio: number }> = [
+      { teethA: 16, teethB: 8, expectedRatio: 2 },     // big drives small -> small speeds up
+      { teethA: 8, teethB: 16, expectedRatio: 0.5 },   // small drives big -> big slows down
+      { teethA: 12, teethB: 12, expectedRatio: 1 },    // equal teeth -> reduces to flat 1:1
+    ];
+    for (const { teethA, teethB, expectedRatio } of cases) {
+      const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 1 });
+      const sprocketA = makeGear({ id: "sprocketA", type: "sprocket", teeth: teethA, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+      const sprocketB = makeGear({ id: "sprocketB", type: "sprocket", teeth: teethB, module: 1, position: [200, 0, 0], axis: [0, 1, 0] });
+      const links: RemoteLink[] = [{ a: "sprocketA", b: "sprocketB", kind: "chain" }];
+      const result = tick({ gears: [crank, sprocketA, sprocketB], remoteLinks: links }, 1 / 60, 1);
+      const b = result.gears.find((g) => g.id === "sprocketB")!;
+      expect(b.angularVelocity).toBeCloseTo(1 * expectedRatio, 9);
+    }
+  });
+
+  it("gives the identical end-to-end result regardless of the gears array order or which sprocket is `a`/`b` in the chain RemoteLink", () => {
+    const dt = 1 / 60;
+    const steps = 90;
+
+    function run(order: "forward" | "reversed", linkOrder: "AtoB" | "BtoA"): { sprocketA: GearInstance; sprocketB: GearInstance; load: GearInstance } {
+      const links: RemoteLink[] =
+        linkOrder === "AtoB" ? [{ a: "sprocketA", b: "sprocketB", kind: "chain" }] : [{ a: "sprocketB", b: "sprocketA", kind: "chain" }];
+      let gears = buildGears(order);
+      for (let i = 0; i < steps; i++) gears = tick({ gears, remoteLinks: links }, dt, 1).gears;
+      return {
+        sprocketA: gears.find((g) => g.id === "sprocketA")!,
+        sprocketB: gears.find((g) => g.id === "sprocketB")!,
+        load: gears.find((g) => g.id === "load")!,
+      };
+    }
+
+    const combos: Array<["forward" | "reversed", "AtoB" | "BtoA"]> = [
+      ["forward", "AtoB"],
+      ["reversed", "AtoB"],
+      ["forward", "BtoA"],
+      ["reversed", "BtoA"],
+    ];
+    const results = combos.map(([order, linkOrder]) => run(order, linkOrder));
+    const baseline = results[0];
+    for (const r of results.slice(1)) {
+      expect(r.sprocketA.angularVelocity).toBeCloseTo(baseline.sprocketA.angularVelocity, 9);
+      expect(r.sprocketB.angularVelocity).toBeCloseTo(baseline.sprocketB.angularVelocity, 9);
+      expect(r.load.angularVelocity).toBeCloseTo(baseline.load.angularVelocity, 9);
+      expect(r.sprocketA.rotation).toBeCloseTo(baseline.sprocketA.rotation, 9);
+      expect(r.sprocketB.rotation).toBeCloseTo(baseline.sprocketB.rotation, 9);
+      expect(r.load.rotation).toBeCloseTo(baseline.load.rotation, 9);
+    }
+    // Sanity: this isn't trivially true because everything is zero -- the chain link is
+    // genuinely doing work (unequal teeth -> unequal, nonzero speed).
+    expect(baseline.sprocketB.angularVelocity).toBeCloseTo(crankAV * (sprocketATeeth / sprocketBTeeth), 9);
+  });
+
+  it("drops a chain RemoteLink referencing a since-deleted gear without throwing, and the surviving sprocket simply loses that power path instead of propagating to nothing", () => {
+    // sprocketB (and the load coupled to it) no longer exist in `gears` -- only the
+    // RemoteLink still names sprocketB's id, exactly as if the user deleted sprocketB
+    // after chaining it to sprocketA (see src/sim/removeGear.ts for the deletion path
+    // this simulates the aftermath of).
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 3 });
+    const sprocketA = makeGear({ id: "sprocketA", type: "sprocket", teeth: 16, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const danglingLink: RemoteLink[] = [{ a: "sprocketA", b: "sprocketB-gone", kind: "chain" }];
+
+    let state = { gears: [crank, sprocketA], remoteLinks: danglingLink };
+    const dt = 1 / 60;
+    for (let i = 0; i < 30; i++) {
+      const currentState = state;
+      expect(() => tick(currentState, dt, 1)).not.toThrow();
+      const result = tick(currentState, dt, 1);
+      state = { gears: result.gears, remoteLinks: danglingLink };
+
+      const sprocketAAfter = result.gears.find((g) => g.id === "sprocketA")!;
+      // sprocketA still gets its power from the coincident coupling to the crank --
+      // buildEdges drops only the dangling chain edge (graph.ts: `if (!a || !b) continue`),
+      // not the perfectly valid coupling edge sitting alongside it.
+      expect(sprocketAAfter.angularVelocity).toBeCloseTo(3, 9);
+      expect(result.diagnostics.unconnectedIds).toEqual([]);
+      expect(result.diagnostics.noPowerIds).toEqual([]);
     }
   });
 });
