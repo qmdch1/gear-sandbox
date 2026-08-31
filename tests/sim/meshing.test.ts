@@ -1,6 +1,8 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
 import { evaluatePair, isOverlapping, computeMeshPhaseOffset, findMeshPartner } from "../../src/sim/meshing";
+import { buildEdges } from "../../src/sim/graph";
+import { propagateRotation } from "../../src/sim/rotation";
 import type { GearInstance } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -165,6 +167,77 @@ describe("v2 object types", () => {
     const edge = evaluatePair(diff, outputA)!;
     expect(edge.kind).toBe("coupling");
     expect(edge.ratio).toBe(1);
+  });
+});
+
+describe("worm gear ratio and self-locking", () => {
+  // A real worm gear's speed relationship: one full worm revolution advances the wheel
+  // by exactly `threadStarts` teeth, so wheelSpeed = wormSpeed * (threadStarts / wheelTeeth).
+  // `worm.teeth` IS the thread-start count (see sim/types.ts's comment on `teeth`), and
+  // `MeshEdge.ratio` is documented (types.ts) as "b's speed = -ratio * a's speed" -- the
+  // exact same "b's speed = -(a.teeth/b.teeth) * a's speed" convention used for every other
+  // mesh kind in this file (see the very first spur test above: ratio = 20/10 = 2). Plugging
+  // a worm into that same convention with a=worm, b=wheel gives
+  // ratio = worm.teeth/wheel.teeth = threadStarts/wheelTeeth -- exactly the physically
+  // correct value, not a bug: the "same formula as a plain spur pair" already IS the right
+  // answer here, because `worm.teeth` was deliberately defined to mean thread-starts.
+  //
+  // Note this is the RECIPROCAL of the commonly quoted "reduction ratio" (wheelTeeth /
+  // threadStarts, e.g. "40:1") -- that number describes input turns per output turn
+  // (wormSpeed / wheelSpeed), not this codebase's `ratio` field, which is output/input
+  // (wheelSpeed / wormSpeed, i.e. b/a). Using wheelTeeth/threadStarts for `edge.ratio` here
+  // would invert the physics and make the wheel spin FASTER than the worm by that factor --
+  // exactly backwards for what is supposed to be a large-reduction, self-locking drive.
+  it("pins the exact worm-to-wheel ratio to threadStarts/wheelTeeth, not wheelTeeth/threadStarts", () => {
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 4, module: 1, position: [0, 0, 0] });
+    const wheel = makeGear({ id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 40, module: 1, position: [22, 0, 0] }); // (2+20)
+    const edge = evaluatePair(worm, wheel)!;
+    expect(edge.kind).toBe("mesh");
+    expect(edge.ratio).toBeCloseTo(4 / 40); // 0.1 = threadStarts/wheelTeeth, per the doc convention
+    expect(edge.ratio).not.toBeCloseTo(40 / 4); // NOT the textbook "reduction ratio" (10) -- would be inverted physics
+  });
+
+  it("keeps the same physical wheel speed regardless of which argument order evaluatePair sees", () => {
+    // buildEdges (graph.ts) always calls evaluatePair(gears[i], gears[j]) for i<j, so
+    // whichever gear the user happened to place first in the layout array ends up as `a`.
+    // The one-way lock and the resulting wheel speed must not depend on that.
+    const crank = makeGear({ id: "crank", type: "crank", axis: [0, 1, 0], position: [0, 0, 0], angularVelocity: 6 });
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 4, module: 1, position: [0, 0, 0] });
+    const wheel = makeGear({ id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 40, module: 1, position: [22, 0, 0] });
+
+    const edgesA = buildEdges([crank, worm, wheel]); // worm placed before wheel -> a=worm in the mesh pair
+    const edgesB = buildEdges([wheel, worm, crank]); // wheel placed before worm -> a=wheel in the mesh pair
+
+    const resultA = propagateRotation([crank, worm, wheel], edgesA);
+    const resultB = propagateRotation([wheel, worm, crank], edgesB);
+
+    expect(resultA.angularVelocities.get("wheel")).toBeCloseTo(-0.6); // 6 * (4/40)
+    expect(resultB.angularVelocities.get("wheel")).toBeCloseTo(-0.6);
+    expect(resultA.angularVelocities.get("worm")).toBeCloseTo(6);
+    expect(resultB.angularVelocities.get("worm")).toBeCloseTo(6);
+  });
+
+  it("still marks the worm as the sole driver when it is passed as `b` -- oneWay flips to bToA, not silently 'none' or reversed", () => {
+    const wheel = makeGear({ id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 40, module: 1, position: [22, 0, 0] });
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 4, module: 1, position: [0, 0, 0] });
+    const edge = evaluatePair(wheel, worm)!; // a=wheel, b=worm (reversed vs. the earlier test)
+    expect(edge.oneWay).toBe("bToA"); // b (the worm) is still the only side allowed to drive
+    expect(edge.ratio).toBeCloseTo(40 / 4); // reciprocal of the a=worm case -- still self-consistent (b's speed = -ratio*a's speed)
+  });
+
+  it("self-locks: a wheel driven from an independent crank cannot back-drive its meshed worm, in either gear array order", () => {
+    const driverCrank = makeGear({ id: "driverCrank", type: "crank", axis: [1, 0, 0], position: [52, 0, 0], teeth: 20, angularVelocity: 6 });
+    const wheel = makeGear({ id: "wheel", type: "spur", axis: [1, 0, 0], teeth: 40, module: 1, position: [22, 0, 0] });
+    const worm = makeGear({ id: "worm", type: "worm", axis: [0, 1, 0], teeth: 4, module: 1, position: [0, 0, 0] });
+    // driverCrank meshes the wheel directly (ordinary parallel-axis spur mesh, (20+40)/2=30 apart)
+    // and the wheel separately meshes the worm one-way. The worm has no other power source.
+
+    for (const gears of [[driverCrank, wheel, worm], [worm, wheel, driverCrank]]) {
+      const edges = buildEdges(gears);
+      const { angularVelocities } = propagateRotation(gears, edges);
+      expect(angularVelocities.get("wheel")).not.toBe(0); // the wheel IS turning
+      expect(angularVelocities.get("worm")).toBe(0); // yet the worm stays put -- one-way lock holds
+    }
   });
 });
 

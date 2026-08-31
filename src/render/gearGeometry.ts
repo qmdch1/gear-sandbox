@@ -266,9 +266,16 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
       const length = module * 6;
       const coreRadius = module * 0.9;
       const threadRadius = module * 1.3;
-      const threadPitch = module * 1.5;
+      // `teeth` doubles as thread-starts for a worm (see sim/types.ts). More starts means
+      // a steeper physical lead, which we stylize here as a visibly denser helix -- so the
+      // rendered thread's tightness tracks the same number that drives the wheel ratio in
+      // `evaluatePair` (ratio = worm.teeth / wheel.teeth), instead of a fixed pitch that
+      // looked identical regardless of thread-start count. At teeth=1 this reduces to
+      // exactly the previous fixed pitch/turns (threadPitch=module*1.5, turns=4,
+      // segments=120), so the single-start case is visually unchanged.
+      const threadPitch = (module * 1.5) / teeth;
       const turns = length / threadPitch;
-      const segments = 120;
+      const segments = Math.max(120, Math.round(30 * turns));
       const helixPoints: THREE.Vector3[] = [];
       for (let i = 0; i <= segments; i++) {
         const t = i / segments;
