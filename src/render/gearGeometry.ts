@@ -255,7 +255,24 @@ function differentialGeometry(teeth: number, module: number): THREE.BufferGeomet
 function ratchetGeometry(teeth: number, module: number): THREE.BufferGeometry {
   const base = extrudedGearGeometry(teeth, module);
   const addendumRadius = (module * teeth) / 2 + module * ADDENDUM_FACTOR;
-  const pawlLength = module * 1.8;
+  // The pawl's LENGTH is a "reach" dimension -- like the bevel cone's height or the
+  // helical twist's total displacement, it must be measured against how far past the
+  // gear's own addendum circle it needs to clear, which grows with pitch radius (teeth
+  // AND module), not module alone. The old `module * 1.8` gave every ratchet the exact
+  // same absolute pawl length regardless of teeth count, so it clears the addendum
+  // circle by a shrinking fraction as teeth grows -- 30% at teeth=10/module=1 (the
+  // showcase's actual "seed-ratchet", defaultLayout.ts), but only 16% at teeth=20 and
+  // 3.5% at teeth=100/module=3 -- the pawl visually shrinking toward invisibility on
+  // bigger gears, same defect pattern as the bevel cone height and helical twist rate.
+  // Deriving it from addendumRadius instead keeps the pawl a constant 30% of the
+  // addendum radius at any size; 0.3 is chosen so the showcase gear (teeth=10, module=1
+  // -> addendumRadius=6) reproduces the exact old pawlLength (6 * 0.3 = 1.8), so its
+  // visual size is unchanged.
+  const pawlLength = addendumRadius * 0.3;
+  // pawlWidth (module * 0.35) and the box's depth (GEAR_THICKNESS * 1.5) are gauge/
+  // cross-section dimensions -- like the crank handle's cylinder radius (module * 0.3,
+  // see crankGeometry above), they set how THICK the arm reads, not how far it reaches,
+  // so they legitimately stay tied to module/GEAR_THICKNESS rather than pitch radius.
   const pawl = new THREE.BoxGeometry(module * 0.35, pawlLength, GEAR_THICKNESS * 1.5);
   // Anchor the pawl's inner edge at the tooth tips (addendum circle) and let it extend
   // further out from there -- anything shorter is hidden inside the gear's own teeth.
