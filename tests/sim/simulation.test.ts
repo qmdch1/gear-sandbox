@@ -502,3 +502,90 @@ describe("tick", () => {
     expect(Math.abs(posSmall - posLarge)).toBeGreaterThan(1); // genuinely different, not coincidentally equal
   });
 });
+
+describe("ratchet one-way lock across many ticks", () => {
+  it("never leaks rotation from one driving gear to another THROUGH a shared ratchet, in either gear-array order, across many ticks", () => {
+    // driverA(20t) --mesh(15 apart)--> ratchet(10t) <--mesh(9 apart)-- driverB(8t)
+    // Both drivers independently sit within mesh distance of the SAME ratchet -- as if
+    // the ratchet sat between two other gears, each able to drive it on its own. The
+    // one-way lock must hold on BOTH sides of the ratchet at once: rotation.ts's
+    // adjacency map never adds an edge to the ratchet's OWN outgoing list for a
+    // ratchet-involved edge (oneWay is always resolved away from the ratchet), so the
+    // ratchet has zero outgoing edges and physically cannot relay anything it receives
+    // to the far driver -- verified here over real ticks, not just the static edge set.
+    const pitchR = (teeth: number) => teeth / 2; // module = 1
+    const ratchetX = pitchR(20) + pitchR(10); // 15
+    const driverBX = ratchetX + pitchR(10) + pitchR(8); // 24
+
+    function build(order: "AfirstInArray" | "BfirstInArray"): GearInstance[] {
+      const driverA = makeGear({ id: "driverA", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 5 });
+      const ratchet = makeGear({ id: "ratchet", type: "ratchet", teeth: 10, module: 1, position: [ratchetX, 0, 0], axis: [0, 1, 0] });
+      const driverB = makeGear({ id: "driverB", type: "crank", teeth: 8, module: 1, position: [driverBX, 0, 0], axis: [0, 1, 0], angularVelocity: 7 });
+      return order === "AfirstInArray" ? [driverA, ratchet, driverB] : [driverB, ratchet, driverA];
+    }
+
+    // Whichever driver appears first in the gears array wins the race to set the
+    // ratchet's speed -- propagateRotation's crank-BFS visits cranks in array order and
+    // marks the ratchet visited on first contact, a pre-existing, documented property of
+    // the general BFS shared by every gear type, not something specific to ratchets.
+    // What must hold regardless of who wins that race: the LOSING driver's own speed is
+    // never touched -- that is the actual thing under test here.
+    const cases: Array<{ order: "AfirstInArray" | "BfirstInArray"; expectedRatchet: number }> = [
+      { order: "AfirstInArray", expectedRatchet: -10 }, // -(20/10) * 5, driverA wins the race
+      { order: "BfirstInArray", expectedRatchet: -5.6 }, // -(8/10) * 7, driverB wins the race
+    ];
+
+    for (const { order, expectedRatchet } of cases) {
+      let state = build(order);
+      const dt = 1 / 60;
+      for (let i = 0; i < 50; i++) {
+        state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+        const driverA = state.find((g) => g.id === "driverA")!;
+        const driverB = state.find((g) => g.id === "driverB")!;
+        const ratchet = state.find((g) => g.id === "ratchet")!;
+        // Neither crank ever deviates from its own commanded speed, tick after tick --
+        // this is what confirms no power path leaks from one driver to the other
+        // through the ratchet sitting between them.
+        expect(driverA.angularVelocity).toBe(5);
+        expect(driverB.angularVelocity).toBe(7);
+        expect(ratchet.angularVelocity).toBeCloseTo(expectedRatchet, 9);
+      }
+    }
+  });
+
+  it("overwrites a stale residual angularVelocity to exactly zero the instant a tick runs once its driver stops, then holds rotation constant for as long as the driver stays stopped", () => {
+    // This sim has no independent inertia/freewheel model for a non-crank gear: every
+    // tick, propagateRotation recomputes a gear's angular velocity purely from the
+    // CURRENT crank speeds reachable through the mesh graph -- it never blends in
+    // whatever velocity the gear happened to carry from a previous tick. So a ratchet
+    // "still spinning" (angularVelocity=3 below) from before its driver stopped is stale
+    // data with no physical meaning in this model; the very first tick after the driver
+    // reads 0 must zero it, and it must then stay at rest indefinitely -- exactly the
+    // real-world ratchet behaviour: nothing is pushing it forward, and the pawl is what
+    // stops it drifting backward either.
+    const driver = makeGear({ id: "driver", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 0, rotation: 1.3 });
+    const ratchet = makeGear({ id: "ratchet", type: "ratchet", teeth: 10, module: 1, position: [15, 0, 0], axis: [0, 1, 0], angularVelocity: 3, rotation: 0.7 });
+
+    // dt=0 both settles the mesh phase (same convention used elsewhere in this file) AND
+    // is itself the first real tick -- so it doubles as proof the residual velocity does
+    // not survive even a single pass.
+    let state = tick({ gears: [driver, ratchet], remoteLinks: [] }, 0, 1).gears;
+    const settledRatchet = state.find((g) => g.id === "ratchet")!;
+    // toBeCloseTo, not toBe: propagateRotation derives this as curSpeed(0) * sign(-1) *
+    // ratio, which is signed-zero-preserving IEEE-754 arithmetic (-0) rather than +0 --
+    // physically meaningless (still "not spinning"), but `toBe`'s Object.is would fail
+    // on -0 !== 0 even though the value is correctly zero. The magnitude is what matters.
+    expect(settledRatchet.angularVelocity).toBeCloseTo(0, 9); // NOT 3 -- the stale residual is gone immediately
+    const settledRotation = settledRatchet.rotation;
+
+    const dt = 1 / 60;
+    for (let i = 0; i < 60; i++) {
+      state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+      const r = state.find((g) => g.id === "ratchet")!;
+      const d = state.find((g) => g.id === "driver")!;
+      expect(d.angularVelocity).toBeCloseTo(0, 9); // the driver genuinely stays stopped
+      expect(r.angularVelocity).toBeCloseTo(0, 9); // the ratchet never starts coasting on its own
+      expect(r.rotation).toBeCloseTo(settledRotation, 9); // and holds its position exactly -- no drift
+    }
+  });
+});
