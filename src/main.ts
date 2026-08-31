@@ -1,6 +1,7 @@
 import type { GearInstance, GearType, RemoteLink } from "./sim/types";
 import { createGear } from "./sim/gearFactory";
 import { createDefaultLayout } from "./sim/defaultLayout";
+import { removeGear } from "./sim/removeGear";
 import { tick } from "./sim/simulation";
 import { createScene } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
@@ -36,15 +37,35 @@ const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
 const ctx = createScene(canvas);
 const sceneSync = new SceneSync(ctx);
 const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => sceneSync.focusOn(id));
-const durabilityPanel = new DurabilityPanel(document.querySelector("#durability-panel")!, (id, axis) => {
-  const gear = gears.find((g) => g.id === id);
-  if (!gear) return;
-  gear.axis = axis;
-  durabilityPanel.show(gear);
-});
+const durabilityPanel = new DurabilityPanel(
+  document.querySelector("#durability-panel")!,
+  (id, axis) => {
+    const gear = gears.find((g) => g.id === id);
+    if (!gear) return;
+    gear.axis = axis;
+    durabilityPanel.show(gear);
+  },
+  (id) => deleteGear(id),
+);
 
 let gears: GearInstance[] = [];
 let remoteLinks: RemoteLink[] = [];
+// Tracks which gear (if any) is currently selected via DragControls' onSelect, so the
+// Delete/Backspace keyboard shortcut below knows what to remove -- kept in sync with the
+// durability panel's own show()/hide() lifecycle rather than duplicating selection state.
+let selectedGearId: string | null = null;
+
+// Deletes a gear from the live layout: drops it from `gears`, drops any remote link
+// (chain/belt) referencing it as an endpoint (see `removeGear` for why a dangling link
+// can't be left behind -- `sceneSync` would never dispose its ribbon mesh otherwise),
+// and hides the durability panel since the gear it was showing no longer exists.
+function deleteGear(id: string): void {
+  const result = removeGear(id, gears, remoteLinks);
+  gears = result.gears;
+  remoteLinks = result.remoteLinks;
+  if (selectedGearId === id) selectedGearId = null;
+  durabilityPanel.hide();
+}
 try {
   const loaded = loadFromLocalStorage();
   if (loaded) {
@@ -154,10 +175,27 @@ new DragControls({
   onSelect: (id) => {
     if (chainLinkMode.handleSelect(id) || beltLinkMode.handleSelect(id)) return;
     const gear = id ? gears.find((g) => g.id === id) : undefined;
-    if (gear) durabilityPanel.show(gear);
-    else durabilityPanel.hide();
+    if (gear) {
+      selectedGearId = gear.id;
+      durabilityPanel.show(gear);
+    } else {
+      selectedGearId = null;
+      durabilityPanel.hide();
+    }
   },
   onPreview: (partnerId) => sceneSync.setPreviewHighlight(partnerId),
+});
+
+// Delete/Backspace deletes the currently selected gear -- a plain shortcut for the same
+// action as the durability panel's 삭제 button. Distinct key from PlacementControls'
+// Escape-cancels-placement handler, so the two don't conflict. Guarded against firing
+// while a text input (e.g. ServerSyncPanel's server-name field) has focus, so pressing
+// Backspace to edit text doesn't also delete the selected gear.
+window.addEventListener("keydown", (event) => {
+  if (event.key !== "Delete" && event.key !== "Backspace") return;
+  if (!selectedGearId) return;
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
+  deleteGear(selectedGearId);
 });
 
 window.addEventListener("resize", () => {
