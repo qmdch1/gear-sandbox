@@ -342,19 +342,17 @@ describe("buildGeometryForType", () => {
     return maxR;
   }
 
-  // The earlier pawl-length fix (ratchetGeometry's `pawl.translate(0, addendumRadius +
-  // pawlLength / 2, 0)` followed by `pawl.rotateZ(...)`) was only ever checked at
-  // teeth=20/module=1. Translating the pawl out along +Y BEFORE rotating it about the
-  // gear's own Z axis (the origin, same axis the render layer spins the whole mesh
-  // about) means the final rotateZ can only change each vertex's DIRECTION from that
-  // axis, never its distance from it -- so the pawl's minimum reach is fixed the moment
-  // it's translated, independent of teeth or module. Confirmed by direct computation
-  // (module*teeth/2 + module*1.0 is the addendum radius used internally):
-  //   teeth=6,  module=1: spur tip 4.0000  -> ratchet reach 5.8026 (clears by ~1.80 = pawlLength)
-  //   teeth=40, module=1: spur tip 21.0000 -> ratchet reach 22.8007 (clears by ~1.80)
-  //   teeth=20, module=2: spur tip 22.0000 -> ratchet reach 25.6024 (clears by ~3.60 = pawlLength at module=2)
-  // i.e. the clearance margin scales with module (as pawlLength = module*1.8 does) and
-  // is NOT eroded by teeth count in either direction -- no scaling bug to fix.
+  // `pawl.translate(0, addendumRadius + pawlLength / 2, 0)` happens BEFORE
+  // `pawl.rotateZ(...)`, and rotation about the gear's own Z axis (the origin, same
+  // axis the render layer spins the whole mesh about) only changes each vertex's
+  // DIRECTION from that axis, never its distance from it -- so the pawl's minimum
+  // reach is fixed the moment it's translated, independent of the later rotation. This
+  // invariant (the pawl always clears the addendum circle) holds at every size both
+  // before and after the pawlLength scaling fix below -- what changed is that the
+  // clearance margin now scales with pitch radius (addendumRadius * 0.3), not a fixed
+  // module-only absolute (the old module * 1.8), so bigger gears keep a proportionally
+  // visible pawl instead of one that shrinks toward the rim as teeth grows. See the
+  // "scales the ratchet pawl length proportionally..." test below for that proportion.
   it.each([
     [6, 1],
     [40, 1],
@@ -370,6 +368,60 @@ describe("buildGeometryForType", () => {
     expect(spurTipRadius).toBeCloseTo(addendumRadius, 3); // sanity: a plain spur's own tip really sits at the addendum circle (loose tolerance: the involute flank is sampled, not exact, so the tip vertex lands within ~2e-6 of the ideal addendum radius)
     expect(ratchetReach).toBeGreaterThan(addendumRadius); // the pawl clears it at every size tested, not just teeth=20/module=1
     expect(ratchetReach).toBeGreaterThan(spurTipRadius);
+  });
+
+  /** Recovers ratchetGeometry's internal `pawlLength` from the built mesh, inverting the
+   *  exact vertex-distance relationship documented above: the farthest vertex from the
+   *  gear's own axis is the pawl box's outer corner, sitting (before the later rotateZ,
+   *  which preserves distance-from-origin) at local y = addendumRadius + pawlLength,
+   *  x = +/-(pawlWidth/2) = +/-(module*0.175). So
+   *  reach = sqrt((addendumRadius + pawlLength)^2 + (module*0.175)^2), solved here for
+   *  pawlLength. Cross-checked against the hand-computed reach values in the test above
+   *  (e.g. teeth=6/module=1: addendumRadius=4 -> derived pawlLength should read back as
+   *  whatever ratchetGeometry actually used, not assumed). */
+  function derivePawlLength(teeth: number, module: number): number {
+    const addendumRadius = (module * teeth) / 2 + module * 1.0;
+    const ratchet = buildGeometryForType("ratchet", teeth, module);
+    const reach = maxRadialReach(ratchet);
+    const halfWidth = module * 0.175;
+    return Math.sqrt(reach * reach - halfWidth * halfWidth) - addendumRadius;
+  }
+
+  it("scales the ratchet pawl length proportionally with the addendum radius (30% of it), not a fixed module-only constant", () => {
+    // Real proportion, not eyeballed: solving pawlLength = addendumRadius * k for the
+    // showcase's own size (teeth=10, module=1 -> addendumRadius=6, old pawlLength=1.8)
+    // gives k = 1.8/6 = 0.3 exactly. That ratio should hold at any teeth/module
+    // combination, unlike the old `module * 1.8`, which held it only at module=1.8's own
+    // fixed absolute regardless of addendum radius.
+    for (const [teeth, module] of [
+      [10, 1],  // addendumRadius=6  -> pawlLength should be 1.8 (the showcase's own size)
+      [20, 1],  // addendumRadius=11 -> pawlLength should be 3.3
+      [60, 2],  // addendumRadius=62 -> pawlLength should be 18.6
+      [100, 3], // addendumRadius=153 -> pawlLength should be 45.9
+    ] as const) {
+      const addendumRadius = (module * teeth) / 2 + module * 1.0;
+      const pawlLength = derivePawlLength(teeth, module);
+      expect(pawlLength / addendumRadius).toBeCloseTo(0.3, 5);
+    }
+  });
+
+  it("gives a bigger ratchet (more teeth, same module) a proportionally BIGGER absolute pawl length, not the same fixed one", () => {
+    // teeth=10 and teeth=30 at module=1 give addendum radii 6 and 16 -- exactly the
+    // same 8:3 ratio the pawl length should now track (the old module-only constant
+    // would have given both an identical 1.8).
+    const smallPawlLength = derivePawlLength(10, 1);
+    const largePawlLength = derivePawlLength(30, 1);
+    expect(largePawlLength).toBeGreaterThan(smallPawlLength);
+    expect(largePawlLength / smallPawlLength).toBeCloseTo(16 / 6, 4);
+  });
+
+  it("keeps the showcase ratchet's exact pawl length unchanged at its actual size (teeth=10, module=1 -- defaultLayout.ts's seed-ratchet)", () => {
+    // Regression guard: the showcase's "seed-ratchet" gear (defaultLayout.ts) is
+    // teeth=10, module=1 -> addendumRadius=6. The old fixed constant was module*1.8=1.8;
+    // the new addendumRadius-proportional formula (addendumRadius * 0.3) must reproduce
+    // that exact value here (6 * 0.3 = 1.8) so the showcase's visual size is unchanged.
+    const pawlLength = derivePawlLength(10, 1);
+    expect(pawlLength).toBeCloseTo(1.8, 5);
   });
 
   it("gives a sprocket a visibly different vertex count than a plain spur gear (square teeth, not full involute flanks)", () => {
