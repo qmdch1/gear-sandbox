@@ -175,4 +175,25 @@ describe("layouts API", () => {
       .send({ gears: [makeGear({ broken: "no" })] });
     expect(res.status).toBe(400);
   });
+
+  it("deletes an existing layout, which is then gone from a subsequent GET", async () => {
+    const created = await request(app).post("/api/layouts").send({ name: "to-delete", gears: [] }).expect(201);
+    const res = await request(app).delete(`/api/layouts/${created.body.id}`);
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe(created.body.id);
+    const fetched = await request(app).get(`/api/layouts/${created.body.id}`);
+    expect(fetched.status).toBe(404);
+  });
+
+  it("removes the layout from the list after deletion", async () => {
+    const created = await request(app).post("/api/layouts").send({ name: "to-delete", gears: [] }).expect(201);
+    await request(app).delete(`/api/layouts/${created.body.id}`).expect(200);
+    const listed = await request(app).get("/api/layouts");
+    expect(listed.body.map((l: { id: string }) => l.id)).not.toContain(created.body.id);
+  });
+
+  it("404s when deleting a layout that doesn't exist", async () => {
+    const res = await request(app).delete("/api/layouts/does-not-exist");
+    expect(res.status).toBe(404);
+  });
 });

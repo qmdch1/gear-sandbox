@@ -4,6 +4,7 @@ import {
   saveNewServerLayout,
   updateServerLayout,
   fetchServerLayout,
+  deleteServerLayout,
   type LayoutSummary,
 } from "../persistence/serverClient";
 
@@ -56,6 +57,12 @@ export class ServerSyncPanel {
       loadBtn.textContent = "불러오기";
       loadBtn.addEventListener("click", () => this.load(layout.id));
       li.appendChild(loadBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "삭제";
+      deleteBtn.addEventListener("click", () => this.delete(layout.id, layout.name));
+      li.appendChild(deleteBtn);
+
       this.list.appendChild(li);
     }
   }
@@ -79,6 +86,17 @@ export class ServerSyncPanel {
       await this.refresh();
     } catch (err) {
       console.error("Failed to overwrite server layout", err);
+    }
+  }
+
+  private async delete(id: string, name: string): Promise<void> {
+    if (!window.confirm(`"${name}" 레이아웃을 서버에서 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    try {
+      await deleteServerLayout(id);
+      if (this.currentId === id) this.currentId = null;
+      await this.refresh();
+    } catch (err) {
+      console.error("Failed to delete server layout", err);
     }
   }
 

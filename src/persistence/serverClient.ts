@@ -41,3 +41,7 @@ export async function updateServerLayout(id: string, name: string, layout: Layou
     }),
   );
 }
+
+export async function deleteServerLayout(id: string): Promise<void> {
+  await parseOrThrow(await fetch(`/api/layouts/${id}`, { method: "DELETE" }));
+}

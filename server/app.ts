@@ -158,5 +158,15 @@ export function createApp(db: Database.Database): express.Express {
     res.json({ id: req.params.id, name: row.name, updatedAt: now });
   });
 
+  app.delete("/api/layouts/:id", (req, res) => {
+    const existing = db.prepare("SELECT id FROM layouts WHERE id = ?").get(req.params.id);
+    if (!existing) {
+      res.status(404).json({ error: "layout not found" });
+      return;
+    }
+    db.prepare("DELETE FROM layouts WHERE id = ?").run(req.params.id);
+    res.json({ id: req.params.id, deleted: true });
+  });
+
   return app;
 }
