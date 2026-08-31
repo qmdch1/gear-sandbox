@@ -1,7 +1,7 @@
 // tests/render/gearGeometry.test.ts
 import * as THREE from "three";
 import { describe, it, expect } from "vitest";
-import { computeSpurProfilePoints, buildGeometryForType } from "../../src/render/gearGeometry";
+import { computeSpurProfilePoints, buildGeometryForType, helicalTwistPerUnit } from "../../src/render/gearGeometry";
 
 /** 2x the signed area of triangle (a, b, c), collapsed to a sign: +1 left turn,
  *  -1 right turn, 0 collinear. Coordinates here are order-10 magnitudes and the
@@ -374,5 +374,78 @@ describe("buildGeometryForType", () => {
     spur.computeBoundingSphere();
     differential.computeBoundingSphere();
     expect(differential.boundingSphere!.radius).toBeGreaterThan(spur.boundingSphere!.radius);
+  });
+
+  it("builds a valid, non-empty, finite helical geometry across a wide range of teeth counts (few, default, many)", () => {
+    for (const teeth of [8, 20, 50]) {
+      const geometry = buildGeometryForType("helical", teeth, 1);
+      const position = geometry.attributes.position;
+      expect(position.count).toBeGreaterThan(0);
+      for (let i = 0; i < position.count; i++) {
+        expect(Number.isFinite(position.getX(i))).toBe(true);
+        expect(Number.isFinite(position.getY(i))).toBe(true);
+        expect(Number.isFinite(position.getZ(i))).toBe(true);
+      }
+    }
+  });
+});
+
+describe("helicalTwistPerUnit (visual twist scaling)", () => {
+  const GEAR_THICKNESS = 0.4; // matches the private constant in gearGeometry.ts
+
+  it("keeps a constant real-world helix angle (~25 deg) regardless of teeth count, instead of a fixed radians-per-depth rate that grows steeper on bigger gears", () => {
+    // tan(helixAngle) = pitchRadius * twistPerUnit (see helicalTwistPerUnit's own doc
+    // comment): the tangential displacement a point at the pitch radius accumulates over
+    // the full GEAR_THICKNESS depth, divided by that same depth.
+    for (const teeth of [8, 16, 20, 50]) {
+      const module = 1;
+      const pitchRadius = (module * teeth) / 2;
+      const twistPerUnit = helicalTwistPerUnit(teeth, module);
+      const impliedHelixAngleDeg = Math.atan(pitchRadius * twistPerUnit) * (180 / Math.PI);
+      expect(impliedHelixAngleDeg).toBeCloseTo(25, 0);
+    }
+  });
+
+  it("gives a bigger gear (more teeth, same module) a proportionally SMALLER twist rate, not the same one -- the whole point of scaling with pitch radius", () => {
+    const small = helicalTwistPerUnit(8, 1);   // pitchRadius = 4
+    const large = helicalTwistPerUnit(50, 1);  // pitchRadius = 25
+    expect(large).toBeLessThan(small);
+    expect(small / large).toBeCloseTo(25 / 4, 1); // inversely proportional to pitch radius
+  });
+
+  it("keeps the total twist well under one tooth-pitch at every teeth count this sandbox realistically uses (6 to 60) -- a sane, non-transverse-looking helix", () => {
+    for (const teeth of [6, 8, 16, 20, 30, 50, 60]) {
+      const toothAngularPitch = (2 * Math.PI) / teeth;
+      const totalTwist = helicalTwistPerUnit(teeth, 1) * GEAR_THICKNESS;
+      expect(totalTwist).toBeLessThan(toothAngularPitch * 0.5); // less than half a tooth's own angular width
+    }
+  });
+
+  it("documents the OLD fixed twistPerUnit=1.2 as the actual defect it was: at the showcase's own helical gear (teeth=16, module=1) it already twisted MORE than a full tooth-pitch, and got worse (not better) as teeth grew", () => {
+    const OLD_FIXED_TWIST_PER_UNIT = 1.2;
+    const oldTotalTwist = OLD_FIXED_TWIST_PER_UNIT * GEAR_THICKNESS; // 0.48 rad, constant regardless of size -- the bug
+    const pitchesOfTwist = (teeth: number) => oldTotalTwist / ((2 * Math.PI) / teeth);
+
+    // teeth=8: under one tooth-pitch (looks plausible-ish)...
+    expect(pitchesOfTwist(8)).toBeCloseTo(0.61, 2);
+    // ...but teeth=16 -- the showcase's actual "seed-helical" gear (defaultLayout.ts) --
+    // already exceeds a full tooth-pitch: a tooth traced from front face to back face
+    // would visually land in/past where its NEIGHBOR started, not a subtle helical lean.
+    expect(pitchesOfTwist(16)).toBeGreaterThan(1);
+    expect(pitchesOfTwist(16)).toBeCloseTo(1.22, 2);
+    // ...and it only gets worse (more twisted, not less) as teeth/pitch-radius grows,
+    // the opposite of a size-independent visual property.
+    expect(pitchesOfTwist(20)).toBeCloseTo(1.53, 2);
+    expect(pitchesOfTwist(50)).toBeCloseTo(3.82, 2);
+    expect(pitchesOfTwist(50)).toBeGreaterThan(pitchesOfTwist(20));
+    expect(pitchesOfTwist(20)).toBeGreaterThan(pitchesOfTwist(8));
+
+    // The NEW formula fixes exactly this: its twist-in-tooth-pitches is essentially flat
+    // across the same range (mirroring a real helix angle's size-independence).
+    const newPitchesOfTwist = (teeth: number) => (helicalTwistPerUnit(teeth, 1) * GEAR_THICKNESS) / ((2 * Math.PI) / teeth);
+    const newValues = [8, 16, 20, 50].map(newPitchesOfTwist);
+    for (const v of newValues) {
+      expect(v).toBeCloseTo(newValues[0], 3);
+    }
   });
 });
