@@ -15,6 +15,7 @@ import { DurabilityPanel } from "./ui/durabilityPanel";
 import { TimeScaleSlider } from "./ui/timeScaleSlider";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
 import { ServerSyncPanel } from "./ui/serverSyncPanel";
+import { PresetPanel } from "./ui/presetPanel";
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
 import { createFrameRunner } from "./runtime/frameSafety";
 import { createDirtyTracker } from "./runtime/dirtyTracker";
@@ -32,6 +33,7 @@ app.innerHTML = `
     </div>
     <div id="save-load"></div>
     <div id="server-sync"></div>
+    <label>예제 모형 (완성된 기계 예시) <div id="presets"></div></label>
     <label>시간배율 <div id="time-scale"></div></label>
     <div id="diagnostics"></div>
     <div id="durability-panel" hidden></div>
@@ -252,6 +254,22 @@ new ServerSyncPanel(document.querySelector("#server-sync")!, {
     resetTransientUiState();
   },
   onSaved: () => dirtyTracker.markClean(),
+});
+
+new PresetPanel(document.querySelector("#presets")!, (layout) => {
+  gears = layout.gears;
+  remoteLinks = layout.remoteLinks;
+  // Unlike `load`/`importFile`/`applyLoadedLayout` above (all of which restore a layout
+  // that was already persisted somewhere -- localStorage, a file, the server -- and so
+  // correctly become the new "saved" baseline), a preset is freshly BUILT in memory by
+  // `PRESETS[].build()` every time this callback runs. The user has never saved this exact
+  // layout anywhere; it only exists in this tab's live state right now. Calling
+  // `markClean()` here would tell `dirtyTracker`/the `beforeunload` guard there's nothing
+  // to lose, when in fact closing the tab right after picking a preset loses the whole
+  // thing -- exactly the case that guard exists to catch. So a preset load counts as a
+  // fresh, unsaved edit (`markDirty()`), the same as adding/moving/deleting a gear by hand.
+  dirtyTracker.markDirty();
+  resetTransientUiState();
 });
 
 new DragControls({
