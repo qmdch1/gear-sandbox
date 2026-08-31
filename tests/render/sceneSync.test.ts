@@ -69,6 +69,80 @@ describe("SceneSync", () => {
     expect(ctx.scene.children.length).toBe(meshCountWithLink - 1);
   });
 
+  it("focusOn re-aims controls.target at the given gear without throwing when the id is unknown", () => {
+    const ctx = createScene(document.createElement("canvas"));
+    const sync = new SceneSync(ctx);
+    sync.sync([makeGear({ id: "a", position: [7, 0, 3] })], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+
+    sync.focusOn("a");
+    expect(ctx.controls.target.x).toBeCloseTo(7);
+    expect(ctx.controls.target.z).toBeCloseTo(3);
+
+    expect(() => sync.focusOn("missing")).not.toThrow();
+  });
+
+  describe("fitAll", () => {
+    it("moves controls.target to the centroid of all current gears", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gears = [
+        makeGear({ id: "a", position: [0, 0, 0] }),
+        makeGear({ id: "b", position: [10, 0, 0] }),
+        makeGear({ id: "c", position: [5, 0, 10] }),
+      ];
+      sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+
+      sync.fitAll(gears);
+
+      // centroid of (0,0,0), (10,0,0), (5,0,10) is (5, 0, 3.333...)
+      expect(ctx.controls.target.x).toBeCloseTo(5);
+      expect(ctx.controls.target.y).toBeCloseTo(0);
+      expect(ctx.controls.target.z).toBeCloseTo(10 / 3);
+    });
+
+    it("clamps the camera distance to minDistance when gears are clustered very close together", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gears = [
+        makeGear({ id: "a", position: [0, 0, 0] }),
+        makeGear({ id: "b", position: [0.001, 0, 0] }),
+      ];
+      sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+
+      sync.fitAll(gears);
+
+      const distance = ctx.camera.position.distanceTo(ctx.controls.target);
+      expect(distance).toBeCloseTo(ctx.controls.minDistance);
+    });
+
+    it("clamps the camera distance to maxDistance when gears are spread very far apart", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gears = [
+        makeGear({ id: "a", position: [-5000, 0, 0] }),
+        makeGear({ id: "b", position: [5000, 0, 0] }),
+      ];
+      sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+
+      sync.fitAll(gears);
+
+      const distance = ctx.camera.position.distanceTo(ctx.controls.target);
+      expect(distance).toBeCloseTo(ctx.controls.maxDistance);
+    });
+
+    it("does not throw and leaves the camera untouched when there are no gears", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const positionBefore = ctx.camera.position.clone();
+      const targetBefore = ctx.controls.target.clone();
+
+      expect(() => sync.fitAll([])).not.toThrow();
+
+      expect(ctx.camera.position.equals(positionBefore)).toBe(true);
+      expect(ctx.controls.target.equals(targetBefore)).toBe(true);
+    });
+  });
+
   it("draws a single ribbon when the same pair is stored in both orders", () => {
     // A remote link is an unordered pair, so {a,b} and {b,a} are the same connection.
     // With an unsorted ribbon key they hashed differently and produced two overlapping
