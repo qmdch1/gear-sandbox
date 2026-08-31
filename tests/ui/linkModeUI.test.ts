@@ -145,4 +145,72 @@ describe("LinkModeUI", () => {
     link.handleSelect("c");
     expect(onPickChange).toHaveBeenCalledWith("c");
   });
+
+  describe("reset", () => {
+    it("cancels a pending pick and fires onPickChange(null)", () => {
+      const onLink = vi.fn();
+      const onPickChange = vi.fn();
+      const button = document.createElement("button");
+      const link = new LinkModeUI(button, "sprocket", () => "sprocket", onLink, onPickChange);
+      button.click(); // activate
+      link.handleSelect("a");
+      onPickChange.mockClear();
+
+      link.reset();
+
+      expect(onPickChange).toHaveBeenCalledWith(null);
+      expect(onPickChange).toHaveBeenCalledTimes(1);
+      expect(onLink).not.toHaveBeenCalled();
+    });
+
+    it("is a safe no-op when nothing is pending (no spurious callback fire)", () => {
+      const onLink = vi.fn();
+      const onPickChange = vi.fn();
+      const button = document.createElement("button");
+      const link = new LinkModeUI(button, "sprocket", () => "sprocket", onLink, onPickChange);
+      button.click(); // activate, no pick yet
+
+      expect(() => link.reset()).not.toThrow();
+      expect(onPickChange).not.toHaveBeenCalled();
+
+      // Also a no-op while inactive.
+      button.click(); // deactivate
+      expect(() => link.reset()).not.toThrow();
+      expect(onPickChange).not.toHaveBeenCalled();
+    });
+
+    it("does not toggle the mode's active state -- only clears the pending pick", () => {
+      const onLink = vi.fn();
+      const onPickChange = vi.fn();
+      const button = document.createElement("button");
+      const link = new LinkModeUI(button, "sprocket", () => "sprocket", onLink, onPickChange);
+      button.click(); // activate
+      link.handleSelect("a");
+
+      link.reset();
+
+      // Still armed: aria-pressed reflects `active`, untouched by reset().
+      expect(button.getAttribute("aria-pressed")).toBe("true");
+      // And the mode still consumes selects as an active link gesture, starting a fresh pick.
+      onPickChange.mockClear();
+      expect(link.handleSelect("c")).toBe(true);
+      expect(onPickChange).toHaveBeenCalledWith("c");
+    });
+
+    it("lets a fresh pick complete a link normally after reset() cancels the stale one", () => {
+      const onLink = vi.fn();
+      const onPickChange = vi.fn();
+      const button = document.createElement("button");
+      const link = new LinkModeUI(button, "sprocket", () => "sprocket", onLink, onPickChange);
+      button.click(); // activate
+      link.handleSelect("a"); // pending pick on a stale gear id
+      link.reset(); // e.g. the layout was swapped out from under this pick
+
+      link.handleSelect("c");
+      link.handleSelect("d");
+
+      expect(onLink).toHaveBeenCalledWith("c", "d");
+      expect(onLink).not.toHaveBeenCalledWith("a", expect.anything());
+    });
+  });
 });

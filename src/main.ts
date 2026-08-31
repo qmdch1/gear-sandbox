@@ -67,6 +67,10 @@ const dirtyTracker = createDirtyTracker();
 // Tracks which gear (if any) is currently selected via DragControls' onSelect, so the
 // Delete/Backspace keyboard shortcut below knows what to remove -- kept in sync with the
 // durability panel's own show()/hide() lifecycle rather than duplicating selection state.
+// That guarantee now also covers the three layout-replacement paths below (SaveLoadPanel's
+// load/importFile, ServerSyncPanel's applyLoadedLayout, via resetTransientUiState()): a
+// freshly loaded layout may not contain the previously-selected gear at all, so selection
+// (and the durability panel showing it) must not survive the swap either.
 let selectedGearId: string | null = null;
 
 // Deletes a gear from the live layout: drops it from `gears`, drops any remote link
@@ -171,6 +175,26 @@ const beltLinkMode = new LinkModeUI(
   },
 );
 
+// A layout swap (load/import/server-sync below) replaces `gears`/`remoteLinks` wholesale, so
+// any transient UI state that references a gear id from the *previous* layout must be
+// cancelled rather than left dangling -- the durability panel showing a now-nonexistent
+// gear, a stale `selectedGearId` that Delete/Backspace would silently no-op against, or a
+// pending chain/belt link pick that would otherwise complete into a `RemoteLink` pointing at
+// an id `gears` no longer has (SceneSync.sync() would just silently skip rendering it, but
+// it'd still sit there dirtying the layout and getting persisted on the next save/export).
+// Deliberately does NOT touch chainLinkMode/beltLinkMode's armed/disarmed (`active`) state --
+// see LinkModeUI.reset() -- only whatever pick was in flight.
+function resetTransientUiState(): void {
+  selectedGearId = null;
+  durabilityPanel.hide();
+  chainPickId = null;
+  beltPickId = null;
+  lastPickSource = null;
+  chainLinkMode.reset();
+  beltLinkMode.reset();
+  syncLinkPickHighlight();
+}
+
 // "전체 보기": resets/fits the camera to frame every placed gear at once -- the counterpart to
 // DiagnosticsPanel's click-to-focus above, for when panning/zooming (or a far-off placement)
 // has wandered off the layout entirely.
@@ -192,6 +216,7 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
       remoteLinks = loaded.remoteLinks;
       // The loaded state IS the new "saved" baseline until the user edits it further.
       dirtyTracker.markClean();
+      resetTransientUiState();
     }
   },
   exportFile: () => {
@@ -211,6 +236,7 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
       remoteLinks = loaded.remoteLinks;
       // Same reasoning as `load` above: an imported file is a new saved baseline.
       dirtyTracker.markClean();
+      resetTransientUiState();
     } catch (err) {
       console.error("Failed to import gear layout file", err);
     }
@@ -223,6 +249,7 @@ new ServerSyncPanel(document.querySelector("#server-sync")!, {
     gears = loaded.gears;
     remoteLinks = loaded.remoteLinks;
     dirtyTracker.markClean();
+    resetTransientUiState();
   },
   onSaved: () => dirtyTracker.markClean(),
 });
