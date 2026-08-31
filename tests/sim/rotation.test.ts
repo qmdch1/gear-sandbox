@@ -79,6 +79,44 @@ describe("propagateRotation", () => {
   });
 });
 
+describe("two cranks coupled into one connected component (user-mistake scenario)", () => {
+  // A user can accidentally (or deliberately) mesh two cranks together, or otherwise
+  // couple them into the same connected component, each carrying its own commanded
+  // angularVelocity. propagateRotation has no concept of "conflict" -- it just BFS's
+  // outward from every unvisited crank in `gears` array order. The FIRST crank (by
+  // array position) in a component is still unvisited when its turn comes, so it always
+  // wins the outer loop and gets to walk the whole component, including any OTHER
+  // crank(s) inside it. Once that walk reaches a second crank as an ordinary neighbor,
+  // it is treated exactly like any other driven gear: `angularVelocities.set(otherId, ...)`
+  // overwrites its map entry (silently discarding its own commanded speed), and it is
+  // marked visited -- so when the outer loop later reaches it, `visited.has(crank.id)`
+  // is already true and it is skipped entirely, never getting its own BFS turn.
+  //
+  // Net effect: deterministic, not undefined/random, and not a crash -- but silent.
+  // Whichever crank happens to sit earlier in the gears array becomes the sole "real"
+  // driver for the whole component; every other crank downstream of it has its own
+  // angularVelocity field quietly ignored and instead driven by the winner, with no
+  // diagnostic raised anywhere. Confirmed here in both array orders to show the
+  // determinism is real (a simple order swap flips which crank wins), not coincidence.
+  it("lets the FIRST crank in array order win as sole driver; the second crank's own commanded speed is silently overwritten", () => {
+    const crank1 = makeGear({ id: "crank1", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 });
+    const crank2 = makeGear({ id: "crank2", type: "crank", teeth: 10, module: 1, position: [15, 0, 0], angularVelocity: 5 });
+    const gears = [crank1, crank2]; // crank1 listed first
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("crank1")).toBe(2);           // untouched: its own commanded speed
+    expect(angularVelocities.get("crank2")).toBeCloseTo(-4);   // overwritten: -(20/10) * 2, its own "5" is discarded
+  });
+
+  it("flips which crank wins when the array order is reversed -- proving the rule is array order, not id or anything else", () => {
+    const crank1 = makeGear({ id: "crank1", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 2 });
+    const crank2 = makeGear({ id: "crank2", type: "crank", teeth: 10, module: 1, position: [15, 0, 0], angularVelocity: 5 });
+    const gears = [crank2, crank1]; // crank2 listed first this time
+    const { angularVelocities } = propagateRotation(gears, buildEdges(gears));
+    expect(angularVelocities.get("crank2")).toBe(5);            // untouched: its own commanded speed
+    expect(angularVelocities.get("crank1")).toBeCloseTo(-2.5);  // overwritten: -(10/20) * 5, its own "2" is discarded
+  });
+});
+
 describe("v2 propagation rules", () => {
   it("transmits chain rotation in the SAME direction (not reversed, unlike a direct gear mesh)", () => {
     const gears = [
@@ -112,6 +150,34 @@ describe("v2 propagation rules", () => {
     const diffSpeed = angularVelocities.get("diff")!;
     expect(angularVelocities.get("outA")).toBeCloseTo(diffSpeed);
     expect(angularVelocities.get("outB")).toBeCloseTo(diffSpeed);
+  });
+
+  it("drives THREE simultaneous, independent branches straight off one crank -- two direct mesh partners plus one coincident (shaft-coupled) partner -- with no cross-talk between them", () => {
+    // crank(20t, av=3) at origin, meshed with spurA(10t) along +X, meshed with spurB(8t)
+    // along +Z (far enough from spurA that the two never mesh with each other), and
+    // shaft-coupled (coincident, same axis) to a load. All three read `curSpeed` off the
+    // SAME crank map entry inside propagateRotation's BFS -- this pins down that reading
+    // it three times for three different neighbors produces three independently-correct
+    // results, not some shared/mutated intermediate.
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 3 });
+    const spurA = makeGear({ id: "spurA", teeth: 10, module: 1, position: [15, 0, 0] }); // mesh dist = 10+5
+    const spurB = makeGear({ id: "spurB", teeth: 8, module: 1, position: [0, 0, 14] });  // mesh dist = 10+4
+    const load = makeGear({ id: "load", type: "load", teeth: 20, module: 1, position: [0, 0, 0] }); // coincident coupling
+
+    const gears = [crank, spurA, spurB, load];
+    const edges = buildEdges(gears);
+
+    // Sanity on the edge set itself: exactly the 3 branches off the crank, and no
+    // accidental edge between spurA and spurB (they're ~20.5 apart, far past mesh range).
+    const crankEdges = edges.filter((e) => e.a === "crank" || e.b === "crank");
+    expect(crankEdges.length).toBe(3);
+    expect(edges.some((e) => new Set([e.a, e.b]).size === 2 && [e.a, e.b].every((id) => id.startsWith("spur")))).toBe(false);
+
+    const { angularVelocities } = propagateRotation(gears, edges);
+    expect(angularVelocities.get("crank")).toBe(3);            // the crank's own input, untouched
+    expect(angularVelocities.get("spurA")).toBeCloseTo(-6);     // -(20/10) * 3
+    expect(angularVelocities.get("spurB")).toBeCloseTo(-7.5);   // -(20/8) * 3
+    expect(angularVelocities.get("load")).toBeCloseTo(3);       // rigid coupling: same speed as the crank
   });
 
   it("gives a THIRD coincident gear on a differential the same locked speed too -- the two-output demo layout is a consequence of the general coincident-coupling rule in evaluatePair, not something propagateRotation or buildEdges hardcodes to exactly two", () => {

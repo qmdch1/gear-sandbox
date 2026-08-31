@@ -143,6 +143,34 @@ describe("buildGeometryForType", () => {
     }
   });
 
+  it("gives a crank a distinct handle silhouette from a plain spur gear of the same teeth/module -- more geometry than the flat disc, and a visible axial protrusion, across a range of sizes", () => {
+    // A crank ("손잡이 기어" = "handle gear") is supposed to read as a power source with
+    // a graspable handle, not just a spur gear with a different label. `crankGeometry`
+    // merges the ordinary flat spur body (thickness GEAR_THICKNESS = 0.4, see
+    // gearGeometry.ts) with a handle cylinder offset from center and extending along the
+    // gear's own axis well past that thickness. Verify both signals -- vertex count and
+    // axial (Z) bounding-box extent -- hold across small, default, and large teeth/module
+    // combinations, not just the one demo size.
+    const GEAR_THICKNESS = 0.4;
+    for (const [teeth, module] of [
+      [6, 1],
+      [20, 1],
+      [8, 2],
+      [60, 0.5],
+    ] as const) {
+      const crank = buildGeometryForType("crank", teeth, module);
+      const spur = buildGeometryForType("spur", teeth, module);
+      crank.computeBoundingBox();
+      const crankZExtent = crank.boundingBox!.max.z - crank.boundingBox!.min.z;
+
+      // The handle adds real geometry, not just a paint/material difference.
+      expect(crank.attributes.position.count).toBeGreaterThan(spur.attributes.position.count);
+      // The handle sticks out along the rotation axis well past the flat gear disc's own
+      // thickness -- a plain spur gear's Z-extent is exactly GEAR_THICKNESS.
+      expect(crankZExtent).toBeGreaterThan(GEAR_THICKNESS * 5);
+    }
+  });
+
   it("gives the bevel gear a smaller cross-section near the apex than at the base (real taper, not a smooth cone)", () => {
     const geometry = buildGeometryForType("bevel", 20, 1);
     geometry.computeBoundingBox();

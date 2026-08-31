@@ -401,6 +401,65 @@ describe("tick", () => {
     expect(outC.rotation).toBe(outB.rotation);
   });
 
+  it("drives THREE simultaneous, independent branches off one crank across many ticks with no cross-talk -- two direct mesh partners at different ratios plus one coincident (shaft-coupled) partner", () => {
+    // crank(20t, av=3) meshed with spurA(10t) along +X, meshed with spurB(8t) along +Z
+    // (far enough apart that spurA/spurB never mesh with each other), and shaft-coupled
+    // (coincident) to a load. All three start at non-trivial, mutually unaligned
+    // rotations -- not a convenient zero state -- so any settling transient shows up
+    // before steady state is measured.
+    const crankTeeth = 20, spurATeeth = 10, spurBTeeth = 8;
+    const gears: GearInstance[] = [
+      makeGear({ id: "crank", type: "crank", teeth: crankTeeth, module: 1, position: [0, 0, 0], angularVelocity: 3, rotation: 0.37 }),
+      makeGear({ id: "spurA", teeth: spurATeeth, module: 1, position: [15, 0, 0], rotation: 1.1 }),
+      makeGear({ id: "spurB", teeth: spurBTeeth, module: 1, position: [0, 0, 14], rotation: 2.9 }),
+      makeGear({ id: "load", type: "load", teeth: 20, module: 1, position: [0, 0, 0], rotation: 0.6 }),
+    ];
+
+    const dt = 1 / 60;
+    let state = tick({ gears, remoteLinks: [] }, 0, 1).gears; // settle each mesh edge's tooth phase once
+
+    const startA = state.find((g) => g.id === "spurA")!.rotation;
+    const startB = state.find((g) => g.id === "spurB")!.rotation;
+    const startLoad = state.find((g) => g.id === "load")!.rotation;
+
+    const expectedA = -(crankTeeth / spurATeeth) * 3; // -(20/10)*3 = -6
+    const expectedB = -(crankTeeth / spurBTeeth) * 3;  // -(20/8)*3 = -7.5
+    const expectedLoad = 3;                            // rigid coupling: same as the crank
+
+    const steps = 300;
+    let oscillationsA = 0;
+    let oscillationsB = 0;
+    for (let i = 0; i < steps; i++) {
+      const beforeA = state.find((g) => g.id === "spurA")!.rotation;
+      const beforeB = state.find((g) => g.id === "spurB")!.rotation;
+      state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+      const afterA = state.find((g) => g.id === "spurA")!.rotation;
+      const afterB = state.find((g) => g.id === "spurB")!.rotation;
+      if (Math.abs(afterA - beforeA - expectedA * dt) > 1e-9) oscillationsA++;
+      if (Math.abs(afterB - beforeB - expectedB * dt) > 1e-9) oscillationsB++;
+
+      // No cross-talk, checked on every single tick: each branch's angular velocity
+      // depends only on the crank's fixed speed and its own ratio -- never on the
+      // other branch's state.
+      expect(state.find((g) => g.id === "spurA")!.angularVelocity).toBeCloseTo(expectedA, 9);
+      expect(state.find((g) => g.id === "spurB")!.angularVelocity).toBeCloseTo(expectedB, 9);
+      expect(state.find((g) => g.id === "load")!.angularVelocity).toBeCloseTo(expectedLoad, 9);
+      expect(state.find((g) => g.id === "crank")!.angularVelocity).toBe(3); // never overwritten
+    }
+
+    expect(oscillationsA).toBe(0);
+    expect(oscillationsB).toBe(0);
+
+    const endA = state.find((g) => g.id === "spurA")!.rotation;
+    const endB = state.find((g) => g.id === "spurB")!.rotation;
+    const endLoad = state.find((g) => g.id === "load")!.rotation;
+    expect(endA - startA).toBeCloseTo(expectedA * dt * steps, 9);
+    expect(endB - startB).toBeCloseTo(expectedB * dt * steps, 9);
+    // The coupling edge never gets a phase adjustment (only "mesh" edges do), so the
+    // load's rotation is exact pure integration from tick 0 -- no settling needed at all.
+    expect(endLoad - startLoad).toBeCloseTo(expectedLoad * dt * steps, 9);
+  });
+
   it("accumulates a rack's linearPosition over time and leaves other gears' linearPosition undefined", () => {
     const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 });
     const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
