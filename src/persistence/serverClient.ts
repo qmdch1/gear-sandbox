@@ -1,4 +1,5 @@
 import type { LayoutState } from "../sim/types";
+import { validateLayout } from "./serialize";
 
 export interface LayoutSummary {
   id: string;
@@ -19,7 +20,15 @@ export async function listServerLayouts(): Promise<LayoutSummary[]> {
 }
 
 export async function fetchServerLayout(id: string): Promise<LayoutDetail> {
-  return parseOrThrow(await fetch(`/api/layouts/${id}`));
+  const body = await parseOrThrow(await fetch(`/api/layouts/${id}`));
+  // The server's own validation (isValidGearsArray/isValidRemoteLinksArray) guards what gets
+  // written, but this is the client's own load-boundary gate -- the same one loadFromLocalStorage
+  // and importFromFile already pass every load through via deserializeLayout/validateLayout.
+  // Without it, a stored row from before the validator existed, a manually-edited DB, or a
+  // duplicate RemoteLink the server's write-side check doesn't catch (it checks shape, not
+  // duplication) would flow straight into live sim/render state unchecked.
+  const { gears, remoteLinks } = validateLayout(body);
+  return { id: body.id, name: body.name, updatedAt: body.updatedAt, gears, remoteLinks };
 }
 
 export async function saveNewServerLayout(name: string, layout: LayoutState): Promise<LayoutSummary> {

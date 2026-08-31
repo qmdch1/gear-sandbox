@@ -61,18 +61,30 @@ export function serializeLayout(layout: LayoutState): string {
   return JSON.stringify({ version: SCHEMA_VERSION, gears: layout.gears, remoteLinks: layout.remoteLinks }, null, 2);
 }
 
-export function deserializeLayout(json: string): LayoutState {
-  const parsed = JSON.parse(json);
-  if (typeof parsed !== "object" || parsed === null || !Array.isArray(parsed.gears)) {
+/** Validates and normalizes an already-parsed candidate layout (untrusted `unknown` shape --
+ *  parsed JSON, a server response body, anything). Checks `gears` is an array of valid
+ *  `GearInstance`s, defaults a missing `remoteLinks` to `[]` (v1-save compatibility), validates
+ *  `remoteLinks` is an array of valid `RemoteLink`s, and dedupes them. Throws the same
+ *  "Invalid gear-sandbox save file" error on any shape failure. This is the shared validation
+ *  gate every load path (local storage, file import, server fetch) must pass through before its
+ *  result is trusted as live layout state. */
+export function validateLayout(parsed: unknown): LayoutState {
+  if (typeof parsed !== "object" || parsed === null || !Array.isArray((parsed as Record<string, unknown>).gears)) {
     throw new Error("Invalid gear-sandbox save file");
   }
-  if (!parsed.gears.every(isValidGear)) {
+  const candidate = parsed as Record<string, unknown>;
+  const gears = candidate.gears as unknown[];
+  if (!gears.every(isValidGear)) {
     throw new Error("Invalid gear-sandbox save file");
   }
   // v1 saves have no `remoteLinks` field at all -- default to empty rather than reject them.
-  const remoteLinks = parsed.remoteLinks === undefined ? [] : parsed.remoteLinks;
+  const remoteLinks = candidate.remoteLinks === undefined ? [] : candidate.remoteLinks;
   if (!Array.isArray(remoteLinks) || !remoteLinks.every(isValidRemoteLink)) {
     throw new Error("Invalid gear-sandbox save file");
   }
-  return { gears: parsed.gears as GearInstance[], remoteLinks: dedupeRemoteLinks(remoteLinks as RemoteLink[]) };
+  return { gears: gears as GearInstance[], remoteLinks: dedupeRemoteLinks(remoteLinks as RemoteLink[]) };
+}
+
+export function deserializeLayout(json: string): LayoutState {
+  return validateLayout(JSON.parse(json));
 }

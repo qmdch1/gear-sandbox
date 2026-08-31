@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { serializeLayout, deserializeLayout } from "../../src/persistence/serialize";
+import { serializeLayout, deserializeLayout, validateLayout } from "../../src/persistence/serialize";
 import type { GearInstance, LayoutState } from "../../src/sim/types";
 
 /** A fully-populated, valid gear -- the baseline the rejection tests below mutate. */
@@ -98,5 +98,47 @@ describe("serialize/deserialize round-trip", () => {
       const bad = JSON.stringify({ version: 2, gears: [{ ...validGear(), axis }], remoteLinks: [] });
       expect(() => deserializeLayout(bad), `axis ${JSON.stringify(axis)} should be rejected`).toThrow();
     }
+  });
+});
+
+describe("validateLayout", () => {
+  it("passes a valid already-parsed layout through unchanged in shape", () => {
+    const layout: LayoutState = {
+      gears: [validGear()],
+      remoteLinks: [{ a: "a", b: "b", kind: "chain" }],
+    };
+    expect(validateLayout(layout)).toEqual(layout);
+  });
+
+  it("throws on an invalid gear", () => {
+    expect(() => validateLayout({ gears: [{ ...validGear(), type: "sprocketeer" }], remoteLinks: [] })).toThrow(
+      "Invalid gear-sandbox save file",
+    );
+  });
+
+  it("throws on an invalid remoteLink", () => {
+    expect(() => validateLayout({ gears: [], remoteLinks: [{ a: "x" }] })).toThrow("Invalid gear-sandbox save file");
+  });
+
+  it("dedupes duplicate remote links", () => {
+    const restored = validateLayout({
+      gears: [],
+      remoteLinks: [
+        { a: "x", b: "y", kind: "chain" },
+        { a: "y", b: "x", kind: "chain" }, // same pair, reversed order
+      ],
+    });
+    expect(restored.remoteLinks).toEqual([{ a: "x", b: "y", kind: "chain" }]);
+  });
+
+  it("defaults a missing remoteLinks field to []", () => {
+    const restored = validateLayout({ gears: [validGear()] });
+    expect(restored.remoteLinks).toEqual([]);
+  });
+
+  it("rejects a non-object and an object with a missing/non-array gears field", () => {
+    expect(() => validateLayout(null)).toThrow("Invalid gear-sandbox save file");
+    expect(() => validateLayout("not an object")).toThrow("Invalid gear-sandbox save file");
+    expect(() => validateLayout({})).toThrow("Invalid gear-sandbox save file");
   });
 });
