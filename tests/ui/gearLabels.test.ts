@@ -22,6 +22,12 @@ describe("GEAR_NOTES", () => {
     expect(GEAR_NOTES.differential!.length).toBeGreaterThan(0);
   });
 
+  it("explains the planetary set's single-lumped-gear simplification", () => {
+    expect(GEAR_NOTES.planetary).toBeDefined();
+    expect(GEAR_NOTES.planetary!.length).toBeGreaterThan(0);
+    expect(GEAR_NOTES.planetary).not.toBe(GEAR_NOTES.differential); // each note is its own text, not a shared placeholder
+  });
+
   it("has no note for a type with no known simplification to explain, like a plain spur gear", () => {
     expect(GEAR_NOTES.spur).toBeUndefined();
   });
