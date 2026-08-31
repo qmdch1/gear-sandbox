@@ -253,4 +253,45 @@ describe("GearMeshObject", () => {
       expect(material.color.equals(colorForGear("spur", 0, false))).toBe(true);
     });
   });
+
+  describe("needsRebuild", () => {
+    it("is false when type/teeth/module are all unchanged", () => {
+      const gear = makeGear({ type: "spur", teeth: 20, module: 1 });
+      const obj = new GearMeshObject(gear);
+      expect(obj.needsRebuild(gear)).toBe(false);
+      expect(obj.needsRebuild({ ...gear })).toBe(false); // fresh object, numerically identical
+    });
+
+    it("is true once the gear's type changes under the same instance", () => {
+      const gear = makeGear({ type: "spur", teeth: 20, module: 1 });
+      const obj = new GearMeshObject(gear);
+      expect(obj.needsRebuild({ ...gear, type: "worm" })).toBe(true);
+    });
+
+    it("is true once the gear's teeth count changes under the same instance", () => {
+      const gear = makeGear({ type: "spur", teeth: 20, module: 1 });
+      const obj = new GearMeshObject(gear);
+      expect(obj.needsRebuild({ ...gear, teeth: 8 })).toBe(true);
+    });
+
+    it("is true once the gear's module changes under the same instance", () => {
+      const gear = makeGear({ type: "spur", teeth: 20, module: 1 });
+      const obj = new GearMeshObject(gear);
+      expect(obj.needsRebuild({ ...gear, module: 2 })).toBe(true);
+    });
+
+    it("treats teeth=0 as equivalent to teeth=1, matching the constructor's own || fallback", () => {
+      const gear = makeGear({ type: "spur", teeth: 0, module: 1 });
+      const obj = new GearMeshObject(gear); // built with teeth=0||1=1
+      expect(obj.needsRebuild({ ...gear, teeth: 1 })).toBe(false); // both normalize to 1 -- no spurious rebuild
+    });
+
+    it("is unaffected by non-shape fields like position, rotation, or durability", () => {
+      const gear = makeGear({ type: "spur", teeth: 20, module: 1 });
+      const obj = new GearMeshObject(gear);
+      expect(
+        obj.needsRebuild({ ...gear, position: [9, 9, 9], rotation: 3, durabilityCurrent: 1 }),
+      ).toBe(false);
+    });
+  });
 });
