@@ -161,6 +161,33 @@ describe("buildGeometryForType", () => {
     expect(maxRadiusNearApex).toBeLessThan(maxRadiusNearBase);
   });
 
+  it("scales the bevel gear's cone height proportionally with pitch radius (module*teeth), not a fixed constant", () => {
+    // Real bevel-gear cone proportions are tied to pitch radius: a bevel gear with
+    // double the pitch radius should get a proportionally taller cone, not the same
+    // fixed axial height regardless of size (which would look wrong -- a giant bevel
+    // gear rendered as a nearly-flat disc, or a tiny one rendered as a disproportionately
+    // tall spike). teeth=10 and teeth=30 at module=1 give pitch radii 5 and 15 -- an
+    // exact 3x ratio -- so the cone's Z-extent (axial height) should also come out ~3x.
+    const small = buildGeometryForType("bevel", 10, 1); // pitchRadius = 5
+    const large = buildGeometryForType("bevel", 30, 1); // pitchRadius = 15
+    small.computeBoundingBox();
+    large.computeBoundingBox();
+    const smallHeight = small.boundingBox!.max.z - small.boundingBox!.min.z;
+    const largeHeight = large.boundingBox!.max.z - large.boundingBox!.min.z;
+    expect(largeHeight / smallHeight).toBeCloseTo(3, 1);
+  });
+
+  it("keeps the bevel showcase gear's cone height unchanged at the default layout's actual size (teeth=16, module=1)", () => {
+    // Regression guard: the showcase's "seed-bevel" gear (defaultLayout.ts) is
+    // teeth=16, module=1 -> pitchRadius=8. The old fixed constant was
+    // GEAR_THICKNESS(0.4)*3 = 1.2; the new pitchRadius-proportional formula must
+    // reproduce that exact value here so the showcase's visual size doesn't shift.
+    const geometry = buildGeometryForType("bevel", 16, 1);
+    geometry.computeBoundingBox();
+    const height = geometry.boundingBox!.max.z - geometry.boundingBox!.min.z;
+    expect(height).toBeCloseTo(1.2, 5);
+  });
+
   it("gives the worm a thread that stands off from a central core (not a smooth cylinder)", () => {
     const geometry = buildGeometryForType("worm", 2, 1);
     geometry.computeBoundingBox();
