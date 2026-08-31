@@ -11,6 +11,28 @@ const CHAIN_LINK_GAP_FACTOR = 0.3;
  *  chain at all -- floor it the same way a real chain can't have a fractional link. */
 const CHAIN_MIN_LINKS = 3;
 
+/** Hard ceiling on chain link count. Without one, `linkCount` scales linearly and
+ *  unbounded with the distance between the two remote-linked endpoints -- and that
+ *  distance is *not* meaningfully bounded by the camera: `scene.ts`'s
+ *  `controls.maxDistance` (300) only limits how far the camera sits from its orbit
+ *  *target*, and OrbitControls' default panning lets that target move anywhere (nothing
+ *  in this codebase clamps `controls.target`), so a user can always pan-then-zoom-in to
+ *  precisely click-to-place (`placementControls.ts`) on any point of the actual bound:
+ *  the 500x500 `groundPlane` (`scene.ts`) itself, whose raycast hits can't fall outside
+ *  its own finite mesh. Worst case is therefore the plane's diagonal,
+ *  sqrt(500^2 + 500^2) ~= 707.11 units. At the chain width `sceneSync.ts` hardcodes
+ *  (0.15), that's an uncapped round(707.11 / (0.15 * CHAIN_LINK_PITCH_FACTOR)) = 1571
+ *  links -- 1571 * 36 = 56,556 vertices for a single ribbon mesh, worse than it first
+ *  looks and confirmed reachable through ordinary UI interaction, not just a hypothetical.
+ *  Capping at 250 links bounds any one chain ribbon to 250 * 36 = 9,000 vertices --
+ *  comfortably in "smooth interactivity" territory -- while sitting far above what
+ *  ordinary use needs (the bundled default layout's demo chain, 30 units apart, needs
+ *  only 67 links) so it only engages for the pathological long-distance chains this risk
+ *  is actually about. `actualPitch`/`linkLength` are recomputed from the *capped*
+ *  `linkCount`, so hitting the cap just spaces links out further -- it never breaks or
+ *  overlaps the geometry. */
+export const CHAIN_MAX_LINKS = 250;
+
 /** A thin tube-shaped ribbon spanning two world points -- stands in for a chain or belt
  *  segment between two remote-linked sprockets/pulleys. Rebuilt on every SceneSync.sync()
  *  call (Task 14) since both endpoints can move independently of any single GearInstance's
@@ -51,7 +73,8 @@ function buildChainLinks(a: THREE.Vector3, b: THREE.Vector3, width: number): THR
   const alignToChain = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
 
   const desiredPitch = width * CHAIN_LINK_PITCH_FACTOR;
-  const linkCount = Math.max(CHAIN_MIN_LINKS, Math.round(distance / Math.max(desiredPitch, 1e-6)));
+  const rawLinkCount = Math.round(distance / Math.max(desiredPitch, 1e-6));
+  const linkCount = Math.min(CHAIN_MAX_LINKS, Math.max(CHAIN_MIN_LINKS, rawLinkCount));
   const actualPitch = distance / linkCount;
   const linkLength = actualPitch * (1 - CHAIN_LINK_GAP_FACTOR);
   const plateThickness = width * 0.35;
