@@ -1,6 +1,6 @@
 // tests/sim/meshing.test.ts
 import { describe, it, expect } from "vitest";
-import { evaluatePair, isOverlapping, computeMeshPhaseOffset, findMeshPartner, pitchRadius } from "../../src/sim/meshing";
+import { evaluatePair, isOverlapping, computeMeshPhaseOffset, findMeshPartner, pitchRadius, MESH_TOLERANCE } from "../../src/sim/meshing";
 import { buildEdges } from "../../src/sim/graph";
 import { propagateRotation } from "../../src/sim/rotation";
 import type { GearInstance } from "../../src/sim/types";
@@ -220,6 +220,62 @@ describe("v2 object types", () => {
     const r1 = makeGear({ id: "r1", type: "rack", teeth: 8, module: 1, position: [0, 0, 0], axis: [1, 0, 0] });
     const r2 = makeGear({ id: "r2", type: "rack", teeth: 8, module: 1, position: [5, 0, 0], axis: [1, 0, 0] });
     expect(evaluatePair(r1, r2)).toBeNull();
+  });
+
+  it("keeps the pinion as the sole driver of the rack regardless of which argument position each is passed in", () => {
+    // `buildEdges` calls evaluatePair(gears[i], gears[j]) with i<j, so which gear lands in
+    // the `a` vs `b` slot depends purely on the order the user happened to place them --
+    // the one-way assignment must track "pinion drives rack" through both call shapes,
+    // never accidentally flip to "rack drives pinion" (physically meaningless -- a rack
+    // has no independent rotation to drive anything with).
+    const pinion = makeGear({ id: "pin", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });
+
+    function drivingId(edge: NonNullable<ReturnType<typeof evaluatePair>>, a: GearInstance, b: GearInstance): string | null {
+      if (edge.oneWay === "aToB") return a.id;
+      if (edge.oneWay === "bToA") return b.id;
+      return null;
+    }
+
+    const pinionFirst = evaluatePair(pinion, rack)!;
+    expect(pinionFirst).not.toBeNull();
+    expect(drivingId(pinionFirst, pinion, rack)).toBe(pinion.id);
+
+    const rackFirst = evaluatePair(rack, pinion)!;
+    expect(rackFirst).not.toBeNull();
+    expect(rackFirst.a).toBe(rack.id);
+    expect(rackFirst.b).toBe(pinion.id);
+    expect(drivingId(rackFirst, rack, pinion)).toBe(pinion.id); // still the pinion, not the rack
+  });
+
+  it("meshes right at the line-distance tolerance boundary and rejects just past it", () => {
+    const pitchR = 10; // teeth=20, module=1
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 0], axis: [1, 0, 0] });
+    const atBoundary = makeGear({
+      id: "pin", teeth: 20, module: 1, axis: [0, 1, 0],
+      position: [0, 0, pitchR + pitchR * MESH_TOLERANCE], // diff == tolerance exactly -> should still mesh
+    });
+    const justPast = makeGear({
+      id: "pin", teeth: 20, module: 1, axis: [0, 1, 0],
+      position: [0, 0, pitchR + pitchR * MESH_TOLERANCE + 0.01], // just past -> should not mesh
+    });
+    expect(evaluatePair(rack, atBoundary)).not.toBeNull();
+    expect(evaluatePair(rack, justPast)).toBeNull();
+  });
+
+  it("meshes a pinion the same way no matter where along the rack's infinite travel line it sits", () => {
+    // A real rack-and-pinion can engage anywhere along the rack's length, not just at
+    // whatever single point the rack object's own `position` happens to be stored at.
+    // `distanceToLine` projects onto the infinite line (unbounded `along`), so this should
+    // already hold -- this test proves it rather than assuming it.
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 0], axis: [1, 0, 0] });
+    const perpendicularOffset = 10; // == pitchRadius of the teeth=20/module=1 pinion below
+    for (const along of [0, 1, -1, 250, -1000, 1e6]) {
+      const pinion = makeGear({ id: "pin", teeth: 20, module: 1, axis: [0, 1, 0], position: [along, 0, perpendicularOffset] });
+      const edge = evaluatePair(rack, pinion);
+      expect(edge, `expected a mesh at along=${along}`).not.toBeNull();
+      expect(edge!.oneWay).toBe("bToA");
+    }
   });
 
   it("couples a sprocket onto a coincident driving shaft, so it can receive power before a chain carries it further", () => {
@@ -466,5 +522,26 @@ describe("findMeshPartner", () => {
   it("does not return the gear itself even if the caller includes it in the candidate list", () => {
     const gear = makeGear({ id: "self", teeth: 20, module: 1, position: [0, 0, 0] });
     expect(findMeshPartner(gear, [gear])).toBeNull();
+  });
+
+  it("KNOWN LIMITATION: when two pinions mesh the same rack at different points along it, only faces whichever comes first in the candidate array", () => {
+    // Both pinions genuinely mesh the rack (a rack's line-distance check is independent of
+    // where along its length the contact happens -- see the along-the-line test above), so
+    // this is not a meshing bug. But `findMeshPartner` (used by the render layer to decide
+    // which pinion the rack should visually face, since a rack has no rotation of its own to
+    // derive a facing direction from) returns the FIRST match in whatever order the caller's
+    // gear list happens to be in -- not necessarily the pinion actually driving the rack. Two
+    // simultaneous pinions on one rack is a niche layout (this sandbox's default showcase
+    // never creates one), and fixing it properly would mean threading "which mesh edge is
+    // actually powered" from the physics layer into what is today a purely geometric lookup
+    // -- out of scope for this focused pass. Documented here as a deliberate limitation, not
+    // silently left to whichever behavior fell out of the array-order accident.
+    const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 0], axis: [1, 0, 0] });
+    const pinionNear = makeGear({ id: "pinionNear", teeth: 20, module: 1, axis: [0, 1, 0], position: [0, 0, 10] });
+    const pinionFar = makeGear({ id: "pinionFar", teeth: 20, module: 1, axis: [0, 1, 0], position: [1000, 0, 10] });
+    expect(evaluatePair(rack, pinionNear)).not.toBeNull();
+    expect(evaluatePair(rack, pinionFar)).not.toBeNull();
+    expect(findMeshPartner(rack, [pinionNear, pinionFar])?.id).toBe("pinionNear");
+    expect(findMeshPartner(rack, [pinionFar, pinionNear])?.id).toBe("pinionFar");
   });
 });

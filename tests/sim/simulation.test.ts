@@ -410,4 +410,36 @@ describe("tick", () => {
     expect(rackAfter.linearPosition).toBeCloseTo(10); // omega(1) * pitchRadius(10) * dt(1)
     expect(pinionAfter.linearPosition).toBeUndefined();
   });
+
+  it("accumulates a rack's linearPosition as exact arc-length (angularVelocity * pitchRadius * dt) across many ticks, for two different pinion radii", () => {
+    // Proves the conversion is the real formula and not accidentally hardcoded/right for
+    // only one specific radius: two very different pitch radii, run for the same elapsed
+    // time at the same angular velocity, must land on two different (and independently
+    // correct) linearPosition values.
+    const dt = 1 / 60;
+    const steps = 180; // 3 simulated seconds
+    const angularVelocity = 1.5;
+
+    function run(teeth: number, module: number): number {
+      const radius = (module * teeth) / 2;
+      const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 0], axis: [1, 0, 0] });
+      // Pinion's perpendicular offset from the rack's travel line must equal its own
+      // pitch radius for the two to mesh at all -- see meshing.ts's line-distance check.
+      const pinion = makeGear({ id: "pinion", type: "crank", teeth, module, position: [0, 0, radius], axis: [0, 1, 0], angularVelocity });
+      let state: GearInstance[] = [pinion, rack];
+      for (let i = 0; i < steps; i++) state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+      return state.find((g) => g.id === "rack")!.linearPosition!;
+    }
+
+    const elapsed = steps * dt;
+    const radiusSmall = (1 * 10) / 2; // teeth=10, module=1 -> 5
+    const radiusLarge = (2 * 15) / 2; // teeth=15, module=2 -> 15
+
+    const posSmall = run(10, 1);
+    const posLarge = run(15, 2);
+
+    expect(posSmall).toBeCloseTo(angularVelocity * radiusSmall * elapsed, 9);
+    expect(posLarge).toBeCloseTo(angularVelocity * radiusLarge * elapsed, 9);
+    expect(Math.abs(posSmall - posLarge)).toBeGreaterThan(1); // genuinely different, not coincidentally equal
+  });
 });

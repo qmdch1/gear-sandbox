@@ -1,6 +1,6 @@
 import type { GearInstance, MeshEdge } from "./types";
 
-const MESH_TOLERANCE = 0.05;          // 5% tolerance on center-distance match
+export const MESH_TOLERANCE = 0.05;   // 5% tolerance on center-distance match
 const PARALLEL_DOT_THRESHOLD = 0.98;  // |axis dot| above this => parallel axes
 const PERP_DOT_THRESHOLD = 0.1;       // |axis dot| below this => perpendicular axes
 const COUPLING_DISTANCE_TOLERANCE = 0.05;
@@ -222,7 +222,17 @@ export function evaluatePair(a: GearInstance, b: GearInstance): MeshEdge | null 
 /** The first gear in `others` that forms a genuine tooth-mesh edge with `gear` (not a
  *  shaft coupling). Used by the render layer to find which gear a rack should visually
  *  face -- a rack has no rotation of its own to derive a facing direction from, so it
- *  needs to look up its actual meshing partner's position instead. */
+ *  needs to look up its actual meshing partner's position instead.
+ *
+ *  KNOWN LIMITATION: if more than one pinion meshes the same rack at different points
+ *  along its length (which the line-distance check in `evaluatePair` genuinely allows --
+ *  a rack can be engaged anywhere along its infinite travel line, not just at its stored
+ *  `position`), this returns whichever one happens to come first in `others`, regardless
+ *  of which pinion is actually driving the rack. Fixing that properly would mean this
+ *  purely-geometric lookup would need to know which mesh edge the physics layer actually
+ *  powered on the current tick -- out of scope while this remains a niche, deliberately
+ *  undocumented-in-the-UI edge case (see tests/sim/meshing.test.ts's "KNOWN LIMITATION"
+ *  case in the `findMeshPartner` suite). */
 export function findMeshPartner(gear: GearInstance, others: GearInstance[]): GearInstance | null {
   for (const other of others) {
     if (other.id === gear.id) continue;
