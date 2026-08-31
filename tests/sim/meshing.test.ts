@@ -199,6 +199,31 @@ describe("v2 object types", () => {
     expect(edge.oneWay).toBe("aToB"); // a=driver, b=ratchet: only a->b allowed
   });
 
+  // buildEdges (graph.ts) always calls evaluatePair(gears[i], gears[j]) for i<j, so
+  // whichever gear the user happened to place first in the layout array ends up as `a` --
+  // exactly the same concern the worm tests above pin down for "worm". `evaluatePair`'s
+  // ratchet branch reads `a.type === "ratchet"` directly (not "whichever side is called
+  // b"), so the one-way direction should already track the ratchet itself regardless of
+  // argument position -- this test locks that in rather than assuming it.
+  it("still marks the ratchet as the side that cannot back-drive when it is passed as `a` -- oneWay flips to bToA, not silently 'none' or reversed", () => {
+    const ratchet = makeGear({ id: "r", type: "ratchet", teeth: 10, module: 1, position: [0, 0, 0] });
+    const driver = makeGear({ id: "d", teeth: 20, module: 1, position: [15, 0, 0] });
+    const edge = evaluatePair(ratchet, driver)!; // a=ratchet, b=driver (reversed vs. the earlier test)
+    expect(edge.oneWay).toBe("bToA"); // b (the driver) is still the only side allowed to drive
+  });
+
+  it("keeps the ratchet one-way-locked to its driver's actual speed regardless of which argument order evaluatePair/buildEdges sees", () => {
+    const driver = makeGear({ id: "driver", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 5 });
+    const ratchet = makeGear({ id: "ratchet", type: "ratchet", teeth: 10, module: 1, position: [15, 0, 0] });
+
+    for (const gears of [[driver, ratchet], [ratchet, driver]]) {
+      const edges = buildEdges(gears);
+      const { angularVelocities } = propagateRotation(gears, edges);
+      expect(angularVelocities.get("driver")).toBe(5); // the driver is never back-driven either way
+      expect(angularVelocities.get("ratchet")).toBeCloseTo(-10, 9); // -(20/10) * 5, same physical answer both times
+    }
+  });
+
   it("does not mesh two ratchets with each other", () => {
     const r1 = makeGear({ id: "r1", type: "ratchet", teeth: 10, module: 1, position: [0, 0, 0] });
     const r2 = makeGear({ id: "r2", type: "ratchet", teeth: 10, module: 1, position: [15, 0, 0] });

@@ -266,6 +266,51 @@ describe("buildGeometryForType", () => {
     expect(ratchet.boundingSphere!.radius).toBeGreaterThan(spur.boundingSphere!.radius);
   });
 
+  /** Max distance from the gear's own rotation axis (world Z through the origin) of any
+   *  vertex in the geometry, measured in the XY plane -- i.e. how far the widest point
+   *  of the shape actually sits from where the gear spins, regardless of geometry's
+   *  bounding-sphere center (which can sit off-axis for an asymmetric shape like the
+   *  ratchet's pawl, unlike a plain spur gear). */
+  function maxRadialReach(geo: THREE.BufferGeometry): number {
+    const pos = geo.attributes.position;
+    let maxR = 0;
+    for (let i = 0; i < pos.count; i++) {
+      const r = Math.hypot(pos.getX(i), pos.getY(i));
+      if (r > maxR) maxR = r;
+    }
+    return maxR;
+  }
+
+  // The earlier pawl-length fix (ratchetGeometry's `pawl.translate(0, addendumRadius +
+  // pawlLength / 2, 0)` followed by `pawl.rotateZ(...)`) was only ever checked at
+  // teeth=20/module=1. Translating the pawl out along +Y BEFORE rotating it about the
+  // gear's own Z axis (the origin, same axis the render layer spins the whole mesh
+  // about) means the final rotateZ can only change each vertex's DIRECTION from that
+  // axis, never its distance from it -- so the pawl's minimum reach is fixed the moment
+  // it's translated, independent of teeth or module. Confirmed by direct computation
+  // (module*teeth/2 + module*1.0 is the addendum radius used internally):
+  //   teeth=6,  module=1: spur tip 4.0000  -> ratchet reach 5.8026 (clears by ~1.80 = pawlLength)
+  //   teeth=40, module=1: spur tip 21.0000 -> ratchet reach 22.8007 (clears by ~1.80)
+  //   teeth=20, module=2: spur tip 22.0000 -> ratchet reach 25.6024 (clears by ~3.60 = pawlLength at module=2)
+  // i.e. the clearance margin scales with module (as pawlLength = module*1.8 does) and
+  // is NOT eroded by teeth count in either direction -- no scaling bug to fix.
+  it.each([
+    [6, 1],
+    [40, 1],
+    [20, 2],
+    [6, 2],
+    [40, 2],
+  ])("keeps the ratchet pawl's endpoint past the addendum circle at teeth=%i, module=%i", (teeth, module) => {
+    const spur = buildGeometryForType("spur", teeth, module);
+    const ratchet = buildGeometryForType("ratchet", teeth, module);
+    const spurTipRadius = maxRadialReach(spur); // the addendum (tooth-tip) circle radius
+    const ratchetReach = maxRadialReach(ratchet);
+    const addendumRadius = (module * teeth) / 2 + module * 1.0; // ADDENDUM_FACTOR = 1.0 (module*1x), documented in gearGeometry.ts
+    expect(spurTipRadius).toBeCloseTo(addendumRadius, 3); // sanity: a plain spur's own tip really sits at the addendum circle (loose tolerance: the involute flank is sampled, not exact, so the tip vertex lands within ~2e-6 of the ideal addendum radius)
+    expect(ratchetReach).toBeGreaterThan(addendumRadius); // the pawl clears it at every size tested, not just teeth=20/module=1
+    expect(ratchetReach).toBeGreaterThan(spurTipRadius);
+  });
+
   it("gives a sprocket a visibly different vertex count than a plain spur gear (square teeth, not full involute flanks)", () => {
     const spur = buildGeometryForType("spur", 20, 1);
     const sprocket = buildGeometryForType("sprocket", 20, 1);
