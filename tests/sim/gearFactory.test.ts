@@ -3,18 +3,27 @@ import { createGear, defaultAxisForType, defaultTeethForType } from "../../src/s
 import { evaluatePair } from "../../src/sim/meshing";
 
 describe("defaultAxisForType", () => {
-  it("gives bevel, worm, differential and rack objects a perpendicular default axis", () => {
+  it("gives bevel, worm and rack objects a perpendicular default axis", () => {
     expect(defaultAxisForType("bevel")).toEqual([1, 0, 0]);
     expect(defaultAxisForType("worm")).toEqual([1, 0, 0]);
-    expect(defaultAxisForType("differential")).toEqual([1, 0, 0]);
     expect(defaultAxisForType("rack")).toEqual([1, 0, 0]);
   });
 
-  it("gives spur/helical/crank/load gears the standard Y axis", () => {
+  it("gives spur/helical/crank/load/differential and the rest of the parallel family the standard Y axis", () => {
     expect(defaultAxisForType("spur")).toEqual([0, 1, 0]);
     expect(defaultAxisForType("helical")).toEqual([0, 1, 0]);
     expect(defaultAxisForType("crank")).toEqual([0, 1, 0]);
     expect(defaultAxisForType("load")).toEqual([0, 1, 0]);
+    // Regression: a differential's own axis is what its output shafts couple to (they're
+    // ordinary parallel-family gears defaulting to [0, 1, 0]), and its bevel *input* is
+    // the side that needs the perpendicular axis -- so a differential itself must default
+    // to [0, 1, 0], not [1, 0, 0], or a freshly placed differential+bevel pair can never
+    // mesh out of the box (see the createGear test below).
+    expect(defaultAxisForType("differential")).toEqual([0, 1, 0]);
+    expect(defaultAxisForType("planetary")).toEqual([0, 1, 0]);
+    expect(defaultAxisForType("ratchet")).toEqual([0, 1, 0]);
+    expect(defaultAxisForType("sprocket")).toEqual([0, 1, 0]);
+    expect(defaultAxisForType("pulley")).toEqual([0, 1, 0]);
   });
 });
 
@@ -48,6 +57,26 @@ describe("createGear", () => {
     // against a freshly created spur gear (standard Y axis) once placed apart.
     const bevel = createGear("bevel", [0, 0, 0]);
     expect(bevel.axis).toEqual([1, 0, 0]);
+  });
+
+  it("produces a differential and a bevel gear that mesh with each other out of the box, using only their default axes", () => {
+    // Regression for the "fresh differential + fresh bevel default to PARALLEL axes and
+    // can never mesh" bug: before the fix, both types defaulted to [1, 0, 0] (dot = 1,
+    // fails the perpendicular-axis mesh requirement). A differential's real-world "input"
+    // is a bevel gear (see meshing.ts's bevelInvolved branch), so this pairing must work
+    // without the user having to manually edit either gear's axis first.
+    const differential = createGear("differential", [0, 0, 0]);
+    const bevel = createGear("bevel", [20, 0, 0]); // pitchRadius(diff) + pitchRadius(bevel) = 10 + 10 = 20
+
+    expect(differential.axis).toEqual([0, 1, 0]);
+    expect(bevel.axis).toEqual([1, 0, 0]);
+    const axisDot =
+      differential.axis[0] * bevel.axis[0] + differential.axis[1] * bevel.axis[1] + differential.axis[2] * bevel.axis[2];
+    expect(axisDot).toBe(0); // perpendicular, as the bevel-mesh rule requires
+
+    const edge = evaluatePair(differential, bevel);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("mesh");
   });
 
   it("gives a rack a starting linearPosition of 0 and a default teeth count", () => {
