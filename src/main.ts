@@ -115,11 +115,35 @@ function addRemoteLink(a: string, b: string, kind: "chain" | "belt"): void {
   remoteLinks.push({ a, b, kind });
 }
 
+// Tracks each link mode's pending first-pick, purely so the two independent LinkModeUI
+// instances (see below -- their buttons don't mutually exclude each other, so both could in
+// theory have a pending pick at once) can share the single `sceneSync` preview-highlight
+// slot sanely: the most recently picked gear wins the highlight, and clearing it reveals
+// the other pending pick (if any) rather than blanking the highlight outright. In the
+// overwhelmingly common case -- only one link mode active at a time -- this simplifies to
+// "the pending pick is highlighted, and nothing else is."
+let chainPickId: string | null = null;
+let beltPickId: string | null = null;
+let lastPickSource: "chain" | "belt" | null = null;
+
+function syncLinkPickHighlight(): void {
+  if (chainPickId && beltPickId) {
+    sceneSync.setPreviewHighlight(lastPickSource === "belt" ? beltPickId : chainPickId);
+    return;
+  }
+  sceneSync.setPreviewHighlight(chainPickId ?? beltPickId ?? null);
+}
+
 const chainLinkMode = new LinkModeUI(
   document.querySelector<HTMLButtonElement>("#chain-link-mode")!,
   "sprocket",
   (id) => gears.find((g) => g.id === id)?.type,
   (a, b) => addRemoteLink(a, b, "chain"),
+  (id) => {
+    chainPickId = id;
+    if (id) lastPickSource = "chain";
+    syncLinkPickHighlight();
+  },
 );
 
 const beltLinkMode = new LinkModeUI(
@@ -127,6 +151,11 @@ const beltLinkMode = new LinkModeUI(
   "pulley",
   (id) => gears.find((g) => g.id === id)?.type,
   (a, b) => addRemoteLink(a, b, "belt"),
+  (id) => {
+    beltPickId = id;
+    if (id) lastPickSource = "belt";
+    syncLinkPickHighlight();
+  },
 );
 
 // "전체 보기": resets/fits the camera to frame every placed gear at once -- the counterpart to
@@ -193,7 +222,18 @@ new DragControls({
       durabilityPanel.hide();
     }
   },
-  onPreview: (partnerId) => sceneSync.setPreviewHighlight(partnerId),
+  // Precedence rule vs. link-mode's pick highlight (see syncLinkPickHighlight above): while
+  // either chain or belt link mode has a pending first-pick, that pick highlight owns the
+  // single `sceneSync` preview slot and this hover-drag preview must not touch it. This
+  // isn't just about which signal is "more important" -- it's load-bearing: DragControls
+  // calls onPreview(null) unconditionally on every pointerup, including a plain click with
+  // no movement (see dragControls.ts). Without this guard, the very click that sets a pick
+  // highlight (via LinkModeUI.onPickChange, fired from the same click's pointerdown-driven
+  // onSelect) would have it wiped out a moment later by that same click's pointerup.
+  onPreview: (partnerId) => {
+    if (chainPickId || beltPickId) return;
+    sceneSync.setPreviewHighlight(partnerId);
+  },
 });
 
 // Delete/Backspace deletes the currently selected gear -- a plain shortcut for the same
