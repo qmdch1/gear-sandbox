@@ -1,5 +1,5 @@
 import type { GearInstance, GearType } from "./types";
-import { isOverlapping, pitchRadius } from "./meshing";
+import { isOverlapping, overlapRadius } from "./meshing";
 import { createGear } from "./gearFactory";
 
 /** How far beyond the bare pitch-radius-sum a nudge lands the new gear's center from the gear it's
@@ -58,7 +58,7 @@ function resolveOverlapFreePositionWith(
     // sitting at different heights -- so there's no "away from it" direction to normalize.
     const [ux, uz] = len < 1e-6 ? [1, 0] : [dx / len, dz / len];
 
-    const clearDistance = (pitchRadius(candidate) + pitchRadius(blocker)) * NUDGE_CLEARANCE_FACTOR;
+    const clearDistance = (overlapRadius(candidate) + overlapRadius(blocker)) * NUDGE_CLEARANCE_FACTOR;
     current = [blocker.position[0] + ux * clearDistance, current[1], blocker.position[2] + uz * clearDistance];
   }
   return current;
