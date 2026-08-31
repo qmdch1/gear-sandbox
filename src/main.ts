@@ -15,6 +15,7 @@ import { TimeScaleSlider } from "./ui/timeScaleSlider";
 import { SaveLoadPanel } from "./ui/saveLoadPanel";
 import { ServerSyncPanel } from "./ui/serverSyncPanel";
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
+import { createFrameRunner } from "./runtime/frameSafety";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -34,6 +35,7 @@ app.innerHTML = `
     <div id="durability-panel" hidden></div>
   </div>
   <div id="viewport"><canvas id="scene-canvas"></canvas></div>
+  <div id="frame-error-banner" role="alert" hidden></div>
 `;
 
 const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
@@ -214,19 +216,66 @@ window.addEventListener("resize", () => {
   ctx.renderer.setSize(canvas.clientWidth, canvas.clientHeight);
 });
 
+// Small, visible (non-console) indicator for the render-loop resilience below -- this app's
+// audience is non-technical, so a console.error alone would never be seen. Kept as a slim,
+// non-interactive fixed banner (see #frame-error-banner in style.css) so it never covers the
+// canvas or sidebar controls, and never blocks clicks/keys reaching them (pointer-events: none).
+const frameErrorBanner = document.querySelector<HTMLDivElement>("#frame-error-banner")!;
+let frameErrorBannerHideTimer: number | undefined;
+function showFrameErrorBanner(message: string, persistent: boolean): void {
+  frameErrorBanner.textContent = message;
+  frameErrorBanner.hidden = false;
+  if (frameErrorBannerHideTimer !== undefined) {
+    window.clearTimeout(frameErrorBannerHideTimer);
+    frameErrorBannerHideTimer = undefined;
+  }
+  if (!persistent) {
+    frameErrorBannerHideTimer = window.setTimeout(() => {
+      frameErrorBanner.hidden = true;
+    }, 5000);
+  }
+}
+
+// Wraps the per-frame work below in a try/catch (via `frameRunner`) so that an uncaught throw
+// anywhere in `tick`/`sceneSync.sync`/`diagnosticsPanel.render` -- e.g. from a corrupted
+// localStorage layout or a malformed imported file that slipped past validation -- can never
+// again silently and permanently freeze the loop the way it once did. A single bad frame is
+// logged and retried on the next frame (the loop keeps calling requestAnimationFrame), so the
+// rest of the app (buttons, panels) stays usable regardless. Only if the *same* failure recurs
+// on every single frame, back to back, for `maxConsecutiveErrors` frames in a row does the
+// runner give up for good -- that pattern means retrying is never going to help and would
+// otherwise spam console.error forever at 60fps, so it stops scheduling further frames and
+// leaves a persistent banner up instead.
+const frameRunner = createFrameRunner({
+  onError: ({ error, frame, consecutiveCount }) => {
+    console.error(`Render loop error on frame ${frame} (${consecutiveCount} in a row) -- retrying next frame.`, error);
+    showFrameErrorBanner("문제가 발생했습니다 — 일부 기능이 일시적으로 중단되었을 수 있습니다", false);
+  },
+  onGiveUp: ({ error, frame, consecutiveCount }) => {
+    console.error(
+      `Render loop failed ${consecutiveCount} frames in a row (through frame ${frame}); stopping the loop instead of retrying forever.`,
+      error,
+    );
+    showFrameErrorBanner("문제가 계속 발생하여 애니메이션을 중단했습니다 — 페이지를 새로고침해 주세요", true);
+  },
+});
+
 let lastTime = performance.now();
 function animate(): void {
   const now = performance.now();
   const dt = Math.min(0.1, (now - lastTime) / 1000);
   lastTime = now;
 
-  const result = tick({ gears, remoteLinks }, dt, timeScale);
-  gears = result.gears;
-  sceneSync.sync(gears, remoteLinks, result.diagnostics);
-  diagnosticsPanel.render(result.diagnostics, gears);
+  const keepGoing = frameRunner.runFrame(() => {
+    const result = tick({ gears, remoteLinks }, dt, timeScale);
+    gears = result.gears;
+    sceneSync.sync(gears, remoteLinks, result.diagnostics);
+    diagnosticsPanel.render(result.diagnostics, gears);
 
-  ctx.controls.update();
-  ctx.renderer.render(ctx.scene, ctx.camera);
-  requestAnimationFrame(animate);
+    ctx.controls.update();
+    ctx.renderer.render(ctx.scene, ctx.camera);
+  });
+
+  if (keepGoing) requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
