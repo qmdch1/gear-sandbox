@@ -39,6 +39,21 @@ export function pitchRadius(g: GearInstance): number {
   return (g.module * g.teeth) / 2;
 }
 
+/** Physical footprint radius for overlap detection. `pitchRadius` is deliberately 0 for
+ *  a `teeth: 0` object like "load" (it never tooth-meshes, so it has no pitch circle) --
+ *  but it still occupies real space: its rendered geometry is a `module * 2` radius
+ *  cylinder (gearGeometry.ts's "load" case). Using `pitchRadius` directly as `isOverlapping`'s
+ *  "expected mesh distance" would make a zero-teeth object contribute 0, and when BOTH
+ *  gears in a pair are zero-teeth (e.g. two "load" objects, which never form a coupling
+ *  edge with each other -- see evaluatePair's `bothNonMeshing`), `expected` collapses to
+ *  0 and `centerDistance < 0` is unsatisfiable at any distance: two loads stacked exactly
+ *  on top of each other would silently never be flagged as overlapping, unlike every
+ *  other same-type pair (see the "two distinct, coincident spur gears" case right above
+ *  this function's use in isOverlapping). */
+function overlapRadius(g: GearInstance): number {
+  return g.teeth > 0 ? pitchRadius(g) : g.module * 2;
+}
+
 function sub(a: [number, number, number], b: [number, number, number]): [number, number, number] {
   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 }
@@ -248,6 +263,6 @@ export function findMeshPartner(gear: GearInstance, others: GearInstance[]): Gea
 export function isOverlapping(a: GearInstance, b: GearInstance): boolean {
   if (evaluatePair(a, b)) return false;
   const centerDistance = dist(a.position, b.position);
-  const expected = pitchRadius(a) + pitchRadius(b);
+  const expected = overlapRadius(a) + overlapRadius(b);
   return centerDistance < expected * (1 - MESH_TOLERANCE);
 }

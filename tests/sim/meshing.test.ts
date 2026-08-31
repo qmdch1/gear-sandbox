@@ -3,7 +3,8 @@ import { describe, it, expect } from "vitest";
 import { evaluatePair, isOverlapping, computeMeshPhaseOffset, findMeshPartner, pitchRadius, MESH_TOLERANCE } from "../../src/sim/meshing";
 import { buildEdges } from "../../src/sim/graph";
 import { propagateRotation } from "../../src/sim/rotation";
-import type { GearInstance } from "../../src/sim/types";
+import { tick } from "../../src/sim/simulation";
+import type { GearInstance, LayoutState } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
   return {
@@ -533,6 +534,33 @@ describe("isOverlapping", () => {
     const b = makeGear({ id: "b", teeth: 20, module: 1, position: [0, 0, 0] });
     expect(isOverlapping(a, b)).toBe(true);
   });
+
+  // Bug: `isOverlapping`'s "expected mesh distance" is `pitchRadius(a) + pitchRadius(b)`.
+  // A "load" always has `teeth: 0` (sim/types.ts), so `pitchRadius(load) === 0` (module *
+  // 0 * teeth / 2). Two loads never form a coupling edge with each other (evaluatePair's
+  // `bothNonMeshing` rule), so a pair of loads sitting on top of each other falls through
+  // to isOverlapping's plain distance check with `expected = 0 + 0 = 0`. Since
+  // `centerDistance` can never be negative, `centerDistance < expected * (1 - MESH_TOLERANCE)`
+  // (i.e. `centerDistance < 0`) is then unsatisfiable at ANY distance -- unlike the spur
+  // case directly above, two coincident loads are silently never flagged as overlapping,
+  // no matter how close (even stacked exactly on top of each other).
+  it("flags two distinct, coincident loads as overlapping, not silently exempt via zero pitch radius", () => {
+    const a = makeGear({ id: "a", type: "load", teeth: 0, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "load", teeth: 0, module: 1, position: [0, 0, 0] });
+    expect(isOverlapping(a, b)).toBe(true);
+  });
+
+  it("flags two loads placed a small but real distance apart as overlapping (not just the exact-coincident case)", () => {
+    const a = makeGear({ id: "a", type: "load", teeth: 0, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "load", teeth: 0, module: 1, position: [0.5, 0, 0] });
+    expect(isOverlapping(a, b)).toBe(true);
+  });
+
+  it("does not flag two loads placed comfortably far apart as overlapping", () => {
+    const a = makeGear({ id: "a", type: "load", teeth: 0, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "load", teeth: 0, module: 1, position: [10, 0, 0] });
+    expect(isOverlapping(a, b)).toBe(false);
+  });
 });
 
 /** Contact phase in tooth-period units: 0 = a tooth centre points at the contact line,
@@ -649,5 +677,145 @@ describe("findMeshPartner", () => {
     expect(evaluatePair(rack, pinionFar)).not.toBeNull();
     expect(findMeshPartner(rack, [pinionNear, pinionFar])?.id).toBe("pinionNear");
     expect(findMeshPartner(rack, [pinionFar, pinionNear])?.id).toBe("pinionFar");
+  });
+});
+
+// Focused deep-dive on "load" (부하/플라이휠) -- a pure power SINK with `teeth: 0` always
+// (sim/types.ts). It never drives anything; it only ever receives rotation via a
+// coincident shaft-coupling. This suite is this type's own dedicated coverage, on top of
+// (not replacing) the general-purpose load assertions already scattered through the
+// `evaluatePair` and `isOverlapping` describe blocks above.
+describe("load object (부하/플라이휠) focused coverage", () => {
+  it("has a pitch radius of exactly 0, since it always has teeth: 0", () => {
+    const load = makeGear({ id: "l", type: "load", teeth: 0, module: 3, position: [0, 0, 0] });
+    expect(pitchRadius(load)).toBe(0);
+  });
+
+  it("still produces sane, non-degenerate overlap detection against a sized gear despite its own zero pitch radius", () => {
+    // spur: teeth=20, module=1 -> pitchRadius=10. load's own footprint contributes on top
+    // (see overlapRadius in meshing.ts), so this is NOT simply "spur's radius alone" --
+    // but it must still scale sanely with distance, not read as always-true/always-false.
+    const spur = makeGear({ id: "s", teeth: 20, module: 1, position: [0, 0, 0] });
+    const closeLoad = makeGear({ id: "l1", type: "load", teeth: 0, module: 1, position: [5, 0, 0] });
+    const farLoad = makeGear({ id: "l2", type: "load", teeth: 0, module: 1, position: [20, 0, 0] });
+    expect(isOverlapping(spur, closeLoad)).toBe(true);
+    expect(isOverlapping(spur, farLoad)).toBe(false);
+  });
+
+  describe("coincident-coupling exhaustiveness", () => {
+    it("couples to a spur gear (already covered above; repeated here for this suite's completeness)", () => {
+      const spur = makeGear({ id: "s", type: "spur", axis: [0, 1, 0], position: [0, 0, 0] });
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+      const edge = evaluatePair(spur, load)!;
+      expect(edge.kind).toBe("coupling");
+      expect(edge.ratio).toBe(1);
+    });
+
+    it("couples to a crank", () => {
+      const crank = makeGear({ id: "c", type: "crank", teeth: 20, axis: [0, 1, 0], position: [0, 0, 0], angularVelocity: 4 });
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+      const edge = evaluatePair(crank, load)!;
+      expect(edge.kind).toBe("coupling");
+      expect(edge.ratio).toBe(1);
+    });
+
+    it("couples to a helical gear", () => {
+      const helical = makeGear({ id: "h", type: "helical", teeth: 16, axis: [1, 0, 0], position: [7, 2, -3] });
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [1, 0, 0], position: [7, 2, -3] });
+      const edge = evaluatePair(helical, load)!;
+      expect(edge.kind).toBe("coupling");
+      expect(edge.ratio).toBe(1);
+    });
+
+    it("couples to a planetary gear", () => {
+      const planetary = makeGear({ id: "p", type: "planetary", teeth: 40, axis: [0, 0, 1], position: [-4, 1, 0] });
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 0, 1], position: [-4, 1, 0] });
+      const edge = evaluatePair(planetary, load)!;
+      expect(edge.kind).toBe("coupling");
+      expect(edge.ratio).toBe(1);
+    });
+
+    it("does not couple to an axis-aligned gear placed just past COUPLING_DISTANCE_TOLERANCE (0.05)", () => {
+      const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0.06, 0, 0] }); // > 0.05
+      expect(evaluatePair(gear, load)).toBeNull();
+    });
+
+    it("does couple to an axis-aligned gear placed just within COUPLING_DISTANCE_TOLERANCE (0.05)", () => {
+      const gear = makeGear({ id: "g", axis: [0, 1, 0], position: [0, 0, 0] });
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0.04, 0, 0] }); // < 0.05
+      const edge = evaluatePair(gear, load)!;
+      expect(edge.kind).toBe("coupling");
+    });
+
+    it("never couples to another load, even when perfectly coincident", () => {
+      const loadA = makeGear({ id: "la", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+      const loadB = makeGear({ id: "lb", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+      expect(evaluatePair(loadA, loadB)).toBeNull();
+    });
+
+    it("never couples to a differential, even when perfectly coincident", () => {
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [0, 0, 0] });
+      const differential = makeGear({ id: "d", type: "differential", teeth: 20, axis: [0, 1, 0], position: [0, 0, 0] });
+      expect(evaluatePair(load, differential)).toBeNull();
+    });
+
+    it("does not fall back to any mesh path, even at a distance that happens to equal a normal mesh's expected pitch-distance", () => {
+      // A load's own pitchRadius is 0, so "expected mesh distance" against a spur would be
+      // just the spur's own pitchRadius (10 for teeth=20, module=1) if load ever reached
+      // step (4)'s parallel-family mesh check. It must not: COINCIDENT_ONLY's `loadsInvolved`
+      // branch rejects any non-coincident load unconditionally, before step (4) ever runs.
+      const spur = makeGear({ id: "s", type: "spur", teeth: 20, module: 1, axis: [0, 1, 0], position: [0, 0, 0] });
+      const load = makeGear({ id: "l", type: "load", teeth: 0, axis: [0, 1, 0], position: [10, 0, 0] }); // == spur's own pitchRadius
+      expect(evaluatePair(spur, load)).toBeNull();
+    });
+  });
+
+  describe("multi-branch: one crank simultaneously meshes a gear AND coincident-couples a load", () => {
+    it("drives a meshed spur and a coincident-coupled load at once, both correctly, across multiple ticks", () => {
+      const crank = makeGear({
+        id: "crank", type: "crank", teeth: 20, module: 1, axis: [0, 1, 0], position: [0, 0, 0], angularVelocity: 6,
+      });
+      const spur = makeGear({
+        id: "spur", type: "spur", teeth: 10, module: 1, axis: [0, 1, 0], position: [15, 0, 0], // (20+10)/2=15
+      });
+      const load = makeGear({
+        id: "load", type: "load", teeth: 0, module: 1, axis: [0, 1, 0], position: [0, 0, 0], // coincident with crank
+      });
+
+      // Both branches active simultaneously from a single BFS root (the crank).
+      const edges = buildEdges([crank, spur, load]);
+      expect(edges).toHaveLength(2);
+      expect(edges.some((e) => e.kind === "mesh")).toBe(true);
+      expect(edges.some((e) => e.kind === "coupling")).toBe(true);
+
+      const { angularVelocities } = propagateRotation([crank, spur, load], edges);
+      expect(angularVelocities.get("crank")).toBe(6);
+      expect(angularVelocities.get("spur")).toBeCloseTo(-12); // mesh: sign=-1, ratio=20/10=2 -> 6*-1*2
+      expect(angularVelocities.get("load")).toBe(6); // coupling: sign=+1, ratio=1 -> tracks crank exactly
+
+      // Drive several real ticks and confirm the load's angularVelocity keeps tracking the
+      // crank exactly (not just on the first frame), and that its accumulated rotation
+      // matches the crank's own -- a 1:1 coupling has no gear-ratio sign flip, unlike the
+      // meshed spur branch running alongside it on the very same crank.
+      let layout: LayoutState = { gears: [crank, spur, load], remoteLinks: [] };
+      const dt = 0.1;
+      for (let i = 1; i <= 5; i++) {
+        const result = tick(layout, dt, 1);
+        layout = { gears: result.gears, remoteLinks: [] };
+        const gearById = new Map(result.gears.map((g) => [g.id, g] as const));
+        const crankNow = gearById.get("crank")!;
+        const spurNow = gearById.get("spur")!;
+        const loadNow = gearById.get("load")!;
+
+        expect(crankNow.angularVelocity).toBe(6);
+        expect(spurNow.angularVelocity).toBeCloseTo(-12);
+        expect(loadNow.angularVelocity).toBe(6); // still tracking the crank exactly, tick after tick
+
+        expect(crankNow.rotation).toBeCloseTo(6 * dt * i);
+        expect(loadNow.rotation).toBeCloseTo(crankNow.rotation); // 1:1 coupling: identical accumulated rotation
+        expect(loadNow.rotation).not.toBeCloseTo(spurNow.rotation); // the meshed branch is NOT 1:1 -- confirms both branches are genuinely independent
+      }
+    });
   });
 });
