@@ -6,6 +6,7 @@ const PRESSURE_ANGLE = 20 * (Math.PI / 180); // industry-standard 20°
 const ADDENDUM_FACTOR = 1.0;   // standard: addendum = 1×module
 const DEDENDUM_FACTOR = 1.25;  // standard: dedendum = 1.25×module (root clearance below the base circle)
 const FLANK_SAMPLES = 5;       // points sampled along each involute flank
+const HELICAL_HELIX_ANGLE = 25 * (Math.PI / 180); // typical real helical-gear helix angle (commonly 15-30°)
 
 /** The involute function inv(alpha) = tan(alpha) - alpha: polar angle (from the
  *  point where the curve departs the base circle) of the involute point at radius
@@ -97,6 +98,33 @@ function extrudedGearGeometry(teeth: number, module: number, twistPerUnit = 0): 
  *  teeth are generated on a cone via Tredgold's approximation; this project's procedural
  *  geometry uses the simpler linear taper, consistent with the sandbox's existing
  *  approach of visual-approximation-over-CAD-precision). */
+/** Twist rate (radians of rigid rotation per unit of axial depth) that gives a helical
+ *  gear a fixed, real-world helix angle (HELICAL_HELIX_ANGLE) regardless of teeth count
+ *  or module. `extrudedGearGeometry`'s twist rotates the WHOLE cross-section rigidly --
+ *  every point at a given z turns by the same angle, not one scaled by its own radius --
+ *  so the tangential displacement a point at radius r ends up with after the full
+ *  GEAR_THICKNESS depth is `r * twistPerUnit * GEAR_THICKNESS`. A real helical gear's
+ *  helix angle beta is exactly `atan(tangentialDisplacement / faceWidth)`, a property of
+ *  the tooth geometry and face width, constant regardless of the gear's diameter -- so
+ *  solving `tan(beta) = r * twistPerUnit` for twistPerUnit gives the formula below.
+ *
+ *  Previously this was a flat constant (twistPerUnit=1.2) independent of teeth/module.
+ *  Since pitch radius grows with teeth (module*teeth/2) while a tooth's own angular
+ *  width does not (module is what sets tooth width, and never varies in this app), a
+ *  flat rate made BIGGER gears twist by proportionally MORE tooth-widths, not the same
+ *  amount: total twist was always 1.2*GEAR_THICKNESS = 0.48 rad, which is 0.61 tooth-
+ *  pitches at teeth=8, but already 1.22 tooth-pitches at the showcase's own "seed-helical"
+ *  gear (teeth=16, module=1 -- implied helix angle ~84°, practically transverse), and 3.82
+ *  tooth-pitches at teeth=50 (~88°) -- nothing like a real helical gear's typical 15-30°
+ *  at ANY size this sandbox actually uses. Deriving twistPerUnit from a fixed helix angle
+ *  instead keeps the twist -- as a fraction of the tooth's own width -- the same
+ *  regardless of teeth or module, matching how a real helix angle is intrinsic to the
+ *  tooth and face width, not the gear's diameter. */
+export function helicalTwistPerUnit(teeth: number, module: number): number {
+  const pitchRadius = (module * teeth) / 2;
+  return pitchRadius > 0 ? Math.tan(HELICAL_HELIX_ANGLE) / pitchRadius : 0;
+}
+
 function taperedGearGeometry(teeth: number, module: number, coneHeight: number, taperRatio: number): THREE.BufferGeometry {
   const points = computeSpurProfilePoints(teeth, module);
   const shape = new THREE.Shape(points);
@@ -281,7 +309,10 @@ export function buildGeometryForType(type: GearType, teeth: number, module: numb
     case "spur":
       return extrudedGearGeometry(teeth, module);
     case "helical":
-      return extrudedGearGeometry(teeth, module, 1.2); // twisted teeth = helical
+      // Twist rate scales with size (see helicalTwistPerUnit) so every helical gear gets
+      // the same real-world ~25° helix angle, instead of a fixed rate that grew steeper
+      // (and visually broken) the bigger the gear got.
+      return extrudedGearGeometry(teeth, module, helicalTwistPerUnit(teeth, module));
     case "crank":
       return crankGeometry(teeth, module);
     case "bevel": {

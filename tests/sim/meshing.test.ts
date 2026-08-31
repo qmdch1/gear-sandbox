@@ -160,6 +160,87 @@ describe("evaluatePair", () => {
   });
 });
 
+describe("helical gear physics (identical to spur -- helix angle is purely visual)", () => {
+  // This is a purely kinematic sandbox: it explicitly does not model torque/forces (see
+  // GEAR_NOTES on differential/planetary). In real life a helical gear's twist changes
+  // how forces are transmitted (axial thrust, true contact ratio), but the rotational
+  // SPEED ratio between two meshing gears of the same normal module is teeth-count-based
+  // regardless of helix angle -- so evaluatePair() putting "helical" in the exact same
+  // PARALLEL_FAMILY set as "spur" (meshing.ts), with no helix-angle-aware branch anywhere
+  // in the file, is the physically correct design, not an oversight. This test pins that
+  // down with a concrete numeric example against a plain spur-to-spur baseline computed
+  // from the exact same inputs, so a future change that starts treating helical
+  // differently can't slip in silently.
+  it("gives a helical-to-spur AND a helical-to-helical mesh the exact same ratio/distance/axis outcome as a plain spur-to-spur mesh at the same numbers", () => {
+    const spurBaseline = evaluatePair(
+      makeGear({ id: "s1", type: "spur", teeth: 24, module: 1, position: [0, 0, 0] }),
+      makeGear({ id: "s2", type: "spur", teeth: 12, module: 1, position: [18, 0, 0] }), // (24+12)/2 = 18
+    )!;
+    expect(spurBaseline.kind).toBe("mesh");
+    expect(spurBaseline.ratio).toBeCloseTo(2); // 24/12
+    expect(spurBaseline.oneWay).toBe("none");
+
+    const helicalToSpur = evaluatePair(
+      makeGear({ id: "h1", type: "helical", teeth: 24, module: 1, position: [0, 0, 0] }),
+      makeGear({ id: "s2", type: "spur", teeth: 12, module: 1, position: [18, 0, 0] }),
+    );
+    const helicalToHelical = evaluatePair(
+      makeGear({ id: "h1", type: "helical", teeth: 24, module: 1, position: [0, 0, 0] }),
+      makeGear({ id: "h2", type: "helical", teeth: 12, module: 1, position: [18, 0, 0] }),
+    );
+
+    for (const edge of [helicalToSpur, helicalToHelical]) {
+      expect(edge).not.toBeNull();
+      expect(edge!.kind).toBe(spurBaseline.kind);
+      expect(edge!.ratio).toBeCloseTo(spurBaseline.ratio);
+      expect(edge!.oneWay).toBe(spurBaseline.oneWay);
+    }
+  });
+
+  it("uses the identical pitchRadius formula (module*teeth/2) for a helical gear as every other parallel-family type", () => {
+    expect(pitchRadius(makeGear({ type: "helical", teeth: 24, module: 1 }))).toBe(12);
+  });
+
+  it("rejects a helical pair placed too far apart, using the same distance tolerance as spur", () => {
+    const a = makeGear({ id: "h1", type: "helical", teeth: 24, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "h2", type: "helical", teeth: 12, module: 1, position: [30, 0, 0] }); // expected 18, way off
+    expect(evaluatePair(a, b)).toBeNull();
+  });
+
+  it("rejects a helical pair with non-parallel axes, using the same axis check as spur", () => {
+    const a = makeGear({ id: "h1", type: "helical", teeth: 24, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const b = makeGear({ id: "h2", type: "helical", teeth: 12, module: 1, position: [18, 0, 0], axis: [1, 0, 0] });
+    expect(evaluatePair(a, b)).toBeNull();
+  });
+
+  it("meshes a helical-to-helical pair consistently regardless of argument order (a,b vs b,a), same as spur/bevel", () => {
+    const a = makeGear({ id: "a", type: "helical", teeth: 24, module: 1, position: [0, 0, 0] });
+    const b = makeGear({ id: "b", type: "helical", teeth: 12, module: 1, position: [18, 0, 0] });
+    const ab = evaluatePair(a, b);
+    const ba = evaluatePair(b, a);
+    expect(ab).not.toBeNull();
+    expect(ba).not.toBeNull();
+    expect(ab!.kind).toBe(ba!.kind);
+    expect(ab!.oneWay).toBe(ba!.oneWay);
+    expect(ab!.oneWay).toBe("none");
+    expect(ab!.ratio).toBeCloseTo(24 / 12);
+    expect(ba!.ratio).toBeCloseTo(12 / 24);
+  });
+
+  it("meshes a helical-to-spur pair consistently regardless of which side is `a`", () => {
+    const helical = makeGear({ id: "h", type: "helical", teeth: 20, module: 1, position: [0, 0, 0] });
+    const spur = makeGear({ id: "s", type: "spur", teeth: 10, module: 1, position: [15, 0, 0] });
+    const hs = evaluatePair(helical, spur);
+    const sh = evaluatePair(spur, helical);
+    expect(hs).not.toBeNull();
+    expect(sh).not.toBeNull();
+    expect(hs!.oneWay).toBe("none");
+    expect(sh!.oneWay).toBe("none");
+    expect(hs!.ratio).toBeCloseTo(20 / 10);
+    expect(sh!.ratio).toBeCloseTo(10 / 20);
+  });
+});
+
 describe("v2 object types", () => {
   it("meshes a planetary set with a spur gear using the same parallel-axis rule as spur-to-spur", () => {
     const planetary = makeGear({ id: "p", type: "planetary", teeth: 40, module: 1, position: [0, 0, 0] });
