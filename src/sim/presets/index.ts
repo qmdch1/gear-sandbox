@@ -1,9 +1,11 @@
 import type { LayoutState } from "../types";
 import { createClockPreset } from "./clock";
 import { createCarPreset } from "./car";
+import { createCastlePreset } from "./castle";
 
 export { createClockPreset } from "./clock";
 export { createCarPreset } from "./car";
+export { createCastlePreset } from "./castle";
 
 export interface PresetEntry {
   id: string;
@@ -27,5 +29,10 @@ export const PRESETS: PresetEntry[] = [
     id: "car",
     label: "자동차 (벨트로 동기 구동되는 네 바퀴)",
     build: createCarPreset,
+  },
+  {
+    id: "castle",
+    label: "성문 (도개교 — 손잡이로 게이트를 올리고 내리는 랙-피니언)",
+    build: createCastlePreset,
   },
 ];
