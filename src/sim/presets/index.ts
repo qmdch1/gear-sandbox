@@ -1,7 +1,9 @@
 import type { LayoutState } from "../types";
 import { createClockPreset } from "./clock";
+import { createCarPreset } from "./car";
 
 export { createClockPreset } from "./clock";
+export { createCarPreset } from "./car";
 
 export interface PresetEntry {
   id: string;
@@ -20,5 +22,10 @@ export const PRESETS: PresetEntry[] = [
     id: "clock",
     label: "시계 (톱니 시계 — 12:1 시분침 기어열)",
     build: createClockPreset,
+  },
+  {
+    id: "car",
+    label: "자동차 (벨트로 동기 구동되는 네 바퀴)",
+    build: createCarPreset,
   },
 ];
