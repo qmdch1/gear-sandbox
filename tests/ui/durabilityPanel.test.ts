@@ -143,4 +143,23 @@ describe("DurabilityPanel", () => {
     const deleteBtn = container.querySelector<HTMLButtonElement>(".delete-btn")!;
     expect(() => deleteBtn.click()).not.toThrow();
   });
+
+  it("shows a Delete/Backspace shortcut hint whenever a gear is shown, mentioning both key names", () => {
+    const container = document.createElement("div");
+    const panel = new DurabilityPanel(container);
+    panel.show(makeGear({}));
+    const hint = container.querySelector(".shortcut-hint");
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toContain("Delete");
+    expect(hint?.textContent).toContain("Backspace");
+  });
+
+  it("hides the shortcut hint along with the rest of the panel once no gear is selected", () => {
+    const container = document.createElement("div");
+    const panel = new DurabilityPanel(container);
+    panel.show(makeGear({}));
+    expect(container.querySelector(".shortcut-hint")).not.toBeNull();
+    panel.hide();
+    expect(container.hidden).toBe(true);
+  });
 });

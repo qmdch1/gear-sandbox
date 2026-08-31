@@ -69,6 +69,16 @@ export class DurabilityPanel {
     });
     this.container.appendChild(deleteBtn);
 
+    // Surfaces the Delete/Backspace keyboard shortcut (wired up in main.ts) right where it's
+    // actually useful -- this panel is only ever visible while a gear is selected, which is
+    // exactly the one moment the shortcut does anything. Matches PaletteUI's own .palette-hint
+    // convention of showing a shortcut hint only while it's actionable, rather than cluttering
+    // the sidebar with an always-visible line that's irrelevant most of the time.
+    const shortcutHint = document.createElement("p");
+    shortcutHint.className = "shortcut-hint";
+    shortcutHint.textContent = "Delete 또는 Backspace 키를 눌러도 이 기어를 삭제할 수 있습니다.";
+    this.container.appendChild(shortcutHint);
+
     this.container.hidden = false;
   }
 
