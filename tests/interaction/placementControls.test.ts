@@ -7,6 +7,9 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // controllable, and test PlacementControls' actual state machine (arm/cancel/commit/fallback)
 // against that controlled input.
 let nextHitPoint: { x: number; y: number; z: number } | null = null;
+// Only used by the DragControls-integration tests below (Bug A regression) -- controls what
+// pointerdown's existing-gear-mesh raycast reports, mirroring dragControls.test.ts's own mock.
+let nextHitId: string | null = null;
 
 vi.mock("three", async (importOriginal) => {
   const actual = await importOriginal<typeof import("three")>();
@@ -14,6 +17,9 @@ vi.mock("three", async (importOriginal) => {
     setFromCamera(): void {}
     intersectObject(): Array<{ point: { x: number; y: number; z: number } }> {
       return nextHitPoint ? [{ point: nextHitPoint }] : [];
+    }
+    intersectObjects(): Array<{ object: { name: string } }> {
+      return nextHitId ? [{ object: { name: nextHitId } }] : [];
     }
   }
   return {
@@ -23,6 +29,7 @@ vi.mock("three", async (importOriginal) => {
 });
 
 import { PlacementControls } from "../../src/interaction/placementControls";
+import { DragControls } from "../../src/interaction/dragControls";
 import type { SceneContext } from "../../src/render/scene";
 import type { GearInstance, GearType } from "../../src/sim/types";
 import { createGear } from "../../src/sim/gearFactory";
@@ -45,6 +52,35 @@ function clickCanvas(ctx: SceneContext): void {
   ctx.renderer.domElement.dispatchEvent(
     new MouseEvent("click", { clientX: 50, clientY: 50, bubbles: true }),
   );
+}
+
+/** Only used by the DragControls-integration tests below -- a real browser fires pointerdown
+ *  and pointerup for the same gesture that later synthesizes "click" on the same element, so
+ *  these simulate that ordering ahead of `clickCanvas`. */
+function pointerDown(ctx: SceneContext): void {
+  ctx.renderer.domElement.dispatchEvent(
+    new PointerEvent("pointerdown", { clientX: 50, clientY: 50, bubbles: true }),
+  );
+}
+
+function pointerUp(): void {
+  window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true }));
+}
+
+/** Like `makeCtx`, but with a real `scene.children` list and mutable `controls.enabled` --
+ *  needed only by the DragControls-integration tests below, since DragControls (unlike
+ *  PlacementControls) reads both of those. */
+function makeIntegrationCtx(sceneChildren: Array<{ name: string }>): SceneContext {
+  const canvas = document.createElement("canvas");
+  canvas.getBoundingClientRect = () =>
+    ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON() {} }) as DOMRect;
+  return {
+    scene: { children: sceneChildren } as unknown as SceneContext["scene"],
+    camera: {} as SceneContext["camera"],
+    renderer: { domElement: canvas } as SceneContext["renderer"],
+    controls: { enabled: true } as SceneContext["controls"],
+    groundPlane: {} as SceneContext["groundPlane"],
+  };
 }
 
 /** A fixed-id existing gear for overlap tests, matching the real `GearInstance` shape (same
@@ -310,6 +346,119 @@ describe("PlacementControls", () => {
       nextHitPoint = { x: 5, y: 0, z: 7 };
       clickCanvas(ctx);
 
+      expect(onPlace).toHaveBeenCalledWith("spur", [5, 0, 7]);
+    });
+  });
+
+  // Bug A (see track task): PlacementControls' "click" handler only ever checked whether
+  // placement was armed (`if (!type) return;`) -- it never checked whether the click actually
+  // hit an EXISTING gear mesh, which DragControls independently raycasts for on the very same
+  // pointerdown/pointerup/click gesture. That let a plain click on an existing gear both select
+  // it (DragControls) AND commit an unwanted brand-new gear near it (PlacementControls), and let
+  // dragging an existing gear to reposition it ALSO commit an extra gear at the release point.
+  //
+  // The fix lives in main.ts's DragControls.onSelect wiring, not in PlacementControls itself:
+  // `onSelect` now calls `placementControls.cancel()` whenever pointerdown's raycast actually
+  // hit an existing gear (id !== null), before the browser's later "click" event ever reaches
+  // PlacementControls. These tests wire PlacementControls + DragControls together exactly the
+  // way main.ts does, to prove the combination actually closes both bugs end-to-end.
+  describe("canceled by an existing-gear hit -- Bug A regression (main.ts's onSelect wiring)", () => {
+    beforeEach(() => {
+      nextHitPoint = null;
+      nextHitId = null;
+    });
+
+    it("a plain click on an existing gear does not also commit an unwanted new placement", () => {
+      const ctx = makeIntegrationCtx([{ name: "existing" }]);
+      const onPlace = vi.fn();
+      const placementControls = new PlacementControls({
+        ctx,
+        onPlace,
+        fallbackPosition: () => [0, 0, 0],
+      });
+
+      // Mirrors main.ts's exact wiring: cancel any armed placement whenever the click hit an
+      // existing gear, regardless of what else consumes the selection.
+      new DragControls({
+        ctx,
+        getGears: () => [],
+        onMove: vi.fn(),
+        onSelect: (id) => {
+          if (id) placementControls.cancel();
+          return false;
+        },
+      });
+
+      placementControls.handlePick("spur" satisfies GearType);
+      expect(placementControls.isActive).toBe(true);
+
+      nextHitId = "existing"; // pointerdown's gear raycast hits the existing gear
+      pointerDown(ctx);
+      pointerUp();
+      // The browser synthesizes "click" after pointerdown/pointerup on the same element --
+      // simulate that ordering here, same as the real canvas.
+      clickCanvas(ctx);
+
+      expect(placementControls.isActive).toBe(false); // canceled at pointerdown time
+      expect(onPlace).not.toHaveBeenCalled(); // no unwanted gear committed
+    });
+
+    it("dragging an existing gear while placement is armed does not also commit a gear at the drop point", () => {
+      const ctx = makeIntegrationCtx([{ name: "existing" }]);
+      const onPlace = vi.fn();
+      const placementControls = new PlacementControls({
+        ctx,
+        onPlace,
+        fallbackPosition: () => [0, 0, 0],
+      });
+      new DragControls({
+        ctx,
+        getGears: () => [],
+        onMove: vi.fn(),
+        onSelect: (id) => {
+          if (id) placementControls.cancel();
+          return false;
+        },
+      });
+
+      placementControls.handlePick("spur" satisfies GearType);
+
+      nextHitId = "existing";
+      pointerDown(ctx); // starts a drag on the existing gear
+      pointerUp(); // drops it
+      clickCanvas(ctx); // the same gesture's synthesized click
+
+      expect(placementControls.isActive).toBe(false);
+      expect(onPlace).not.toHaveBeenCalled();
+    });
+
+    it("a click on empty ground still places normally -- placement is only canceled on an actual existing-gear hit", () => {
+      const ctx = makeIntegrationCtx([]);
+      const onPlace = vi.fn();
+      const placementControls = new PlacementControls({
+        ctx,
+        onPlace,
+        fallbackPosition: () => [0, 0, 0],
+      });
+      new DragControls({
+        ctx,
+        getGears: () => [],
+        onMove: vi.fn(),
+        onSelect: (id) => {
+          if (id) placementControls.cancel();
+          return false;
+        },
+      });
+
+      placementControls.handlePick("spur" satisfies GearType);
+
+      nextHitId = null; // pointerdown's gear raycast hits nothing
+      pointerDown(ctx);
+      pointerUp();
+      nextHitPoint = { x: 5, y: 0, z: 7 };
+      clickCanvas(ctx);
+
+      expect(placementControls.isActive).toBe(false); // committed normally
       expect(onPlace).toHaveBeenCalledWith("spur", [5, 0, 7]);
     });
   });

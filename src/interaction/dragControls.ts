@@ -29,8 +29,12 @@ export interface DragControlsOptions {
   ctx: SceneContext;
   getGears: () => GearInstance[];
   onMove: (id: string, position: [number, number, number]) => void;
-  /** Fired unconditionally on pointerdown with the id of the gear mesh hit, or null if none. */
-  onSelect?: (gearId: string | null) => void;
+  /** Fired unconditionally on pointerdown with the id of the gear mesh hit, or null if none.
+   *  Return `true` to signal that this selection was already consumed elsewhere (e.g. a
+   *  chain/belt link-mode pick, see `ui/linkModeUI.ts`) -- DragControls will still report the
+   *  hit, but will NOT start a drag or disable orbit controls for it. Any other return value
+   *  (including none) means "not consumed", and a drag proceeds as normal when a gear was hit. */
+  onSelect?: (gearId: string | null) => boolean | void;
   /** Fired during a drag with the nearest compatible partner's id at the candidate drop point, or null. */
   onPreview?: (partnerId: string | null) => void;
 }
@@ -85,11 +89,17 @@ export class DragControls {
     this.raycaster.setFromCamera(ndc, ctx.camera);
     const hits = this.raycaster.intersectObjects(ctx.scene.children.filter((c) => c.name));
     const hitId = hits.length > 0 ? hits[0].object.name : null;
-    if (hitId) {
+    // Always report the hit unconditionally, so callers (selection UI, link-mode picks) stay in
+    // sync regardless of whether a drag actually starts -- but only start the drag / steal orbit
+    // controls when the caller did NOT signal that it already consumed this click elsewhere
+    // (e.g. a chain/belt link-mode pick, see main.ts and ui/linkModeUI.ts). Without this gate, a
+    // link-mode pick that moves even slightly between mousedown and mouseup -- routine for an
+    // ordinary click -- would silently relocate the picked gear to the release point.
+    const consumed = this.options.onSelect?.(hitId) === true;
+    if (hitId && !consumed) {
       this.draggingId = hitId;
       ctx.controls.enabled = false;
     }
-    this.options.onSelect?.(hitId);
   };
 
   private onPointerMove = (event: PointerEvent): void => {
