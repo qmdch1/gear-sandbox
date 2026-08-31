@@ -105,6 +105,7 @@ const placementControls = new PlacementControls({
   onPlace: (type, position) => addGear(type, position),
   onModeChange: (activeType) => paletteUI.setActive(activeType),
   fallbackPosition: () => gridSlotPosition(),
+  getGears: () => gears,
 });
 
 function addRemoteLink(a: string, b: string, kind: "chain" | "belt"): void {
