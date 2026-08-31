@@ -50,7 +50,7 @@ export function pitchRadius(g: GearInstance): number {
  *  on top of each other would silently never be flagged as overlapping, unlike every
  *  other same-type pair (see the "two distinct, coincident spur gears" case right above
  *  this function's use in isOverlapping). */
-function overlapRadius(g: GearInstance): number {
+export function overlapRadius(g: GearInstance): number {
   return g.teeth > 0 ? pitchRadius(g) : g.module * 2;
 }
 
