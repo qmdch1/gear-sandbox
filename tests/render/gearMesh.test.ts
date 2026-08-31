@@ -157,4 +157,63 @@ describe("GearMeshObject", () => {
     withFace.update(gear, [3, 4, 0]);
     expect(withFace.mesh.quaternion.equals(withoutFace.mesh.quaternion)).toBe(true);
   });
+
+  describe("color recompute skipping", () => {
+    it("keeps the very same Color object across repeated updates with unchanged durability/broken", () => {
+      const gear = makeGear({ durabilityCurrent: 100, durabilityMax: 100, broken: false });
+      const obj = new GearMeshObject(gear);
+      const material = obj.mesh.material as THREE.MeshStandardMaterial;
+      const colorBefore = material.color;
+      obj.update(gear);
+      obj.update(gear);
+      obj.update({ ...gear }); // even a fresh object with numerically identical fields
+      expect(material.color).toBe(colorBefore); // same object reference -- no reassignment happened
+    });
+
+    it("does not reassign color for a durability drift smaller than the visibility epsilon", () => {
+      // Mirrors wear.ts's continuous per-tick float drift (durabilityCurrent -= small amount
+      // every frame while spinning) rather than a discrete jump -- this is the exact case the
+      // optimization targets: many frames' worth of imperceptible sub-threshold change.
+      const gear = makeGear({ durabilityCurrent: 100, durabilityMax: 100, broken: false });
+      const obj = new GearMeshObject(gear);
+      const material = obj.mesh.material as THREE.MeshStandardMaterial;
+      const colorBefore = material.color;
+      obj.update({ ...gear, durabilityCurrent: 99.999999 }); // ratio delta ~1e-8, far under epsilon
+      expect(material.color).toBe(colorBefore);
+    });
+
+    it("reassigns a new Color once accumulated drift crosses the visibility epsilon", () => {
+      const gear = makeGear({ durabilityCurrent: 100, durabilityMax: 100, broken: false });
+      const obj = new GearMeshObject(gear);
+      const material = obj.mesh.material as THREE.MeshStandardMaterial;
+      const colorBefore = material.color;
+      // A ratio drop of 0.5 crosses the 0.001-ish visibility threshold by a wide margin,
+      // and actually shifts the rendered color (full health -> the 0.5 yellow midpoint).
+      obj.update({ ...gear, durabilityCurrent: 50 });
+      expect(material.color).not.toBe(colorBefore);
+      expect(material.color.equals(colorForGear("spur", 0.5, false))).toBe(true);
+    });
+
+    it("always reassigns color on a broken transition, even with the ratio otherwise unchanged", () => {
+      const gear = makeGear({ durabilityCurrent: 0, durabilityMax: 100, broken: false });
+      const obj = new GearMeshObject(gear);
+      const material = obj.mesh.material as THREE.MeshStandardMaterial;
+      const colorBefore = material.color;
+      obj.update({ ...gear, broken: true }); // same ratio (0), only `broken` flips
+      expect(material.color).not.toBe(colorBefore);
+      expect(material.color.equals(colorForGear("spur", 0, true))).toBe(true);
+    });
+
+    it("always applies a color on the very first update of a fresh instance", () => {
+      // Regression guard for the "no stale state to compare against yet" requirement --
+      // a brand new GearMeshObject must not appear to have unchanged durability/broken by
+      // comparing against an uninitialized 0/false default.
+      const gear = makeGear({ durabilityCurrent: 0, durabilityMax: 100, broken: false });
+      const obj = new GearMeshObject(gear);
+      const material = obj.mesh.material as THREE.MeshStandardMaterial;
+      // durabilityCurrent=0 -> ratio=0 -> should already read as the broken/critical color,
+      // not the constructor's initial colorForGear(type, 1, false) placeholder.
+      expect(material.color.equals(colorForGear("spur", 0, false))).toBe(true);
+    });
+  });
 });
