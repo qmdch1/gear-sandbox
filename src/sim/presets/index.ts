@@ -1,7 +1,9 @@
 import type { LayoutState } from "../types";
 import { createClockPreset } from "./clock";
+import { createCastlePreset } from "./castle";
 
 export { createClockPreset } from "./clock";
+export { createCastlePreset } from "./castle";
 
 export interface PresetEntry {
   id: string;
@@ -20,5 +22,10 @@ export const PRESETS: PresetEntry[] = [
     id: "clock",
     label: "시계 (톱니 시계 — 12:1 시분침 기어열)",
     build: createClockPreset,
+  },
+  {
+    id: "castle",
+    label: "성문 (도개교 — 손잡이로 게이트를 올리고 내리는 랙-피니언)",
+    build: createCastlePreset,
   },
 ];
