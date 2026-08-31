@@ -298,6 +298,109 @@ describe("tick", () => {
     expect(end - start).toBeCloseTo(3e-7 * dt * 1000, 9);
   });
 
+  it("keeps a differential's two output shafts locked in angular velocity AND accumulated rotation across many ticks of a full crank->bevel->differential train, even when the differential (and everything upstream of it) starts at a non-trivial, unaligned rotation -- not just from a convenient zero state", () => {
+    // crank(16t) --mesh(perp)--> inputBevel(8t) --mesh(perp)--> differential(32t) --coupling(x2)--> outA(10t), outB(10t)
+    const pitchRadius = (teeth: number) => teeth / 2; // module = 1
+    const crankTeeth = 16, bevelTeeth = 8, diffTeeth = 32;
+    const bevelX = pitchRadius(crankTeeth) + pitchRadius(bevelTeeth); // 12
+    const diffZ = pitchRadius(bevelTeeth) + pitchRadius(diffTeeth); // 20
+
+    const gears: GearInstance[] = [
+      makeGear({ id: "crank", type: "crank", teeth: crankTeeth, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 2, rotation: 0.37 }),
+      makeGear({ id: "bevel", type: "bevel", teeth: bevelTeeth, module: 1, position: [bevelX, 0, 0], axis: [1, 0, 0], rotation: 1.1 }),
+      // The differential itself starts well off zero AND off any tooth-lattice-aligned
+      // phase -- the whole point of this scenario per the task: the locked-output
+      // guarantee must not secretly depend on starting from a settled/zero phase.
+      makeGear({ id: "diff", type: "differential", teeth: diffTeeth, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0], rotation: 2.9 }),
+      makeGear({ id: "outA", teeth: 10, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0], rotation: 0 }),
+      makeGear({ id: "outB", teeth: 10, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0], rotation: 0 }),
+    ];
+
+    const dt = 1 / 60;
+    const steps = 500; // ~8.3 simulated seconds
+    let state = gears;
+    for (let i = 0; i < steps; i++) {
+      const result = tick({ gears: state, remoteLinks: [] }, dt, 1);
+      state = result.gears;
+      const outA = state.find((g) => g.id === "outA")!;
+      const outB = state.find((g) => g.id === "outB")!;
+      // Exact, not approximate: both outputs go through byte-for-byte identical arithmetic
+      // off the same differential speed every single tick, so any drift at all would be a
+      // real bug, not float noise.
+      expect(outA.angularVelocity).toBe(outB.angularVelocity);
+      expect(outA.rotation).toBe(outB.rotation);
+    }
+
+    const diff = state.find((g) => g.id === "diff")!;
+    const outA = state.find((g) => g.id === "outA")!;
+    const outB = state.find((g) => g.id === "outB")!;
+    // Concrete numbers: crank(2 rad/s, 16t) -mesh-> bevel: -2*(16/8) = -4 rad/s;
+    // bevel -mesh-> diff: -(-4)*(8/32) = 1 rad/s; diff -coupling-> outA/outB: 1*1 = 1 rad/s.
+    // Constant every tick (propagateRotation derives it fresh from teeth ratios and the
+    // crank's own speed alone -- never from any gear's accumulated rotation), so pure
+    // integration applies: rotation = 0 + 1 * dt * steps.
+    expect(diff.angularVelocity).toBeCloseTo(1, 9);
+    expect(outA.angularVelocity).toBeCloseTo(1, 9);
+    expect(outB.angularVelocity).toBeCloseTo(1, 9);
+    expect(outA.rotation).toBeCloseTo(1 * dt * steps, 9);
+    expect(outB.rotation).toBeCloseTo(1 * dt * steps, 9);
+  });
+
+  it("locks a differential's two outputs to the same VELOCITY, not the same absolute rotation value -- coupling never forces positions together, so two outputs seeded at different starting rotations keep a constant offset forever rather than snapping to each other", () => {
+    const pitchRadius = (teeth: number) => teeth / 2;
+    const crankTeeth = 16, bevelTeeth = 8, diffTeeth = 32;
+    const bevelX = pitchRadius(crankTeeth) + pitchRadius(bevelTeeth);
+    const diffZ = pitchRadius(bevelTeeth) + pitchRadius(diffTeeth);
+
+    const gears: GearInstance[] = [
+      makeGear({ id: "crank", type: "crank", teeth: crankTeeth, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 2 }),
+      makeGear({ id: "bevel", type: "bevel", teeth: bevelTeeth, module: 1, position: [bevelX, 0, 0], axis: [1, 0, 0] }),
+      makeGear({ id: "diff", type: "differential", teeth: diffTeeth, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0] }),
+      makeGear({ id: "outA", teeth: 10, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0], rotation: 0.5 }),
+      makeGear({ id: "outB", teeth: 10, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0], rotation: -0.2 }),
+    ];
+    const startOffset = 0.5 - -0.2;
+
+    const dt = 1 / 60;
+    let state = gears;
+    for (let i = 0; i < 300; i++) {
+      state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+      const outA = state.find((g) => g.id === "outA")!;
+      const outB = state.find((g) => g.id === "outB")!;
+      expect(outA.angularVelocity).toBe(outB.angularVelocity); // speed still locked
+      expect(outA.rotation - outB.rotation).toBeCloseTo(startOffset, 9); // offset preserved exactly, not closed
+    }
+  });
+
+  it("does not disturb a THIRD gear coincident-coupled onto a differential -- it locks to the same speed as the two documented outputs across many ticks, confirming the two-output demo is emergent from the general coincident-coupling rule and not hardcoded to exactly two", () => {
+    const pitchRadius = (teeth: number) => teeth / 2;
+    const crankTeeth = 16, bevelTeeth = 8, diffTeeth = 32;
+    const bevelX = pitchRadius(crankTeeth) + pitchRadius(bevelTeeth);
+    const diffZ = pitchRadius(bevelTeeth) + pitchRadius(diffTeeth);
+
+    const gears: GearInstance[] = [
+      makeGear({ id: "crank", type: "crank", teeth: crankTeeth, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 2 }),
+      makeGear({ id: "bevel", type: "bevel", teeth: bevelTeeth, module: 1, position: [bevelX, 0, 0], axis: [1, 0, 0] }),
+      makeGear({ id: "diff", type: "differential", teeth: diffTeeth, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0] }),
+      makeGear({ id: "outA", teeth: 10, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0] }),
+      makeGear({ id: "outB", teeth: 10, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0] }),
+      makeGear({ id: "outC", teeth: 6, module: 1, position: [bevelX, 0, diffZ], axis: [0, 1, 0] }), // undocumented third output
+    ];
+
+    const dt = 1 / 60;
+    let state = gears;
+    for (let i = 0; i < 300; i++) {
+      state = tick({ gears: state, remoteLinks: [] }, dt, 1).gears;
+    }
+    const outA = state.find((g) => g.id === "outA")!;
+    const outB = state.find((g) => g.id === "outB")!;
+    const outC = state.find((g) => g.id === "outC")!;
+    expect(outC.angularVelocity).toBe(outA.angularVelocity);
+    expect(outC.angularVelocity).toBe(outB.angularVelocity);
+    expect(outC.rotation).toBe(outA.rotation);
+    expect(outC.rotation).toBe(outB.rotation);
+  });
+
   it("accumulates a rack's linearPosition over time and leaves other gears' linearPosition undefined", () => {
     const pinion = makeGear({ id: "pinion", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1 });
     const rack = makeGear({ id: "rack", type: "rack", teeth: 8, module: 1, position: [0, 0, 10], axis: [1, 0, 0] });

@@ -277,4 +277,29 @@ describe("buildGeometryForType", () => {
     const manyTeeth = buildGeometryForType("sprocket", 24, 1);
     expect(manyTeeth.attributes.position.count).toBeGreaterThan(fewTeeth.attributes.position.count);
   });
+
+  it("gives the differential more geometry than a plain spur gear of the same size, not less (regression: the old sphere+smooth-cone shape had FEWER vertices than a plain spur gear -- 1176 vs. 3108 at teeth=20/module=1 -- reading as a blobbier, less detailed shape than an ordinary gear)", () => {
+    for (const teeth of [12, 20, 30]) {
+      const spur = buildGeometryForType("spur", teeth, 1);
+      const differential = buildGeometryForType("differential", teeth, 1);
+      expect(differential.attributes.position.count).toBeGreaterThan(spur.attributes.position.count);
+    }
+  });
+
+  it("gives the differential a housing that extends well past its own ring gear along the axis -- a bulging carrier, not a flat disk", () => {
+    const differential = buildGeometryForType("differential", 20, 1);
+    differential.computeBoundingBox();
+    const box = differential.boundingBox!;
+    const axialExtent = box.max.z - box.min.z;
+    const GEAR_THICKNESS = 0.4; // a plain (non-housed) gear's z-extent is just this
+    expect(axialExtent).toBeGreaterThan(GEAR_THICKNESS * 5);
+  });
+
+  it("gives the differential a wider radial reach than a plain spur gear's addendum circle (the housing bulges out sideways too)", () => {
+    const spur = buildGeometryForType("spur", 20, 1);
+    const differential = buildGeometryForType("differential", 20, 1);
+    spur.computeBoundingSphere();
+    differential.computeBoundingSphere();
+    expect(differential.boundingSphere!.radius).toBeGreaterThan(spur.boundingSphere!.radius);
+  });
 });

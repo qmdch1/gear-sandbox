@@ -184,13 +184,39 @@ function pulleyGeometry(teeth: number, module: number): THREE.BufferGeometry {
   return lathe;
 }
 
+/** A real involute-toothed ring gear (the surface `evaluatePair`'s perpendicular-axis
+ *  bevel check actually treats as meshing with the input bevel pinion) plus a bulging
+ *  carrier housing behind it and two output-shaft stubs -- one poking out the front of
+ *  the ring gear, one out the back of the housing, one per side of the assembly, as a
+ *  visual callout to the two coincident 1:1 couplings this type gets from `evaluatePair`
+ *  (the "locked" output pair, spec §3.6). The previous version was just a smooth sphere
+ *  plus a toothless cone -- no teeth at all, and fewer vertices than a plain spur gear of
+ *  the same size (verified: 1176 vs. 3108 at teeth=20/module=1) -- which read as a
+ *  blobbier, LESS detailed shape than an ordinary gear, not a "complex assembly" as the
+ *  Korean label (차동장치) implies, and looked wrong the instant an actual toothed bevel
+ *  gear appeared to engage a smooth cone. */
 function differentialGeometry(teeth: number, module: number): THREE.BufferGeometry {
   const pitchRadius = (module * teeth) / 2;
-  const housing = new THREE.SphereGeometry(pitchRadius * 0.8, 16, 12);
-  const inputGear = new THREE.ConeGeometry(pitchRadius, GEAR_THICKNESS * 2, teeth);
-  inputGear.rotateX(Math.PI / 2);
-  inputGear.translate(0, 0, pitchRadius * 0.9);
-  return mergeGeometries([housing, inputGear]);
+  const ringGear = extrudedGearGeometry(teeth, module);
+
+  // The carrier housing enclosing the (here: locked) spider gears -- a real
+  // differential's single most recognizable feature, and the shape that reads
+  // "assembly" rather than "one gear." Bulges out behind the ring gear's face.
+  const housingRadius = pitchRadius * 0.45;
+  const housingCenterZ = GEAR_THICKNESS + housingRadius * 0.7;
+  const housing = new THREE.SphereGeometry(housingRadius, 16, 12);
+  housing.translate(0, 0, housingCenterZ);
+
+  const stubRadius = module * 0.4;
+  const stubLength = pitchRadius * 0.3;
+  const stubFront = new THREE.CylinderGeometry(stubRadius, stubRadius, stubLength, 10);
+  stubFront.rotateX(Math.PI / 2);
+  stubFront.translate(0, 0, -stubLength / 2); // pokes out the ring gear's front face (z < 0)
+  const stubBack = new THREE.CylinderGeometry(stubRadius, stubRadius, stubLength, 10);
+  stubBack.rotateX(Math.PI / 2);
+  stubBack.translate(0, 0, housingCenterZ + housingRadius + stubLength / 2); // pokes out the housing's back
+
+  return mergeGeometries([ringGear, housing, stubFront, stubBack]);
 }
 
 /** A spur-gear body plus a single angled pawl arm sticking out past the rim -- the

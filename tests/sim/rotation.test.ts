@@ -113,4 +113,33 @@ describe("v2 propagation rules", () => {
     expect(angularVelocities.get("outA")).toBeCloseTo(diffSpeed);
     expect(angularVelocities.get("outB")).toBeCloseTo(diffSpeed);
   });
+
+  it("gives a THIRD coincident gear on a differential the same locked speed too -- the two-output demo layout is a consequence of the general coincident-coupling rule in evaluatePair, not something propagateRotation or buildEdges hardcodes to exactly two", () => {
+    const diff = makeGear({ id: "diff", type: "differential", teeth: 30, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const inputBevel = makeGear({
+      id: "in", type: "crank", teeth: 15, module: 1, position: [22.5, 0, 0], axis: [1, 0, 0], angularVelocity: 4,
+    });
+    const outputA = makeGear({ id: "outA", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const outputB = makeGear({ id: "outB", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const outputC = makeGear({ id: "outC", teeth: 12, module: 1, position: [0, 0, 0], axis: [0, 1, 0] }); // the third, undocumented partner
+    const gears = [diff, inputBevel, outputA, outputB, outputC];
+    const edges = buildEdges(gears);
+
+    // Confirm the edge set itself is sane before checking propagation: exactly the 1 mesh
+    // (input) + 3 coincident couplings (outA/outB/outC) from the differential -- and no
+    // accidental edges between the three outputs themselves, even though they're all
+    // coincident with EACH OTHER too (plain spur gears at zero center-distance satisfy
+    // none of evaluatePair's own mesh rules, since those require a nonzero pitch-radius-sum
+    // distance).
+    const diffEdges = edges.filter((e) => e.a === "diff" || e.b === "diff");
+    expect(diffEdges.length).toBe(4);
+    expect(edges.some((e) => new Set([e.a, e.b]).size === 2 && [e.a, e.b].every((id) => id.startsWith("out")))).toBe(false);
+
+    const { angularVelocities } = propagateRotation(gears, edges);
+    const diffSpeed = angularVelocities.get("diff")!;
+    expect(diffSpeed).not.toBe(0); // sanity: the differential is actually being driven
+    expect(angularVelocities.get("outA")).toBe(diffSpeed);
+    expect(angularVelocities.get("outB")).toBe(diffSpeed);
+    expect(angularVelocities.get("outC")).toBe(diffSpeed); // the undocumented third output locks too
+  });
 });

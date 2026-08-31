@@ -259,6 +259,18 @@ describe("v2 object types", () => {
     expect(edge.kind).toBe("coupling");
     expect(edge.ratio).toBe(1);
   });
+
+  it("does not special-case exactly two outputs -- a THIRD gear coincident with a differential also gets a coincident 1:1 coupling, since the rule is the general coincident-coupling block (step 2), not something that counts how many partners the differential already has", () => {
+    const diff = makeGear({ id: "diff", type: "differential", teeth: 30, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const outputA = makeGear({ id: "outA", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const outputB = makeGear({ id: "outB", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    const outputC = makeGear({ id: "outC", teeth: 12, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    for (const output of [outputA, outputB, outputC]) {
+      const edge = evaluatePair(diff, output)!;
+      expect(edge.kind).toBe("coupling");
+      expect(edge.ratio).toBe(1);
+    }
+  });
 });
 
 describe("worm gear ratio and self-locking", () => {
