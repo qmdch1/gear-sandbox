@@ -198,6 +198,31 @@ describe("buildGeometryForType", () => {
     expect(maxRadius).toBeGreaterThan(1 * 0.9); // exceeds the plain core radius
   });
 
+  it("makes the worm's visual thread denser (more windings) as `teeth` (thread-starts) increases, matching the same number evaluatePair uses for the drive ratio", () => {
+    // Before this change, `turns` was a hardcoded constant (module*6 / module*1.5 = 4)
+    // completely independent of `teeth` -- a worm with 1 thread-start and one with 4 looked
+    // pixel-identical even though evaluatePair() gives them very different wheel ratios
+    // (worm.teeth/wheel.teeth). More tubular segments at a fixed radial segment count means
+    // more windings were sampled, so vertex count is a reliable, cheap proxy for "how many
+    // times the thread wraps around" without depending on TubeGeometry's internals.
+    const oneStart = buildGeometryForType("worm", 1, 1);
+    const fourStart = buildGeometryForType("worm", 4, 1);
+    expect(fourStart.attributes.position.count).toBeGreaterThan(oneStart.attributes.position.count);
+  });
+
+  it("still builds a valid worm geometry at teeth=1 (the single-thread-start case, where the new teeth-scaled pitch collapses back to the old constant one)", () => {
+    // At teeth=1: threadPitch = (module*1.5)/1 = module*1.5 and turns = length/threadPitch = 4,
+    // segments = max(120, round(30*4)) = 120 -- the exact constants the old, non-teeth-aware
+    // code always used. This just guards that the teeth=1 path still produces a sane,
+    // non-degenerate geometry after the change.
+    const geometry = buildGeometryForType("worm", 1, 1);
+    geometry.computeBoundingBox();
+    const box = geometry.boundingBox!;
+    const maxRadius = Math.max(Math.hypot(box.max.x, 0), Math.hypot(box.max.y, 0));
+    expect(maxRadius).toBeGreaterThan(1 * 0.9);
+    expect(geometry.attributes.position.count).toBeGreaterThan(0);
+  });
+
   it("builds a non-empty geometry for every v2 gear type too", () => {
     const types = ["rack", "planetary", "ratchet", "sprocket", "pulley", "differential"] as const;
     for (const t of types) {
