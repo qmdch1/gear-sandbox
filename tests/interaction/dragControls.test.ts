@@ -27,6 +27,7 @@ vi.mock("three", async (importOriginal) => {
 });
 
 import { DragControls, findNearestCompatiblePartner } from "../../src/interaction/dragControls";
+import { LinkModeUI } from "../../src/ui/linkModeUI";
 import type { SceneContext } from "../../src/render/scene";
 import type { GearInstance } from "../../src/sim/types";
 import { isOverlapping } from "../../src/sim/meshing";
@@ -184,5 +185,143 @@ describe("DragControls drop-time overlap avoidance", () => {
     pointerUp();
 
     expect(onMove).not.toHaveBeenCalled();
+  });
+});
+
+// Bug B (see track task): DragControls.onPointerDown used to unconditionally start a drag
+// (and disable orbit controls) for whatever gear pointerdown hit, BEFORE calling onSelect --
+// leaving callers like main.ts's chain/belt link-mode wiring with no way to say "this click
+// was consumed as a link-mode pick, don't also drag it." That let an ordinary click (mousedown,
+// tiny pointer drift, mouseup -- routine, not a deliberate drag gesture) silently relocate the
+// picked gear. onSelect now returns a boolean: `true` means "consumed elsewhere," and
+// DragControls must skip both the drag-start and the orbit-controls-disable side effects for it,
+// while still calling onSelect unconditionally either way.
+describe("DragControls onSelect consumption gating (Bug B fix)", () => {
+  beforeEach(() => {
+    nextGroundPoint = null;
+    nextHitId = null;
+  });
+
+  it("does not start a drag or disable orbit controls when onSelect returns true (consumed elsewhere)", () => {
+    const ctx = makeCtx();
+    const gear = makeGear({ id: "g1", position: [1, 0, 1] });
+    const gears = [gear];
+    const onMove = vi.fn(trackingOnMove(gears));
+    const onSelect = vi.fn(() => true);
+    new DragControls({ ctx, getGears: () => gears, onMove, onSelect });
+
+    nextHitId = "g1";
+    pointerDown(ctx);
+    expect(onSelect).toHaveBeenCalledWith("g1");
+    // Orbit controls must stay enabled -- no drag was started for this consumed click.
+    expect(ctx.controls.enabled).toBe(true);
+
+    nextGroundPoint = { x: 9, y: 0, z: 9 };
+    pointerMove(ctx);
+    pointerUp();
+
+    expect(onMove).not.toHaveBeenCalled();
+    expect(gear.position).toEqual([1, 0, 1]);
+  });
+
+  it("still drags normally when onSelect returns false (no regression)", () => {
+    const ctx = makeCtx();
+    const gear = makeGear({ id: "g1", position: [1, 0, 1] });
+    const gears = [gear];
+    const onMove = vi.fn(trackingOnMove(gears));
+    const onSelect = vi.fn(() => false);
+    new DragControls({ ctx, getGears: () => gears, onMove, onSelect });
+
+    nextHitId = "g1";
+    pointerDown(ctx);
+    expect(ctx.controls.enabled).toBe(false);
+
+    nextGroundPoint = { x: 9, y: 0, z: 9 };
+    pointerMove(ctx);
+    expect(gear.position).toEqual([9, 0, 9]);
+
+    pointerUp();
+    expect(ctx.controls.enabled).toBe(true);
+  });
+
+  it("still drags normally when onSelect is omitted entirely (existing callers with no onSelect)", () => {
+    const ctx = makeCtx();
+    const gear = makeGear({ id: "g1", position: [1, 0, 1] });
+    const gears = [gear];
+    const onMove = vi.fn(trackingOnMove(gears));
+    new DragControls({ ctx, getGears: () => gears, onMove });
+
+    nextHitId = "g1";
+    pointerDown(ctx);
+    expect(ctx.controls.enabled).toBe(false);
+
+    nextGroundPoint = { x: 2, y: 0, z: 3 };
+    pointerMove(ctx);
+    expect(gear.position).toEqual([2, 0, 3]);
+  });
+
+  it("still calls onSelect unconditionally with the hit id, whether or not the click is consumed", () => {
+    const ctx = makeCtx();
+    const onSelect = vi.fn(() => true);
+    new DragControls({ ctx, getGears: () => [], onMove: vi.fn(), onSelect });
+
+    nextHitId = "g1";
+    pointerDown(ctx);
+    expect(onSelect).toHaveBeenCalledWith("g1");
+
+    nextHitId = null;
+    pointerDown(ctx);
+    expect(onSelect).toHaveBeenLastCalledWith(null);
+  });
+
+  // Integration-level proof, wired the same way main.ts actually wires it
+  // (`chainLinkMode.handleSelect(id) || beltLinkMode.handleSelect(id)`), using the real
+  // LinkModeUI class rather than a stand-in -- this is the exact end-to-end scenario Bug B
+  // described: picking a gear for a chain/belt link, with the pointer drifting before release.
+  it("a real LinkModeUI pick on a gear does not start a drag, even if the pointer moves before release", () => {
+    const ctx = makeCtx();
+    const sprocketA = makeGear({ id: "sprocket-a", type: "sprocket", position: [0, 0, 0] });
+    const sprocketB = makeGear({ id: "sprocket-b", type: "sprocket", position: [10, 0, 0] });
+    const gears = [sprocketA, sprocketB];
+    const onMove = vi.fn(trackingOnMove(gears));
+
+    const button = document.createElement("button");
+    const onLink = vi.fn();
+    const chainLinkMode = new LinkModeUI(
+      button,
+      "sprocket",
+      (id) => gears.find((g) => g.id === id)?.type,
+      onLink,
+    );
+    button.click(); // arms chain link mode, mirroring the sidebar button in main.ts
+
+    new DragControls({
+      ctx,
+      getGears: () => gears,
+      onMove,
+      onSelect: (id) => chainLinkMode.handleSelect(id),
+    });
+
+    nextHitId = "sprocket-a";
+    pointerDown(ctx); // picked as the first link-mode target -- handleSelect returns true
+    expect(ctx.controls.enabled).toBe(true); // never disabled -- no drag started
+
+    // The pointer drifts far away before release -- routine for an ordinary click. Without the
+    // fix, this relocated the picked gear to wherever the pointer ended up.
+    nextGroundPoint = { x: 500, y: 0, z: 500 };
+    pointerMove(ctx);
+    pointerUp();
+
+    expect(sprocketA.position).toEqual([0, 0, 0]);
+    expect(onMove).not.toHaveBeenCalled();
+    expect(onLink).not.toHaveBeenCalled(); // only the first pick landed; no second gear clicked yet
+
+    // The second click, on a different sprocket, completes the link and also must not drag.
+    nextHitId = "sprocket-b";
+    pointerDown(ctx);
+    pointerUp();
+
+    expect(onLink).toHaveBeenCalledWith("sprocket-a", "sprocket-b");
+    expect(sprocketB.position).toEqual([10, 0, 0]);
   });
 });

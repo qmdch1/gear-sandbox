@@ -265,7 +265,19 @@ new DragControls({
     }
   },
   onSelect: (id) => {
-    if (chainLinkMode.handleSelect(id) || beltLinkMode.handleSelect(id)) return;
+    // A click that actually hit an existing gear mesh (id !== null) was never a valid "place a
+    // new gear on empty ground" gesture -- regardless of what this same click goes on to do with
+    // that hit (plain-select it, drag it, or have a chain/belt link-mode pick below consume it).
+    // Cancel any armed placement mode here, unconditionally on a hit, before the browser's own
+    // subsequent "click" event reaches PlacementControls (DragControls fires this onSelect from
+    // pointerdown, which always precedes the click event for the same gesture, so this runs in
+    // time). This single guard fixes both: (1) a plain click on an existing gear no longer also
+    // commits an unwanted new gear near it, and (2) dragging an existing gear while placement
+    // happens to be armed no longer also commits an unwanted gear at the drop point -- without
+    // PlacementControls needing its own duplicate existing-gear raycast.
+    if (id) placementControls.cancel();
+
+    if (chainLinkMode.handleSelect(id) || beltLinkMode.handleSelect(id)) return true;
     const gear = id ? gears.find((g) => g.id === id) : undefined;
     if (gear) {
       selectedGearId = gear.id;
@@ -274,6 +286,7 @@ new DragControls({
       selectedGearId = null;
       durabilityPanel.hide();
     }
+    return false;
   },
   // Precedence rule vs. link-mode's pick highlight (see syncLinkPickHighlight above): while
   // either chain or belt link mode has a pending first-pick, that pick highlight owns the
