@@ -1,5 +1,6 @@
 import type { GearInstance, MeshEdge } from "./types";
 import { pitchRadius } from "./meshing";
+import { buildDirectedAdjacency } from "./adjacency";
 
 export interface RotationResult {
   angularVelocities: Map<string, number>;
@@ -15,12 +16,7 @@ export function propagateRotation(gears: GearInstance[], edges: MeshEdge[]): Rot
     linearVelocities.set(g.id, 0);
   }
 
-  const adjacency = new Map<string, MeshEdge[]>();
-  for (const g of gears) adjacency.set(g.id, []);
-  for (const e of edges) {
-    if (e.oneWay !== "bToA") adjacency.get(e.a)!.push(e);
-    if (e.oneWay !== "aToB") adjacency.get(e.b)!.push(e);
-  }
+  const adjacency = buildDirectedAdjacency(gears, edges);
 
   // Roots are picked purely by `type === "crank"` -- never by "already has a nonzero
   // angularVelocity" -- because a crank's speed is the one independent INPUT in this
