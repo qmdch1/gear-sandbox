@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { tick } from "../../src/sim/simulation";
-import type { GearInstance } from "../../src/sim/types";
+import type { GearInstance, RemoteLink } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
   return {
@@ -587,5 +587,131 @@ describe("ratchet one-way lock across many ticks", () => {
       expect(r.angularVelocity).toBeCloseTo(0, 9); // the ratchet never starts coasting on its own
       expect(r.rotation).toBeCloseTo(settledRotation, 9); // and holds its position exactly -- no drift
     }
+  });
+});
+
+describe("pulley / belt end-to-end power path (spec §3.4)", () => {
+  // Full chain: crank -> (coincident shaft coupling) -> pulleyA -> (belt RemoteLink) ->
+  // pulleyB -> (coincident shaft coupling) -> load. Deliberately gives the two pulleys
+  // the SAME pitch radius (10) via DIFFERENT teeth/module combinations (20t/module 1 vs.
+  // 10t/module 2) -- if the belt edge's ratio were ever computed from tooth count (like a
+  // chain's) instead of pitch radius (physically correct for a smooth, toothless belt
+  // wheel), this would immediately diverge: teeth-ratio would be 20/10 = 2, but the
+  // physically-correct radius-ratio is 10/10 = 1. `buildEdges` (src/sim/graph.ts) already
+  // computes `pitchRadius(a) / pitchRadius(b)` for any non-"chain" RemoteLink kind, so this
+  // is a real regression guard on that formula, not a coincidence-masking case like
+  // graph.test.ts's existing belt-ratio test (which happens to use equal modules, so
+  // teeth-ratio and radius-ratio can't be told apart there).
+  function buildLayout(gearOrder: GearInstance[], link: RemoteLink) {
+    return { gears: gearOrder, remoteLinks: [link] };
+  }
+
+  function makePulleyChain() {
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 2 });
+    const pulleyA = makeGear({ id: "pulleyA", type: "pulley", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] }); // pitchRadius 10, coincident with crank
+    const pulleyB = makeGear({ id: "pulleyB", type: "pulley", teeth: 10, module: 2, position: [500, 0, 0], axis: [0, 1, 0] }); // pitchRadius 10, different teeth/module
+    const load = makeGear({ id: "load", type: "load", teeth: 0, module: 1, position: [500, 0, 0], axis: [0, 1, 0] }); // coincident with pulleyB
+    return { crank, pulleyA, pulleyB, load };
+  }
+
+  it("drives the full chain at the belt's pitch-radius ratio (1, here), NOT a tooth-count ratio (which would be 2)", () => {
+    const { crank, pulleyA, pulleyB, load } = makePulleyChain();
+    const link: RemoteLink = { a: "pulleyA", b: "pulleyB", kind: "belt" };
+    const result = tick(buildLayout([crank, pulleyA, pulleyB, load], link), 1, 1);
+
+    const gCrank = result.gears.find((g) => g.id === "crank")!;
+    const gA = result.gears.find((g) => g.id === "pulleyA")!;
+    const gB = result.gears.find((g) => g.id === "pulleyB")!;
+    const gLoad = result.gears.find((g) => g.id === "load")!;
+
+    expect(gCrank.angularVelocity).toBe(2);              // the crank's own commanded input
+    expect(gA.angularVelocity).toBeCloseTo(2);            // coincident coupling: same speed, same direction
+    expect(gB.angularVelocity).toBeCloseTo(2);            // belt, pitch-radius ratio 10/10 = 1, same direction (NOT 4, which a teeth-ratio of 2 would give)
+    expect(gLoad.angularVelocity).toBeCloseTo(2);          // coincident coupling: same speed, same direction
+
+    // No diagnostics problems -- the whole chain is one powered component.
+    expect(result.diagnostics.unconnectedIds).toEqual([]);
+    expect(result.diagnostics.noPowerIds).toEqual([]);
+
+    // Multi-tick: rotations integrate exactly (belt/coupling edges never go through the
+    // tooth-phase-offset logic -- that's gated to `edge.kind === "mesh"` only -- so there
+    // is no settling tick needed and no phase drift to guard against).
+    const dt = 1 / 60;
+    let state = result.gears;
+    const startA = state.find((g) => g.id === "pulleyA")!.rotation;
+    const startB = state.find((g) => g.id === "pulleyB")!.rotation;
+    for (let i = 0; i < 120; i++) state = tick({ gears: state, remoteLinks: [link] }, dt, 1).gears;
+    const finalA = state.find((g) => g.id === "pulleyA")!;
+    const finalB = state.find((g) => g.id === "pulleyB")!;
+    expect(finalA.rotation - startA).toBeCloseTo(2 * 120 * dt, 9);
+    expect(finalB.rotation - startB).toBeCloseTo(2 * 120 * dt, 9); // same delta as A: ratio 1, same direction
+  });
+
+  it("gives the SAME end-to-end result no matter the gears array order or which pulley is a/b in the RemoteLink", () => {
+    // Use unequal pitch radii here (10 vs 5) so a/b-swap actually exercises the
+    // isForward=false branch of propagateRotation's ratio inversion (1/ratio), not just a
+    // trivial ratio-of-1 case.
+    function scenario(gearOrder: (g: ReturnType<typeof makePulleyChain>) => GearInstance[], link: RemoteLink) {
+      const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 2 });
+      const pulleyA = makeGear({ id: "pulleyA", type: "pulley", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] }); // pitchRadius 10
+      const pulleyB = makeGear({ id: "pulleyB", type: "pulley", teeth: 20, module: 0.5, position: [500, 0, 0], axis: [0, 1, 0] }); // pitchRadius 5
+      const load = makeGear({ id: "load", type: "load", teeth: 0, module: 1, position: [500, 0, 0], axis: [0, 1, 0] });
+      const gears = gearOrder({ crank, pulleyA, pulleyB, load });
+      const result = tick({ gears, remoteLinks: [link] }, 1, 1);
+      return {
+        crank: result.gears.find((g) => g.id === "crank")!.angularVelocity,
+        pulleyA: result.gears.find((g) => g.id === "pulleyA")!.angularVelocity,
+        pulleyB: result.gears.find((g) => g.id === "pulleyB")!.angularVelocity,
+        load: result.gears.find((g) => g.id === "load")!.angularVelocity,
+      };
+    }
+
+    const orderings: Array<(g: ReturnType<typeof makePulleyChain>) => GearInstance[]> = [
+      ({ crank, pulleyA, pulleyB, load }) => [crank, pulleyA, pulleyB, load],
+      ({ crank, pulleyA, pulleyB, load }) => [load, pulleyB, pulleyA, crank],
+      ({ crank, pulleyA, pulleyB, load }) => [pulleyB, crank, load, pulleyA],
+    ];
+    const linkVariants: RemoteLink[] = [
+      { a: "pulleyA", b: "pulleyB", kind: "belt" },
+      { a: "pulleyB", b: "pulleyA", kind: "belt" }, // swapped a/b
+    ];
+
+    for (const order of orderings) {
+      for (const link of linkVariants) {
+        const r = scenario(order, link);
+        expect(r.crank).toBe(2);
+        expect(r.pulleyA).toBeCloseTo(2);        // coupled 1:1 with the crank
+        expect(r.pulleyB).toBeCloseTo(4);         // belt: rA/rB = 10/5 = 2 -> pulleyB spins twice as fast, same direction
+        expect(r.load).toBeCloseTo(4);            // coupled 1:1 with pulleyB
+      }
+    }
+  });
+
+  it("does not crash and leaves the surviving pulley on its own local power path when a belt link dangles after its partner is deleted", () => {
+    // Mirrors buildEdges' own defensive check (src/sim/graph.ts: "a linked gear was
+    // deleted -- drop the stale link rather than crash") at the full tick() level: a
+    // RemoteLink whose other endpoint id no longer exists in `gears` (e.g. the owning
+    // pulley was deleted through a path that didn't go through removeGear, or a
+    // hand-edited save file) must not throw, and the surviving pulley must fall back to
+    // whatever power it still gets through ordinary coincident coupling.
+    const crank = makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0], angularVelocity: 3 });
+    const pulleyA = makeGear({ id: "pulleyA", type: "pulley", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] }); // coincident with crank
+    const danglingLink: RemoteLink = { a: "pulleyA", b: "pulleyB-deleted", kind: "belt" };
+
+    expect(() => tick({ gears: [crank, pulleyA], remoteLinks: [danglingLink] }, 1, 1)).not.toThrow();
+
+    const result = tick({ gears: [crank, pulleyA], remoteLinks: [danglingLink] }, 1, 1);
+    const gA = result.gears.find((g) => g.id === "pulleyA")!;
+    expect(gA.angularVelocity).toBeCloseTo(3); // still gets power through the coincident coupling with the crank
+    expect(result.diagnostics.unconnectedIds).toEqual([]);
+    expect(result.diagnostics.noPowerIds).toEqual([]);
+
+    // And with NO other power path at all (no crank coupling either), the dangling link
+    // still must not crash -- the gear just sits unpowered.
+    const lonelyPulley = makeGear({ id: "pulleyA", type: "pulley", teeth: 20, module: 1, position: [0, 0, 0], axis: [0, 1, 0] });
+    expect(() => tick({ gears: [lonelyPulley], remoteLinks: [danglingLink] }, 1, 1)).not.toThrow();
+    const lonelyResult = tick({ gears: [lonelyPulley], remoteLinks: [danglingLink] }, 1, 1);
+    expect(lonelyResult.gears.find((g) => g.id === "pulleyA")!.angularVelocity).toBe(0);
+    expect(lonelyResult.diagnostics.unconnectedIds).toEqual(["pulleyA"]);
   });
 });
