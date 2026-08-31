@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import type { GearInstance } from "../sim/types";
 import { evaluatePair } from "../sim/meshing";
+import { resolveOverlapFreePositionForGear } from "../sim/overlapResolution";
 import type { SceneContext } from "../render/scene";
 
 /** Among candidate gears, the closest one that would form a valid mesh/coupling with `dragged`. */
@@ -28,8 +29,12 @@ export interface DragControlsOptions {
   ctx: SceneContext;
   getGears: () => GearInstance[];
   onMove: (id: string, position: [number, number, number]) => void;
-  /** Fired unconditionally on pointerdown with the id of the gear mesh hit, or null if none. */
-  onSelect?: (gearId: string | null) => void;
+  /** Fired unconditionally on pointerdown with the id of the gear mesh hit, or null if none.
+   *  Return `true` to signal that this selection was already consumed elsewhere (e.g. a
+   *  chain/belt link-mode pick, see `ui/linkModeUI.ts`) -- DragControls will still report the
+   *  hit, but will NOT start a drag or disable orbit controls for it. Any other return value
+   *  (including none) means "not consumed", and a drag proceeds as normal when a gear was hit. */
+  onSelect?: (gearId: string | null) => boolean | void;
   /** Fired during a drag with the nearest compatible partner's id at the candidate drop point, or null. */
   onPreview?: (partnerId: string | null) => void;
 }
@@ -37,7 +42,20 @@ export interface DragControlsOptions {
 /** Thin pointer-event wiring: raycast onto the ground plane, drag the picked gear's
  *  position, and delegate the "is this a valid drop spot" question to
  *  `findNearestCompatiblePartner`. Verified via manual QA (Task 15) — pointer/raycaster
- *  behavior is not meaningfully unit-testable without a real WebGL context. */
+ *  behavior is not meaningfully unit-testable without a real WebGL context.
+ *
+ *  Overlap avoidance (mirroring PlacementControls' `resolveOverlapFreePosition`, see
+ *  `sim/overlapResolution.ts`) is applied only at drop (`onPointerUp`), NOT on every
+ *  `onPointerMove`. During the drag itself the gear tracks the raw raycast point exactly,
+ *  same as before this feature existed: nudging continuously, every pointermove, would
+ *  fight the user's own cursor motion the instant it crossed into another gear's overlap
+ *  radius -- a moving correction chasing a moving target, likely feeling jittery/unstable,
+ *  and (worse) making it hard to ever deliberately land on a legitimate coincident coupling
+ *  target (e.g. a load onto its crank) since any near-miss along the way would get shoved
+ *  clear before the cursor could settle exactly on it. Correcting once, only on release,
+ *  lets the gear follow the cursor faithfully while dragging and only "snap clear" at the
+ *  moment it's dropped -- closer to how the click-to-place flow already behaves (one
+ *  evaluation at commit time, not per intermediate mouse position). */
 export class DragControls {
   private raycaster = new THREE.Raycaster();
   private draggingId: string | null = null;
@@ -71,11 +89,17 @@ export class DragControls {
     this.raycaster.setFromCamera(ndc, ctx.camera);
     const hits = this.raycaster.intersectObjects(ctx.scene.children.filter((c) => c.name));
     const hitId = hits.length > 0 ? hits[0].object.name : null;
-    if (hitId) {
+    // Always report the hit unconditionally, so callers (selection UI, link-mode picks) stay in
+    // sync regardless of whether a drag actually starts -- but only start the drag / steal orbit
+    // controls when the caller did NOT signal that it already consumed this click elsewhere
+    // (e.g. a chain/belt link-mode pick, see main.ts and ui/linkModeUI.ts). Without this gate, a
+    // link-mode pick that moves even slightly between mousedown and mouseup -- routine for an
+    // ordinary click -- would silently relocate the picked gear to the release point.
+    const consumed = this.options.onSelect?.(hitId) === true;
+    if (hitId && !consumed) {
       this.draggingId = hitId;
       ctx.controls.enabled = false;
     }
-    this.options.onSelect?.(hitId);
   };
 
   private onPointerMove = (event: PointerEvent): void => {
@@ -99,8 +123,24 @@ export class DragControls {
   };
 
   private onPointerUp = (): void => {
+    const draggedId = this.draggingId;
     this.draggingId = null;
     this.options.ctx.controls.enabled = true;
     this.options.onPreview?.(null);
+
+    if (!draggedId) return;
+    const gears = this.options.getGears();
+    const dragged = gears.find((g) => g.id === draggedId);
+    if (!dragged) return;
+
+    // Exclude the dragged gear itself from the "existing gears to check against" list --
+    // same id-exclusion `findNearestCompatiblePartner` above already applies -- otherwise
+    // it would trivially "overlap" its own just-dropped position (distance 0 from itself).
+    const others = gears.filter((g) => g.id !== draggedId);
+    const resolved = resolveOverlapFreePositionForGear(dragged, dragged.position, others);
+    // `resolveOverlapFreePositionForGear` returns the exact same array reference, unchanged,
+    // when the drop position needed no correction -- so this only fires an (extra) `onMove`
+    // for a genuine nudge, not on every plain click/drop.
+    if (resolved !== dragged.position) this.options.onMove(draggedId, resolved);
   };
 }

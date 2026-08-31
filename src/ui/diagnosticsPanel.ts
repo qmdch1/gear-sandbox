@@ -1,4 +1,17 @@
-import type { SimDiagnostics } from "../sim/types";
+import type { GearInstance, SimDiagnostics } from "../sim/types";
+import { GEAR_LABELS } from "./gearLabels";
+
+/** A short, human-readable stand-in for a gear id in diagnostics text -- the id itself
+ *  is `crypto.randomUUID()` for anything a user places via the palette (see
+ *  gearFactory.createGear), so showing it raw ("미연결: 3f9a2c11-...") means nothing to
+ *  a non-technical user. The gear's friendly type name plus the id's last 4 characters
+ *  (enough to tell two problem gears of the same type apart; clicking still focuses the
+ *  exact gear via its full id, unaffected) is the whole point. */
+function describeGear(id: string, gears: GearInstance[]): string {
+  const gear = gears.find((g) => g.id === id);
+  const label = gear ? GEAR_LABELS[gear.type] : "알 수 없는 기어";
+  return `${label} (#${id.slice(-4)})`;
+}
 
 export class DiagnosticsPanel {
   constructor(private container: HTMLElement, private onFocus: (id: string) => void) {
@@ -13,11 +26,14 @@ export class DiagnosticsPanel {
     });
   }
 
-  render(diagnostics: SimDiagnostics): void {
+  render(diagnostics: SimDiagnostics, gears: GearInstance[]): void {
     const items: Array<{ label: string; id: string }> = [
-      ...diagnostics.unconnectedIds.map((id) => ({ label: `미연결: ${id}`, id })),
-      ...diagnostics.noPowerIds.map((id) => ({ label: `동력 없음: ${id}`, id })),
-      ...diagnostics.overlapPairs.map(([a, b]) => ({ label: `겹침: ${a} / ${b}`, id: a })),
+      ...diagnostics.unconnectedIds.map((id) => ({ label: `미연결: ${describeGear(id, gears)}`, id })),
+      ...diagnostics.noPowerIds.map((id) => ({ label: `동력 없음: ${describeGear(id, gears)}`, id })),
+      ...diagnostics.overlapPairs.map(([a, b]) => ({
+        label: `겹침: ${describeGear(a, gears)} / ${describeGear(b, gears)}`,
+        id: a,
+      })),
     ];
 
     this.container.innerHTML = "";

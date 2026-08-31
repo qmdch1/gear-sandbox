@@ -1,15 +1,19 @@
-import type { GearInstance } from "../sim/types";
+import type { LayoutState } from "../sim/types";
 import {
   listServerLayouts,
   saveNewServerLayout,
   updateServerLayout,
   fetchServerLayout,
+  deleteServerLayout,
   type LayoutSummary,
 } from "../persistence/serverClient";
 
 export interface ServerSyncApi {
-  getGears(): GearInstance[];
-  applyLoadedGears(gears: GearInstance[]): void;
+  getLayout(): LayoutState;
+  applyLoadedLayout(layout: LayoutState): void;
+  /** Called after a successful server save (new or overwrite), so the caller can treat the
+   *  just-persisted layout as a new "saved" baseline (e.g. clearing an unsaved-changes flag). */
+  onSaved?(): void;
 }
 
 export class ServerSyncPanel {
@@ -56,6 +60,12 @@ export class ServerSyncPanel {
       loadBtn.textContent = "불러오기";
       loadBtn.addEventListener("click", () => this.load(layout.id));
       li.appendChild(loadBtn);
+
+      const deleteBtn = document.createElement("button");
+      deleteBtn.textContent = "삭제";
+      deleteBtn.addEventListener("click", () => this.delete(layout.id, layout.name));
+      li.appendChild(deleteBtn);
+
       this.list.appendChild(li);
     }
   }
@@ -64,8 +74,9 @@ export class ServerSyncPanel {
     const name = this.nameInput.value.trim();
     if (!name) return;
     try {
-      const summary = await saveNewServerLayout(name, this.api.getGears());
+      const summary = await saveNewServerLayout(name, this.api.getLayout());
       this.currentId = summary.id;
+      this.api.onSaved?.();
       await this.refresh();
     } catch (err) {
       console.error("Failed to save new server layout", err);
@@ -75,10 +86,22 @@ export class ServerSyncPanel {
   private async overwrite(): Promise<void> {
     if (!this.currentId) return;
     try {
-      await updateServerLayout(this.currentId, this.nameInput.value.trim() || "이름 없음", this.api.getGears());
+      await updateServerLayout(this.currentId, this.nameInput.value.trim() || "이름 없음", this.api.getLayout());
+      this.api.onSaved?.();
       await this.refresh();
     } catch (err) {
       console.error("Failed to overwrite server layout", err);
+    }
+  }
+
+  private async delete(id: string, name: string): Promise<void> {
+    if (!window.confirm(`"${name}" 레이아웃을 서버에서 삭제할까요? 이 작업은 되돌릴 수 없습니다.`)) return;
+    try {
+      await deleteServerLayout(id);
+      if (this.currentId === id) this.currentId = null;
+      await this.refresh();
+    } catch (err) {
+      console.error("Failed to delete server layout", err);
     }
   }
 
@@ -87,7 +110,7 @@ export class ServerSyncPanel {
       const detail = await fetchServerLayout(id);
       this.currentId = detail.id;
       this.nameInput.value = detail.name;
-      this.api.applyLoadedGears(detail.gears);
+      this.api.applyLoadedLayout(detail); // LayoutDetail structurally contains {gears, remoteLinks}
     } catch (err) {
       console.error("Failed to load server layout", err);
     }
