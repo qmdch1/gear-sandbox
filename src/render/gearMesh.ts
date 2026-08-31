@@ -63,8 +63,33 @@ export function colorForGear(type: GearType, ratio: number, broken: boolean): TH
   return CRITICAL.clone().lerp(WARNING, t);
 }
 
+/** Ratio-space threshold below which a durability change is skipped as invisible, rather
+ *  than re-lerped and reassigned to the material every frame. `colorForGear` maps the
+ *  0..1 ratio through two half-range lerps (t = (ratio - 0.5) * 2, or ratio * 2 below the
+ *  midpoint), so a channel's rate of change with respect to ratio is on the order of 2 --
+ *  i.e. a delta of `d` in ratio can move a color channel by roughly `2*d`. A rendered
+ *  channel is effectively 8-bit (1/255 per step), so half a step (~1/510 ≈ 0.00196) is
+ *  the largest change that could plausibly still look identical; picking an epsilon at
+ *  roughly half of that (0.001) keeps real, human-visible durability shifts from ever
+ *  being delayed by more than a fraction of a color step. `wear.ts`'s `applyWear` reduces
+ *  `durabilityCurrent` by a small float amount every tick a gear is spinning above
+ *  `MIN_SPIN_TO_WEAR` (there is no discrete "wear event" -- it drifts continuously), so an
+ *  exact `===` check on ratio would recompute on essentially every frame for any gear
+ *  that's currently spinning under load, defeating the optimization for exactly the
+ *  common case it needs to help with. Comparing against the last *applied* ratio (not the
+ *  previous frame's ratio) also means these sub-epsilon deltas don't reset each frame --
+ *  they accumulate until they cross the threshold relative to what's actually on screen. */
+const COLOR_UPDATE_EPSILON = 0.001;
+
 export class GearMeshObject {
   readonly mesh: THREE.Mesh;
+  /** Last ratio/broken values actually applied to the material's color, so `update` can
+   *  skip the recompute+reassign when nothing durability-relevant has meaningfully changed
+   *  since then. `null` until the first `update` call applies a color, so a fresh instance
+   *  (including one made right after a `dispose()`d gear is recreated) always paints its
+   *  initial color rather than comparing against stale state. */
+  private lastColorRatio: number | null = null;
+  private lastColorBroken: boolean | null = null;
 
   constructor(gear: GearInstance) {
     const geometry = buildGeometryForType(gear.type, gear.teeth || 1, gear.module || 1);
@@ -102,7 +127,14 @@ export class GearMeshObject {
       this.mesh.rotateZ(gear.rotation);
     }
     const ratio = gear.durabilityMax > 0 ? gear.durabilityCurrent / gear.durabilityMax : 1;
-    (this.mesh.material as THREE.MeshStandardMaterial).color = colorForGear(gear.type, ratio, gear.broken);
+    const ratioUnchanged =
+      this.lastColorRatio !== null && Math.abs(ratio - this.lastColorRatio) < COLOR_UPDATE_EPSILON;
+    const brokenUnchanged = this.lastColorBroken !== null && gear.broken === this.lastColorBroken;
+    if (!ratioUnchanged || !brokenUnchanged) {
+      (this.mesh.material as THREE.MeshStandardMaterial).color = colorForGear(gear.type, ratio, gear.broken);
+      this.lastColorRatio = ratio;
+      this.lastColorBroken = gear.broken;
+    }
   }
 
   dispose(): void {
