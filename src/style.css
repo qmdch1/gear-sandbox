@@ -15,3 +15,20 @@ html, body { margin: 0; height: 100%; background: #1a1d22; color: #eee; font-fam
 .axis-btn.active { background: #4a7; color: #fff; font-weight: bold; }
 .delete-btn { display: block; width: 100%; margin-top: 8px; padding: 4px 0; background: #3a2020; color: #f88; border: 1px solid #a44; border-radius: 3px; }
 .delete-btn:hover { background: #a33; color: #fff; }
+
+/* Narrow viewports (phones, small tablets in portrait): a fixed 220px sidebar column
+   leaves too little width for the 3D viewport -- e.g. at a 390px-wide phone, 220px fixed
+   leaves only 170px for #scene-canvas, unusable for orbit/drag interaction. Below 700px
+   we stack sidebar-over-viewport instead, capping the sidebar to 40% of the viewport
+   height (it already has overflow-y: auto for its own scroll) so #viewport/#scene-canvas
+   keeps the full width and a clear majority of the height. */
+@media (max-width: 700px) {
+  #app {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 40vh) 1fr;
+  }
+
+  #sidebar {
+    max-height: 40vh;
+  }
+}
