@@ -107,7 +107,19 @@ export class GearMeshObject {
     this.builtTeeth = gear.teeth || 1;
     this.builtModule = gear.module || 1;
     const geometry = buildGeometryForType(this.builtType, this.builtTeeth, this.builtModule);
-    const material = new THREE.MeshStandardMaterial({ color: colorForGear(gear.type, 1, false) });
+    // `GEAR_TYPE_COLOR` (colorForGear.ts) names its palette after real metals -- steel,
+    // bronze, copper -- but `MeshStandardMaterial` defaults to `roughness: 1, metalness: 0`
+    // (fully matte, zero specular response) when neither is set, which reads as unglazed
+    // clay/plastic, not metal, regardless of the color chosen. A moderate metalness +
+    // lower roughness gives every gear an actual specular highlight that moves with the
+    // camera/lights, which is what makes a curved or toothed surface read as solid,
+    // dimensional metal instead of a flat-shaded cutout (confirmed the flatness by
+    // screenshot before this change, not just reasoning about it).
+    const material = new THREE.MeshStandardMaterial({
+      color: colorForGear(gear.type, 1, false),
+      metalness: 0.55,
+      roughness: 0.45,
+    });
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.name = gear.id;
     this.update(gear);
