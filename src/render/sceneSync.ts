@@ -3,7 +3,7 @@ import type { GearInstance, RemoteLink, SimDiagnostics } from "../sim/types";
 import type { SceneContext } from "./scene";
 import { GearMeshObject } from "./gearMesh";
 import { buildLinkRibbon } from "./chainGeometry";
-import { findMeshPartner } from "../sim/meshing";
+import { findMeshPartner, pitchRadius } from "../sim/meshing";
 
 const PROBLEM_HIGHLIGHT = new THREE.Color(0xff3b30);
 const PREVIEW_HIGHLIGHT = new THREE.Color(0x2ecc71);
@@ -130,7 +130,17 @@ export class SceneSync {
    *
    *  No-op on an empty layout: there is nothing to bound, and snapping the camera to some
    *  arbitrary default would be more surprising than just leaving the current view alone
-   *  (e.g. mid-pan while the last gear was just deleted). */
+   *  (e.g. mid-pan while the last gear was just deleted).
+   *
+   *  Bounds each gear by its actual visual footprint, not just its bare position point --
+   *  expanding the box by position alone badly undersizes the frame for a layout with only
+   *  a couple of large, closely-spaced gears (confirmed by screenshot: the 성문/castle
+   *  preset's two gears sit only 7 units apart, but the winch handle's own pitch radius is
+   *  also 7, so a position-only box computed a tiny radius and the resulting camera ended
+   *  up INSIDE the gear's own geometry). `module * 2` covers `load`'s teeth-0 case, where
+   *  `pitchRadius` alone is always exactly 0 (same reasoning `meshing.ts`'s own
+   *  `overlapRadius` helper uses for the same field), and a small floor keeps a
+   *  pathologically tiny gear from collapsing its own contribution to the box. */
   fitAll(gears: GearInstance[]): void {
     if (gears.length === 0) return;
 
@@ -138,7 +148,9 @@ export class SceneSync {
     const centroid = new THREE.Vector3();
     for (const gear of gears) {
       const p = new THREE.Vector3(...gear.position);
-      box.expandByPoint(p);
+      const r = Math.max(pitchRadius(gear), gear.module * 2, 0.5);
+      box.expandByPoint(p.clone().addScalar(r));
+      box.expandByPoint(p.clone().addScalar(-r));
       centroid.add(p);
     }
     centroid.divideScalar(gears.length);

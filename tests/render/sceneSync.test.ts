@@ -210,11 +210,16 @@ describe("SceneSync", () => {
     });
 
     it("clamps the camera distance to minDistance when gears are clustered very close together", () => {
+      // Deliberately tiny teeth/module here -- fitAll bounds each gear by its actual visual
+      // footprint (pitchRadius), not just its bare position, so a cluster of ORDINARY-sized
+      // gears (e.g. the default teeth=20/module=1) still needs real framing room even when
+      // their positions are nearly coincident. Only a cluster whose gears are ALSO
+      // physically tiny should collapse all the way down to minDistance.
       const ctx = createScene(document.createElement("canvas"));
       const sync = new SceneSync(ctx);
       const gears = [
-        makeGear({ id: "a", position: [0, 0, 0] }),
-        makeGear({ id: "b", position: [0.001, 0, 0] }),
+        makeGear({ id: "a", position: [0, 0, 0], teeth: 2, module: 0.1 }),
+        makeGear({ id: "b", position: [0.001, 0, 0], teeth: 2, module: 0.1 }),
       ];
       sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
 
@@ -222,6 +227,27 @@ describe("SceneSync", () => {
 
       const distance = ctx.camera.position.distanceTo(ctx.controls.target);
       expect(distance).toBeCloseTo(ctx.controls.minDistance);
+    });
+
+    it("frames a cluster of ORDINARY-sized gears wide enough to clear their own geometry, even when their positions sit almost on top of each other", () => {
+      // The exact bug this guards against: a position-only bounding box for two closely
+      // spaced but physically normal-sized gears (pitchRadius 10 each, from the default
+      // teeth=20/module=1) computed a near-zero radius and put the camera INSIDE the
+      // gear's own mesh (confirmed by screenshot on the 성문/castle preset, whose two
+      // gears sit only 7 units apart with a pitch radius of 7). The fitted distance must
+      // be meaningfully larger than the bare minDistance clamp.
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gears = [
+        makeGear({ id: "a", position: [0, 0, 0] }),
+        makeGear({ id: "b", position: [7, 0, 0] }),
+      ];
+      sync.sync(gears, [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+
+      sync.fitAll(gears);
+
+      const distance = ctx.camera.position.distanceTo(ctx.controls.target);
+      expect(distance).toBeGreaterThan(ctx.controls.minDistance * 2);
     });
 
     it("clamps the camera distance to maxDistance when gears are spread very far apart", () => {
