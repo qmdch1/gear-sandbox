@@ -2,10 +2,12 @@ import type { LayoutState } from "../types";
 import { createClockPreset } from "./clock";
 import { createCarPreset } from "./car";
 import { createCastlePreset } from "./castle";
+import { createHoistPreset } from "./hoist";
 
 export { createClockPreset } from "./clock";
 export { createCarPreset } from "./car";
 export { createCastlePreset } from "./castle";
+export { createHoistPreset } from "./hoist";
 
 export interface PresetEntry {
   id: string;
@@ -34,5 +36,10 @@ export const PRESETS: PresetEntry[] = [
     id: "castle",
     label: "성문 (도개교 — 손잡이로 게이트를 올리고 내리는 랙-피니언)",
     build: createCastlePreset,
+  },
+  {
+    id: "hoist",
+    label: "기중기 (도르래로 크랭크 속도를 4:1로 줄이는 손 윈치)",
+    build: createHoistPreset,
   },
 ];
