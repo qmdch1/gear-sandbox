@@ -102,6 +102,14 @@ try {
 } catch (err) {
   console.error("Failed to load saved layout from localStorage; starting with an empty layout.", err);
 }
+
+// The camera's own fixed initial position (see scene.ts: [30,30,30] looking at the
+// origin) has no idea how big or where the actual loaded/seeded layout sits -- the
+// bundled showcase in particular spans well beyond that framing, so the very first
+// thing a user saw was a cropped, disorienting close-up instead of the whole assembled
+// scene (confirmed by screenshot, not just reasoning about it). Frame the real starting
+// layout properly right away, the same way the "전체 보기" button does by hand.
+sceneSync.fitAll(gears);
 let timeScale = 1;
 
 function addGear(type: GearType, position: [number, number, number]): void {
