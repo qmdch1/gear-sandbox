@@ -36,12 +36,13 @@ describe("PresetPanel", () => {
     expect(presets[0].build).toHaveBeenCalledTimes(1);
     expect(presets[1].build).not.toHaveBeenCalled();
     expect(onSelect).toHaveBeenCalledTimes(1);
-    expect(onSelect).toHaveBeenCalledWith(fakeLayout("a-layout"));
+    // onSelect receives (layout, props); these fake presets have no buildProps, so props is [].
+    expect(onSelect).toHaveBeenCalledWith(fakeLayout("a-layout"), []);
 
     (btnB as HTMLElement).click();
     expect(presets[1].build).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledTimes(2);
-    expect(onSelect).toHaveBeenLastCalledWith(fakeLayout("b-layout"));
+    expect(onSelect).toHaveBeenLastCalledWith(fakeLayout("b-layout"), []);
   });
 
   it("uses the real PRESETS catalog by default when no explicit list is passed", () => {

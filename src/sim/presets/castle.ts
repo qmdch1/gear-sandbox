@@ -1,5 +1,6 @@
 import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
+import type { Prop } from "../../render/props";
 
 /** Builds one gear instance for a preset layout. Mirrors `defaultLayout.ts`'s own
  *  `seedGear` helper exactly (same "freshly placed, caller-supplied stable id" shape) --
@@ -115,4 +116,41 @@ export function createCastlePreset(): LayoutState {
   ];
 
   return { gears, remoteLinks: [] };
+}
+
+/** The castle gatehouse -- purely visual props (see `render/props.ts`), no simulation.
+ *  Two stone towers flank the gate track at x=7 (where the rack gate slides vertically),
+ *  a battlemented lintel arches over the top, and a low threshold wall grounds it, so the
+ *  rack reads as a portcullis rising between castle towers rather than a bare toothed bar.
+ *  The gate itself (the rack gear) slides up and down THROUGH this frame as the winch
+ *  turns. */
+export function createCastleProps(): Prop[] {
+  const gateX = 7;
+  const stone = 0x77746c;
+  const darkStone = 0x5f5d56;
+  const towerHalfGap = 5; // towers sit this far to either side of the gate track
+
+  const props: Prop[] = [
+    // Left and right towers flanking the gate.
+    { kind: "box", position: [gateX - towerHalfGap, 6, 0], size: [4, 34, 4], color: stone, roughness: 0.9, metalness: 0.05 },
+    { kind: "box", position: [gateX + towerHalfGap, 6, 0], size: [4, 34, 4], color: stone, roughness: 0.9, metalness: 0.05 },
+    // Lintel / archway across the top, spanning between the towers.
+    { kind: "box", position: [gateX, 20, 0], size: [2 * towerHalfGap + 4, 3.5, 4], color: darkStone, roughness: 0.9, metalness: 0.05 },
+    // Threshold wall at the base, so the gate has something to seat down into.
+    { kind: "box", position: [gateX, -6, 0], size: [2 * towerHalfGap + 4, 3, 4], color: darkStone, roughness: 0.9, metalness: 0.05 },
+  ];
+
+  // Crenellations (merlons) along the top of the lintel, for a castle silhouette.
+  for (let i = -1; i <= 1; i++) {
+    props.push({
+      kind: "box",
+      position: [gateX + i * 4, 23, 0],
+      size: [2, 3, 4],
+      color: stone,
+      roughness: 0.9,
+      metalness: 0.05,
+    });
+  }
+
+  return props;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createCarPreset } from "../../../src/sim/presets/car";
+import { createCarPreset, createCarProps } from "../../../src/sim/presets/car";
 import { evaluatePair, isOverlapping } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
@@ -33,22 +33,34 @@ describe("createCarPreset", () => {
     expect(engine.type).toBe("crank");
     expect(engine.teeth).toBe(16);
     expect(engine.module).toBe(1);
-    expect(engine.axis).toEqual([0, 1, 0]);
-    expect(engine.position).toEqual([0, 0, 0]);
+    // Wheels stand vertically (axis [1,0,0], rolling about world X) and are raised to
+    // WHEEL_Y=8 so they sit on the ground rather than half-buried; the engine is
+    // coincident with the front-left wheel (same position AND axis) so its coupling forms.
+    expect(engine.axis).toEqual([1, 0, 0]);
+    expect(engine.position).toEqual([0, 8, 0]);
     expect(engine.angularVelocity).toBe(-1.0);
 
     for (const wheel of [fl, fr, rl, rr]) {
       expect(wheel.type).toBe("pulley");
       expect(wheel.teeth).toBe(16);
       expect(wheel.module).toBe(1);
-      expect(wheel.axis).toEqual([0, 1, 0]);
+      expect(wheel.axis).toEqual([1, 0, 0]);
       expect((wheel.module * wheel.teeth) / 2).toBe(8); // pitchRadius = 8, identical for all 4
     }
 
-    expect(fl.position).toEqual([0, 0, 0]); // coincident with the engine, by design
-    expect(fr.position).toEqual([20, 0, 0]);
-    expect(rl.position).toEqual([0, 0, -20]);
-    expect(rr.position).toEqual([20, 0, -20]);
+    expect(fl.position).toEqual([0, 8, 0]); // coincident with the engine, by design
+    expect(fr.position).toEqual([20, 8, 0]);
+    expect(rl.position).toEqual([0, 8, -20]);
+    expect(rr.position).toEqual([20, 8, -20]);
+  });
+
+  it("supplies a decorative chassis body (createCarProps) -- axle rods, side rails, and a body shell", () => {
+    const props = createCarProps();
+    expect(props.length).toBeGreaterThan(0);
+    // Two axle rods (cylinders) + two side rails + body + cabin: all supported prop kinds.
+    const kinds = new Set(props.map((p) => p.kind));
+    expect(kinds.has("cylinder")).toBe(true);
+    expect(kinds.has("box")).toBe(true);
   });
 
   it("forms a real coincident coupling edge between the engine and the front-left wheel via the real evaluatePair", () => {

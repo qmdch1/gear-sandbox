@@ -1,5 +1,6 @@
 import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
+import type { Prop } from "../../render/props";
 
 /** Builds one gear instance for a preset layout. Mirrors `defaultLayout.ts`'s own
  *  `seedGear` helper exactly (same "freshly placed, caller-supplied stable id" shape) --
@@ -34,22 +35,38 @@ function seedGear(
   };
 }
 
-/** A 4-wheel, belt-synchronized drivetrain -- an honest gear/belt-only demo of "one
- *  engine turns all four wheels together," NOT a literal car body/chassis (this sandbox
- *  has no non-gear decorative geometry system to draw one with). What's actually shown
- *  is four wheel-hub pulleys, arranged in a rectangular wheelbase, all visibly turning
- *  in lockstep off a single crank -- which reads clearly as "a vehicle's drivetrain"
- *  without pretending to model a differential, a transmission, or anything else this
- *  preset doesn't actually contain.
+// --- Car body dimensions (shared by the gears' placement and the chassis props below) ---
+const WHEEL_Y = 8; // wheel-hub height above the ground plane -- roughly the wheel radius, so
+//                    each vertically-standing wheel sits ON the grid instead of half-buried.
+const TRACK_X = 20; // left-right wheel separation (the axle width).
+const WHEELBASE_Z = 20; // front-rear wheel separation.
+
+/** A recognizable 4-wheel CAR: four wheels standing vertically at the corners of a
+ *  rectangular wheelbase, wrapped in a decorative chassis frame + body (see
+ *  `createCarProps`), all four wheels belt-synchronized off one engine crank.
  *
- *  Layout (top-down, X = left/right axle direction, -Z = "forward"):
+ *  The gears carry the real, verifiable mechanism (one engine, four wheels locked to the
+ *  same speed); the props (`createCarProps`) carry the recognizable shape (axle rods,
+ *  side rails, a body shell) so it reads as an actual vehicle rather than four discs
+ *  floating in space. The two are deliberately separate: props are static decoration that
+ *  never mesh, rotate, persist, or affect the simulation -- see `render/props.ts`.
  *
- *    자동차_좌앞바퀴 (0,0,0) ------ 자동차_우앞바퀴 (20,0,0)      <- front axle
+ *  Layout (top-down, X = left/right axle direction, -Z = "forward"), wheels raised to
+ *  WHEEL_Y so they stand on the ground:
+ *
+ *    자동차_좌앞바퀴 (0,8,0) ------ 자동차_우앞바퀴 (20,8,0)      <- front axle
  *         |
- *    자동차_좌뒷바퀴 (0,0,-20) ---- 자동차_우뒷바퀴 (20,0,-20)    <- rear axle
+ *    자동차_좌뒷바퀴 (0,8,-20) ---- 자동차_우뒷바퀴 (20,8,-20)    <- rear axle
+ *
+ *  Every wheel uses `axis: [1, 0, 0]` -- rotating about world X so the wheel disc stands
+ *  UPRIGHT and rolls forward/back, exactly how a real wheel sits, instead of the old
+ *  `[0, 1, 0]` that spun them flat like turntables. The physics is unchanged by this
+ *  reorientation: belt links carry rotation regardless of axis, and the engine stays
+ *  coincident with the front-left wheel (same position AND axis) so its shaft coupling
+ *  still forms.
  *
  *  자동차_엔진 (the crank) sits EXACTLY coincident with 자동차_좌앞바퀴 -- same position
- *  [0,0,0], same axis [0,1,0]. `pulley` is one of `evaluatePair`'s `COINCIDENT_ONLY`
+ *  [0,8,0], same axis [1,0,0]. `pulley` is one of `evaluatePair`'s `COINCIDENT_ONLY`
  *  types (meshing.ts): a pulley has no direct tooth-mesh rule of its own and only ever
  *  receives rotation by sharing a shaft with whatever drives it, exactly like a
  *  chain/belt wheel is bolted straight onto a power shaft in reality. This is the same
@@ -96,11 +113,11 @@ function seedGear(
  *  that would only show up at a "nice" speed like 1 or -1. */
 export function createCarPreset(): LayoutState {
   const gears: GearInstance[] = [
-    seedGear("자동차_엔진", "crank", [0, 0, 0], [0, 1, 0], 16, 1, -1.0),
-    seedGear("자동차_좌앞바퀴", "pulley", [0, 0, 0], [0, 1, 0], 16, 1),
-    seedGear("자동차_우앞바퀴", "pulley", [20, 0, 0], [0, 1, 0], 16, 1),
-    seedGear("자동차_좌뒷바퀴", "pulley", [0, 0, -20], [0, 1, 0], 16, 1),
-    seedGear("자동차_우뒷바퀴", "pulley", [20, 0, -20], [0, 1, 0], 16, 1),
+    seedGear("자동차_엔진", "crank", [0, WHEEL_Y, 0], [1, 0, 0], 16, 1, -1.0),
+    seedGear("자동차_좌앞바퀴", "pulley", [0, WHEEL_Y, 0], [1, 0, 0], 16, 1),
+    seedGear("자동차_우앞바퀴", "pulley", [TRACK_X, WHEEL_Y, 0], [1, 0, 0], 16, 1),
+    seedGear("자동차_좌뒷바퀴", "pulley", [0, WHEEL_Y, -WHEELBASE_Z], [1, 0, 0], 16, 1),
+    seedGear("자동차_우뒷바퀴", "pulley", [TRACK_X, WHEEL_Y, -WHEELBASE_Z], [1, 0, 0], 16, 1),
   ];
 
   return {
@@ -111,4 +128,33 @@ export function createCarPreset(): LayoutState {
       { a: "자동차_좌뒷바퀴", b: "자동차_우뒷바퀴", kind: "belt" }, // rear axle
     ],
   };
+}
+
+/** The car's decorative body -- purely visual props (see `render/props.ts`), no
+ *  simulation. Two axle rods threading the wheel pairs, two side rails linking front to
+ *  rear, and a two-tier body shell (lower body + cabin) sitting on top, so the four
+ *  belt-driven wheels read as an actual car rather than four discs in a rectangle. All
+ *  dimensions are derived from the same WHEEL_Y / TRACK_X / WHEELBASE_Z the gears use, so
+ *  the frame lands exactly on the wheels. */
+export function createCarProps(): Prop[] {
+  const midX = TRACK_X / 2; // 10
+  const midZ = -WHEELBASE_Z / 2; // -10
+  const frame = 0x3a3f47; // dark gunmetal chassis
+  const rod = 0x8b929c; // steel axle rod
+  const body = 0xc0392b; // car-red body shell
+  const cabin = 0x9a2f24; // slightly darker cabin
+
+  return [
+    // Axle rods running left<->right through each wheel pair (cylinders default to the Y
+    // axis, so rotate 90° about Z to lay them along X).
+    { kind: "cylinder", position: [midX, WHEEL_Y, 0], radius: 0.7, height: TRACK_X + 2, color: rod, rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
+    { kind: "cylinder", position: [midX, WHEEL_Y, -WHEELBASE_Z], radius: 0.7, height: TRACK_X + 2, color: rod, rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
+    // Side rails running front<->rear, linking the axle ends into a chassis rectangle.
+    { kind: "box", position: [0, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame },
+    { kind: "box", position: [TRACK_X, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame },
+    // Lower body shell sitting above the axles.
+    { kind: "box", position: [midX, WHEEL_Y + 5, midZ], size: [TRACK_X - 3, 5, WHEELBASE_Z + 6], color: body, metalness: 0.55, roughness: 0.35 },
+    // Cabin / greenhouse, set back toward the rear and narrower.
+    { kind: "box", position: [midX, WHEEL_Y + 9.5, midZ - 3], size: [TRACK_X - 7, 4.5, WHEELBASE_Z - 4], color: cabin, metalness: 0.55, roughness: 0.35 },
+  ];
 }

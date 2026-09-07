@@ -1,5 +1,6 @@
 import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
+import type { Prop } from "../../render/props";
 
 /** Builds one gear instance for a preset layout. Mirrors `car.ts`'s own `seedGear`
  *  helper exactly (same "freshly placed, caller-supplied stable id" shape) --
@@ -100,4 +101,29 @@ export function createHoistPreset(): LayoutState {
       { a: "기중기_소형풀리", b: "기중기_대형풀리", kind: "belt" }, // small pulley drives the drum, 4:1 speed reduction
     ],
   };
+}
+
+/** The hoist's decorative body -- purely visual props (see `render/props.ts`), no
+ *  simulation. A timber gantry stands over the drum (the big driven pulley at x=30): two
+ *  uprights and a top beam, with a hanging hook line, plus a base sill tying the crank end
+ *  to the drum end, so the belt-and-pulleys read as an actual hand winch/crane rather than
+ *  two discs and a ribbon. */
+export function createHoistProps(): Prop[] {
+  const drumX = 30;
+  const timber = 0x8a6a3a;
+  const darkTimber = 0x6b4f2a;
+  const steel = 0x9aa0a8;
+
+  return [
+    // Base sill running along the ground from the crank (x=0) to under the drum.
+    { kind: "box", position: [drumX / 2, -6, 0], size: [drumX + 10, 2, 6], color: darkTimber, roughness: 0.85, metalness: 0.05 },
+    // Two gantry uprights straddling the drum.
+    { kind: "box", position: [drumX, 9, -4], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
+    { kind: "box", position: [drumX, 9, 4], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
+    // Top cross-beam bridging the uprights, over the drum.
+    { kind: "box", position: [drumX, 25, 0], size: [3, 2.5, 12], color: darkTimber, roughness: 0.8, metalness: 0.05 },
+    // Hanging hook line dropping from the beam (a thin vertical rod ending in a hook block).
+    { kind: "cylinder", position: [drumX, 12, 0], radius: 0.35, height: 24, color: steel, metalness: 0.7, roughness: 0.35 },
+    { kind: "box", position: [drumX, -1, 0], size: [2, 2, 2], color: steel, metalness: 0.7, roughness: 0.35 },
+  ];
 }

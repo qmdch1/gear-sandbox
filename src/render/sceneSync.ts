@@ -4,6 +4,7 @@ import type { SceneContext } from "./scene";
 import { GearMeshObject } from "./gearMesh";
 import { buildLinkRibbon } from "./chainGeometry";
 import { findMeshPartner, pitchRadius } from "../sim/meshing";
+import { buildPropMesh, type Prop } from "./props";
 
 const PROBLEM_HIGHLIGHT = new THREE.Color(0xff3b30);
 const PREVIEW_HIGHLIGHT = new THREE.Color(0x2ecc71);
@@ -29,9 +30,30 @@ export function computeSyncActions(
 export class SceneSync {
   private objects = new Map<string, GearMeshObject>();
   private linkMeshes = new Map<string, THREE.Mesh>();
+  private propMeshes: THREE.Mesh[] = [];
   private previewId: string | null = null;
 
   constructor(private ctx: SceneContext) {}
+
+  /** Replaces the current set of decorative (non-simulated) props -- a preset's physical
+   *  body (car chassis, clock bezel, etc.) -- with a new one. Props are static: they are
+   *  added to the scene once here and never touched by the per-frame `sync()` loop, since
+   *  they don't move, mesh, or rotate. Passing `[]` (the default) clears all props, which
+   *  is what every non-preset layout load does -- a plain saved/imported layout has no
+   *  body, just gears. */
+  setProps(props: Prop[] = []): void {
+    for (const mesh of this.propMeshes) {
+      this.ctx.scene.remove(mesh);
+      mesh.geometry.dispose();
+      (mesh.material as THREE.Material).dispose();
+    }
+    this.propMeshes = [];
+    for (const prop of props) {
+      const mesh = buildPropMesh(prop);
+      this.propMeshes.push(mesh);
+      this.ctx.scene.add(mesh);
+    }
+  }
 
   sync(gears: GearInstance[], remoteLinks: RemoteLink[], diagnostics: SimDiagnostics): void {
     const { toAdd, toRemoveIds } = computeSyncActions(new Set(this.objects.keys()), gears);

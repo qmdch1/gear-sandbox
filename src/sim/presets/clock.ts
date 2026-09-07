@@ -1,5 +1,6 @@
 import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
+import type { Prop } from "../../render/props";
 
 /** Builds one gear instance for a preset layout. Mirrors `defaultLayout.ts`'s own
  *  `seedGear` helper exactly (same "freshly placed, caller-supplied stable id" shape) --
@@ -97,4 +98,55 @@ export function createClockPreset(): LayoutState {
   ];
 
   return { gears, remoteLinks: [] };
+}
+
+// The hour wheel (teeth 120, module 0.2 -> pitchRadius 12) is the biggest, slowest,
+// most dial-like gear, sitting at HOUR_X. The clock body wraps THAT gear as its face.
+const HOUR_X = 29;
+const HOUR_PITCH_RADIUS = 12;
+
+/** The clock's decorative body -- purely visual props (see `render/props.ts`), no
+ *  simulation. A brass bezel ring + backplate turn the big slow hour wheel into a
+ *  recognizable clock dial, and twelve tick marks around the rim make it read as a clock
+ *  face rather than just a large gear. The fast minute crank + idler upstream stay
+ *  visible as the exposed "movement" feeding the dial. Everything is centered on the hour
+ *  wheel and lies flat in the XZ plane (the gears spin about world Y, so their faces point
+ *  up -- the dial is viewed from above/at an angle, like a skeleton-clock movement laid
+ *  open on a bench). */
+export function createClockProps(): Prop[] {
+  const bezelR = HOUR_PITCH_RADIUS + 2.5; // 14.5 -- just outside the hour wheel's teeth
+  const brass = 0xb08d3a;
+  const backplate = 0x2a2622;
+  const tickColor = 0xf0e6c8;
+
+  const props: Prop[] = [
+    // Backplate disc sitting just behind (below) the dial gear, so the movement reads
+    // against a solid face instead of the open grid. Cylinder default axis is Y, which is
+    // exactly the flat-disc orientation we want here (no rotation).
+    { kind: "cylinder", position: [HOUR_X, -0.8, 0], radius: bezelR + 1, height: 0.6, color: backplate, roughness: 0.85, metalness: 0.1 },
+    // Brass bezel ring around the dial. A torus defaults to the XY plane; rotate 90° about
+    // X to lay it flat in XZ, encircling the hour wheel.
+    { kind: "ring", position: [HOUR_X, 0.4, 0], radius: bezelR, tube: 1.2, color: brass, rotation: [Math.PI / 2, 0, 0], metalness: 0.7, roughness: 0.3 },
+  ];
+
+  // Twelve hour tick marks around the bezel, every 30°, pointing radially. A box's long
+  // axis is X; rotating it about Y by -angle aligns that long axis with the radial
+  // direction (cos a, 0, sin a) at that clock position. The 12/3/6/9 marks are drawn a
+  // touch longer so the cardinal hours stand out, like a real dial.
+  const tickRingR = bezelR - 1.2;
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const cardinal = i % 3 === 0;
+    props.push({
+      kind: "box",
+      position: [HOUR_X + Math.cos(a) * tickRingR, 0.5, Math.sin(a) * tickRingR],
+      size: [cardinal ? 2.6 : 1.6, 0.5, cardinal ? 0.9 : 0.6],
+      color: tickColor,
+      rotation: [0, -a, 0],
+      metalness: 0.3,
+      roughness: 0.6,
+    });
+  }
+
+  return props;
 }

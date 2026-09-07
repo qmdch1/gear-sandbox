@@ -203,6 +203,9 @@ function resetTransientUiState(): void {
   chainLinkMode.reset();
   beltLinkMode.reset();
   syncLinkPickHighlight();
+  // Any layout swap clears the previous preset's decorative body (a plain saved/imported
+  // layout has none). A preset load re-adds its own props right AFTER calling this.
+  sceneSync.setProps();
 }
 
 // "전체 보기": resets/fits the camera to frame every placed gear at once -- the counterpart to
@@ -264,7 +267,7 @@ new ServerSyncPanel(document.querySelector("#server-sync")!, {
   onSaved: () => dirtyTracker.markClean(),
 });
 
-new PresetPanel(document.querySelector("#presets")!, (layout) => {
+new PresetPanel(document.querySelector("#presets")!, (layout, props) => {
   gears = layout.gears;
   remoteLinks = layout.remoteLinks;
   // Unlike `load`/`importFile`/`applyLoadedLayout` above (all of which restore a layout
@@ -278,6 +281,10 @@ new PresetPanel(document.querySelector("#presets")!, (layout) => {
   // fresh, unsaved edit (`markDirty()`), the same as adding/moving/deleting a gear by hand.
   dirtyTracker.markDirty();
   resetTransientUiState();
+  // AFTER resetTransientUiState (which clears any prior preset's body): render this
+  // preset's own decorative props -- the car chassis, clock bezel, etc. -- around its gears.
+  sceneSync.setProps(props);
+  sceneSync.fitAll(gears);
 });
 
 new DragControls({
