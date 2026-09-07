@@ -4,11 +4,17 @@ import { createClockPreset, createClockProps } from "./clock";
 import { createCarPreset, createCarProps } from "./car";
 import { createCastlePreset, createCastleProps } from "./castle";
 import { createHoistPreset, createHoistProps } from "./hoist";
+import { createAirplanePreset, createAirplaneProps } from "./airplane";
+import { createWindmillPreset, createWindmillProps } from "./windmill";
+import { createBicyclePreset, createBicycleProps } from "./bicycle";
 
 export { createClockPreset, createClockProps } from "./clock";
 export { createCarPreset, createCarProps } from "./car";
 export { createCastlePreset, createCastleProps } from "./castle";
 export { createHoistPreset, createHoistProps } from "./hoist";
+export { createAirplanePreset, createAirplaneProps } from "./airplane";
+export { createWindmillPreset, createWindmillProps } from "./windmill";
+export { createBicyclePreset, createBicycleProps } from "./bicycle";
 
 export interface PresetEntry {
   id: string;
@@ -50,5 +56,23 @@ export const PRESETS: PresetEntry[] = [
     label: "기중기 (도르래로 크랭크 속도를 4:1로 줄이는 손 윈치)",
     build: createHoistPreset,
     buildProps: createHoistProps,
+  },
+  {
+    id: "airplane",
+    label: "비행기 (엔진이 앞머리 프로펠러를 돌리는 동체 + 날개)",
+    build: createAirplanePreset,
+    buildProps: createAirplaneProps,
+  },
+  {
+    id: "windmill",
+    label: "풍차 (날개축이 베벨기어로 수직 방아축을 돌리는 석탑)",
+    build: createWindmillPreset,
+    buildProps: createWindmillProps,
+  },
+  {
+    id: "bicycle",
+    label: "자전거 (페달→체인→뒷바퀴 2배 증속 드라이브트레인)",
+    build: createBicyclePreset,
+    buildProps: createBicycleProps,
   },
 ];

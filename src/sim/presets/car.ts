@@ -112,8 +112,16 @@ const WHEELBASE_Z = 20; // front-rear wheel separation.
  *  picks `-0.6`, so a direction/ratio test can't pass by some sign-convention accident
  *  that would only show up at a "nice" speed like 1 or -1. */
 export function createCarPreset(): LayoutState {
+  const midX = TRACK_X / 2; // 10 -- car centre, under the body
+  const midZ = -WHEELBASE_Z / 2; // -10
   const gears: GearInstance[] = [
-    seedGear("자동차_엔진", "crank", [0, WHEEL_Y, 0], [1, 0, 0], 16, 1, -1.0),
+    // Engine + driveshaft live at the car's CENTRE, tucked under the body shell where the
+    // crank's protruding handle is hidden (axis [0,1,0] points the handle UP into the body,
+    // not out past a wheel like the old front-left-coincident engine did). The small engine
+    // crank turns a wheel-sized driveshaft pulley (coincident 1:1 coupling), which belts out
+    // to the wheels -- so the crank handle no longer sticks out beside the front-left wheel.
+    seedGear("자동차_엔진", "crank", [midX, WHEEL_Y, midZ], [0, 1, 0], 8, 1, -1.0),
+    seedGear("자동차_구동축", "pulley", [midX, WHEEL_Y, midZ], [0, 1, 0], 8, 1), // driveshaft, small (r4) so it stays clear of the wheels' overlap radius at the car centre
     seedGear("자동차_좌앞바퀴", "pulley", [0, WHEEL_Y, 0], [1, 0, 0], 16, 1),
     seedGear("자동차_우앞바퀴", "pulley", [TRACK_X, WHEEL_Y, 0], [1, 0, 0], 16, 1),
     seedGear("자동차_좌뒷바퀴", "pulley", [0, WHEEL_Y, -WHEELBASE_Z], [1, 0, 0], 16, 1),
@@ -123,6 +131,12 @@ export function createCarPreset(): LayoutState {
   return {
     gears,
     remoteLinks: [
+      // Driveshaft (r4) belts to the front-left wheel (r8): a 4/8 = 1/2 step-down. The three
+      // wheel-to-wheel belts (all r8, ratio 1) then carry that same speed to the other three
+      // wheels -- so all FOUR wheels still turn at exactly the SAME speed as each other (half
+      // the driveshaft/engine speed). The small driveshaft is what keeps the hidden centre hub
+      // clear of the wheels' overlap radius; the wheels remaining locked together is the point.
+      { a: "자동차_구동축", b: "자동차_좌앞바퀴", kind: "belt" }, // driveshaft -> front-left
       { a: "자동차_좌앞바퀴", b: "자동차_우앞바퀴", kind: "belt" }, // front axle
       { a: "자동차_좌앞바퀴", b: "자동차_좌뒷바퀴", kind: "belt" }, // left side
       { a: "자동차_좌뒷바퀴", b: "자동차_우뒷바퀴", kind: "belt" }, // rear axle
