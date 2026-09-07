@@ -177,6 +177,18 @@ export class SceneSync {
     }
     centroid.divideScalar(gears.length);
 
+    // Also frame any decorative props (a car's chassis, a castle's towers, ...). A preset's
+    // body can extend far beyond its gears -- the castle gears span only ~7 units but its
+    // towers rise 30+ -- so framing gears alone would leave the body cropped or shove the
+    // camera inside it. Expand the box (not the centroid: the camera should still aim at the
+    // mechanism, just back off far enough to show the whole body around it) by each prop
+    // mesh's world-space bounding box.
+    for (const mesh of this.propMeshes) {
+      mesh.updateMatrixWorld(true);
+      const propBox = new THREE.Box3().setFromObject(mesh);
+      box.union(propBox);
+    }
+
     // Half-diagonal of the bounding box, used as a stand-in bounding-sphere radius -- simple,
     // and plenty good enough for "does the whole layout fit in frame", not a tight fit.
     const radius = box.getSize(new THREE.Vector3()).length() / 2;
