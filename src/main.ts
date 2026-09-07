@@ -1,7 +1,7 @@
 import type { GearInstance, GearType, RemoteLink } from "./sim/types";
 import { wouldDuplicateLink } from "./sim/remoteLinks";
 import { createGear } from "./sim/gearFactory";
-import { createDefaultLayout } from "./sim/defaultLayout";
+import { createShowroomLayout, createShowroomProps } from "./sim/showroom";
 import { removeGear } from "./sim/removeGear";
 import { tick } from "./sim/simulation";
 import { createScene } from "./render/scene";
@@ -60,6 +60,9 @@ const durabilityPanel = new DurabilityPanel(
 
 let gears: GearInstance[] = [];
 let remoteLinks: RemoteLink[] = [];
+// Decorative props for the initial scene -- the showroom seeds a set (car chassis, plane
+// fuselage, ...); a loaded/saved layout has none until the user picks a preset again.
+let defaultProps: import("./render/props").Prop[] = [];
 // True whenever the live layout has edits a save/export/server-sync would capture but hasn't
 // yet -- drives the "don't lose your work" beforeunload guard further down. See
 // `createDirtyTracker` for exactly which edits count (and, just as importantly, which don't --
@@ -93,15 +96,21 @@ try {
     gears = loaded.gears;
     remoteLinks = loaded.remoteLinks;
   } else {
-    // First-ever visit (or cleared storage): seed a working showcase layout instead of
-    // an empty canvas, so a new user sees gears actually meshing before they place any.
-    const seeded = createDefaultLayout();
+    // First-ever visit (or cleared storage): seed the finished-object showroom (car,
+    // airplane, windmill, bicycle) instead of an empty canvas or an abstract bench of
+    // loose gears, so a new user immediately sees recognizable, complete machines running.
+    const seeded = createShowroomLayout();
     gears = seeded.gears;
     remoteLinks = seeded.remoteLinks;
+    defaultProps = createShowroomProps();
   }
 } catch (err) {
   console.error("Failed to load saved layout from localStorage; starting with an empty layout.", err);
 }
+
+// Apply the seeded scene's decorative props (empty for a loaded save) BEFORE fitAll, so the
+// camera frames the machines' bodies too, not just their bare gears.
+sceneSync.setProps(defaultProps);
 
 // The camera's own fixed initial position (see scene.ts: [30,30,30] looking at the
 // origin) has no idea how big or where the actual loaded/seeded layout sits -- the
