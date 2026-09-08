@@ -102,8 +102,17 @@ export function tick(layout: LayoutState, dt: number, timeScale: number): SimTic
     });
     const phaseAdjustment = phaseAdjustments.get(g.id) ?? 0;
     const rotation = broken ? g.rotation : g.rotation + phaseAdjustment + angularVelocity * dt;
-    const linearPosition =
-      g.type === "rack" ? (g.linearPosition ?? 0) + (linearVelocities.get(g.id) ?? 0) * dt : g.linearPosition;
+    // A rack accumulates linear travel, clamped into its `travelLimit` if it has one -- so a
+    // gate/lift that is cranked indefinitely parks at its physical stop rather than sailing
+    // out of the scene. Racks with no limit keep their original unbounded behaviour.
+    let linearPosition = g.linearPosition;
+    if (g.type === "rack") {
+      linearPosition = (g.linearPosition ?? 0) + (linearVelocities.get(g.id) ?? 0) * dt;
+      if (g.travelLimit) {
+        const [lo, hi] = g.travelLimit;
+        linearPosition = Math.min(Math.max(linearPosition, lo), hi);
+      }
+    }
     return { ...g, durabilityCurrent, broken, rotation, angularVelocity, linearPosition };
   });
 

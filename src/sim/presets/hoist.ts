@@ -103,27 +103,94 @@ export function createHoistPreset(): LayoutState {
   };
 }
 
-/** The hoist's decorative body -- purely visual props (see `render/props.ts`), no
- *  simulation. A timber gantry stands over the drum (the big driven pulley at x=30): two
- *  uprights and a top beam, with a hanging hook line, plus a base sill tying the crank end
- *  to the drum end, so the belt-and-pulleys read as an actual hand winch/crane rather than
- *  two discs and a ribbon. */
+/** How far the hook can rise before it reaches the headblock under the gantry beam. */
+export const HOOK_TRAVEL = 22;
+
+/** The effective radius the rope spools at on the drum -- the drum's inner rope hub, not its
+ *  full pitch radius (16), which would whip the hook to the top in five seconds. Rope-on-drum
+ *  kinematics give the hook `drumRotation * ROPE_RADIUS` of lift, so at the drum's 0.25 rad/s
+ *  this is 0.75 world units per second: a lift you can actually watch. */
+export const ROPE_RADIUS = 3;
+
+/** The hoist's body -- visual props (see `render/props.ts`), no simulation. A timber gantry
+ *  stands clear of the drum, and the hook block and its crate RIDE UP the guide cable as the
+ *  drum turns (`windWith`), so the winch visibly lifts something instead of the drum spinning
+ *  under a hook that never moves.
+ *
+ *  The gantry deliberately sits at x=55, well past the drum's far edge (the drum is centred at
+ *  x=30 with pitch radius 16, so its disc reaches x=46). An earlier layout straddled the drum
+ *  with uprights at z=+/-4, which put both posts *through* the drum's own disc; standing the
+ *  gantry beyond the drum instead keeps the hook's drop line clear of it, and matches how a
+ *  real winch runs its rope from a drum at the base up over the mast head. A slack rope line
+ *  from the drum's rim up to the beam shows that path. */
 export function createHoistProps(): Prop[] {
   const drumX = 30;
+  const drumR = 16;
+  const gantryX = 55;
   const timber = 0x8a6a3a;
   const darkTimber = 0x6b4f2a;
   const steel = 0x9aa0a8;
+  const rope = 0x6e6a5f;
+  const crate = 0x9c6b3f;
 
-  return [
-    // Base sill running along the ground from the crank (x=0) to under the drum.
-    { kind: "box", position: [drumX / 2, -6, 0], size: [drumX + 10, 2, 6], color: darkTimber, roughness: 0.85, metalness: 0.05 },
-    // Two gantry uprights straddling the drum.
-    { kind: "box", position: [drumX, 9, -4], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
-    { kind: "box", position: [drumX, 9, 4], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
-    // Top cross-beam bridging the uprights, over the drum.
-    { kind: "box", position: [drumX, 25, 0], size: [3, 2.5, 12], color: darkTimber, roughness: 0.8, metalness: 0.05 },
-    // Hanging hook line dropping from the beam (a thin vertical rod ending in a hook block).
-    { kind: "cylinder", position: [drumX, 12, 0], radius: 0.35, height: 24, color: steel, metalness: 0.7, roughness: 0.35 },
-    { kind: "box", position: [drumX, -1, 0], size: [2, 2, 2], color: steel, metalness: 0.7, roughness: 0.35 },
+  const beamY = 25;
+  const props: Prop[] = [
+    // Base sill running along the ground from the crank (x=0) out under the gantry.
+    { kind: "box", position: [gantryX / 2, -6, 0], size: [gantryX + 12, 2, 6], color: darkTimber, roughness: 0.85, metalness: 0.05 },
+    // Two gantry uprights, clear of the drum.
+    { kind: "box", position: [gantryX, 9, -5], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
+    { kind: "box", position: [gantryX, 9, 5], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
+    // Top cross-beam bridging the uprights.
+    { kind: "box", position: [gantryX, beamY, 0], size: [3, 2.5, 14], color: darkTimber, roughness: 0.8, metalness: 0.05 },
+    // The guide cable the hook rides, hanging the full travel from the beam down to the sill.
+    { kind: "cylinder", position: [gantryX, 11, 0], radius: 0.35, height: 26, color: steel, metalness: 0.7, roughness: 0.35 },
   ];
+
+  // The rope running from the drum's rim up to the beam head -- a static line showing where
+  // the hook's lift comes from. A cylinder's long axis is Y, so rotating about Z by
+  // -atan2(dx, dy) points it along the (dx, dy) run.
+  const ropeFrom: [number, number] = [drumX + drumR - 2, 0];
+  const ropeTo: [number, number] = [gantryX, beamY - 1.5];
+  const dx = ropeTo[0] - ropeFrom[0];
+  const dy = ropeTo[1] - ropeFrom[1];
+  props.push({
+    kind: "cylinder",
+    position: [(ropeFrom[0] + ropeTo[0]) / 2, (ropeFrom[1] + ropeTo[1]) / 2, 0],
+    radius: 0.3,
+    height: Math.hypot(dx, dy),
+    color: rope,
+    rotation: [0, 0, -Math.atan2(dx, dy)],
+    roughness: 0.8,
+    metalness: 0.1,
+  });
+
+  // Radial bars across the drum's face, attached to it, so the drum's rotation is visible --
+  // a bare pulley disc is rotationally symmetric and shows no motion on its own. The drum lies
+  // flat (axis Y), so the bars lie in the XZ plane and sweep about Y.
+  const barLen = drumR - 2;
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    props.push({
+      kind: "box",
+      position: [drumX + Math.cos(a) * (barLen / 2), 1.2, Math.sin(a) * (barLen / 2)],
+      size: [barLen, 0.6, 1.1],
+      color: steel,
+      rotation: [0, -a, 0],
+      metalness: 0.6,
+      roughness: 0.4,
+      attachTo: "기중기_대형풀리",
+    });
+  }
+
+  // The hook block and the crate slung under it, both hoisted by the drum's rope.
+  const lift = {
+    gear: "기중기_대형풀리",
+    radius: ROPE_RADIUS,
+    direction: [0, 1, 0] as [number, number, number],
+    travel: [0, HOOK_TRAVEL] as [number, number],
+  };
+  props.push({ kind: "box", position: [gantryX, -1, 0], size: [2, 2, 2], color: steel, metalness: 0.7, roughness: 0.35, windWith: lift });
+  props.push({ kind: "box", position: [gantryX, -3.5, 0], size: [4, 3, 4], color: crate, roughness: 0.8, metalness: 0.05, windWith: lift });
+
+  return props;
 }

@@ -67,16 +67,26 @@ export class SceneSync {
     gearId: string;
     basePos: THREE.Vector3;
   }> = [];
+  // Props hoisted by a rope spooling onto a rotating drum (see Prop.windWith).
+  private windingProps: Array<{
+    mesh: THREE.Mesh;
+    gearId: string;
+    basePos: THREE.Vector3;
+    dir: THREE.Vector3;
+    radius: number;
+    travel: [number, number];
+  }> = [];
   private previewId: string | null = null;
 
   constructor(private ctx: SceneContext) {}
 
   /** Replaces the current set of decorative (non-simulated) props -- a preset's physical
-   *  body (car chassis, clock bezel, etc.) -- with a new one. Props are static: they are
-   *  added to the scene once here and never touched by the per-frame `sync()` loop, since
-   *  they don't move, mesh, or rotate. Passing `[]` (the default) clears all props, which
-   *  is what every non-preset layout load does -- a plain saved/imported layout has no
-   *  body, just gears. */
+   *  body (car chassis, clock bezel, etc.) -- with a new one. Props never mesh or take part
+   *  in the simulation, but they are not all static: one that declares `attachTo`,
+   *  `slideWith` or `windWith` is recorded here and then re-posed every frame by `sync()`
+   *  from the gear it follows (spinning sails and wheel spokes, a sliding gate, a hoisted
+   *  hook). Passing `[]` (the default) clears all props, which is what every non-preset
+   *  layout load does -- a plain saved/imported layout has no body, just gears. */
   setProps(props: Prop[] = []): void {
     for (const mesh of this.propMeshes) {
       this.ctx.scene.remove(mesh);
@@ -86,6 +96,7 @@ export class SceneSync {
     this.propMeshes = [];
     this.attachedProps = [];
     this.slidingProps = [];
+    this.windingProps = [];
     for (const prop of props) {
       const mesh = buildPropMesh(prop);
       this.propMeshes.push(mesh);
@@ -102,6 +113,16 @@ export class SceneSync {
       }
       if (prop.slideWith) {
         this.slidingProps.push({ mesh, gearId: prop.slideWith, basePos: mesh.position.clone() });
+      }
+      if (prop.windWith) {
+        this.windingProps.push({
+          mesh,
+          gearId: prop.windWith.gear,
+          basePos: mesh.position.clone(),
+          dir: new THREE.Vector3(...prop.windWith.direction).normalize(),
+          radius: prop.windWith.radius,
+          travel: prop.windWith.travel,
+        });
       }
     }
   }
@@ -135,6 +156,21 @@ export class SceneSync {
       if (!gear) continue;
       axis.set(gear.axis[0], gear.axis[1], gear.axis[2]).normalize();
       p.mesh.position.copy(p.basePos).addScaledVector(axis, gear.linearPosition ?? 0);
+    }
+  }
+
+  /** Hoists each winding prop (see Prop.windWith) along its direction by the drum's
+   *  `rotation * radius` -- rope-on-drum kinematics -- clamped to the prop's travel range so
+   *  the hook parks at its stop instead of climbing out of the scene. Called every frame
+   *  from `sync()`. */
+  private updateWindingProps(byId: Map<string, GearInstance>): void {
+    if (this.windingProps.length === 0) return;
+    for (const p of this.windingProps) {
+      const gear = byId.get(p.gearId);
+      if (!gear) continue;
+      const [lo, hi] = p.travel;
+      const lift = Math.min(Math.max(gear.rotation * p.radius, lo), hi);
+      p.mesh.position.copy(p.basePos).addScaledVector(p.dir, lift);
     }
   }
 
@@ -189,6 +225,7 @@ export class SceneSync {
     const byId = new Map(gears.map((g) => [g.id, g] as const));
     this.updateAttachedProps(byId); // spin windmill sails, propeller blades, wheel spokes, etc.
     this.updateSlidingProps(byId); // slide a castle gate panel with its rack's linear travel
+    this.updateWindingProps(byId); // hoist the crane's hook on its drum's rope
     const currentLinkKeys = new Set(remoteLinks.map(remoteLinkKey));
     for (const [key, mesh] of this.linkMeshes) {
       if (!currentLinkKeys.has(key)) {

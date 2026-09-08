@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createCastlePreset, createCastleProps } from "../../../src/sim/presets/castle";
+import { createCastlePreset, createCastleProps, GATE_TRAVEL } from "../../../src/sim/presets/castle";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
@@ -101,6 +101,23 @@ describe("createCastlePreset", () => {
     // The winch handle itself has genuinely turned (not stalled at rotation 0).
     const finalHandle = layout.gears.find((g) => g.id === "성문_손잡이")!;
     expect(Math.abs(finalHandle.rotation)).toBeGreaterThan(0);
+  });
+
+  it("parks the gate at its travel limit instead of sailing out of the scene when cranked forever", () => {
+    let layout = createCastlePreset();
+    // 60 real seconds. Unlimited, the gate advances 3.5 units/s -> 210 units, on a gatehouse
+    // only 34 tall; the travelLimit must stop it at the fully-retracted position.
+    for (let i = 0; i < 3600; i++) {
+      const r = tick(layout, 1 / 60, 1);
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+    }
+    const gate = layout.gears.find((g) => g.id === "성문_도개교")!;
+    expect(gate.linearPosition).toBe(GATE_TRAVEL);
+
+    // The winch itself keeps turning -- the gate is at its stop, not the mechanism seized.
+    const handle = layout.gears.find((g) => g.id === "성문_손잡이")!;
+    expect(handle.angularVelocity).toBe(0.5);
+    expect(gate.broken).toBe(false);
   });
 
   it("supplies a portcullis gate panel that slides with the rack (slideWith), plus the stone gatehouse", () => {

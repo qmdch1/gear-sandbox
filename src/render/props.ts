@@ -31,6 +31,19 @@ interface PropCommon {
    *  only moving thing being the little toothed rack bar itself. Mutually exclusive with
    *  `attachTo` in practice (a rack doesn't rotate; a rotating gear has no linearPosition). */
   slideWith?: string;
+  /** If set, this prop hangs from a ROPE spooling onto a rotating drum: every frame
+   *  `SceneSync` moves it along `direction` by `drum.rotation * radius` -- the exact
+   *  kinematics of a rope winding onto a drum of that radius (the same angle x radius
+   *  relation `rotation.ts` already uses to drive a rack from a pinion). Purely kinematic,
+   *  like everything else in this sandbox: it says where the hook goes, never how much it
+   *  could lift. `travel` bounds it, so the hook stops at the headblock instead of climbing
+   *  through the gantry forever. */
+  windWith?: {
+    gear: string; // the winch drum
+    radius: number; // effective radius the rope spools at, in world units
+    direction: [number, number, number]; // world direction travelled per positive rotation
+    travel: [number, number]; // [min, max] world units of travel, clamped
+  };
 }
 
 export type Prop =

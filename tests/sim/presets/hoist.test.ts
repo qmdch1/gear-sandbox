@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createHoistPreset } from "../../../src/sim/presets/hoist";
+import { createHoistPreset, createHoistProps, HOOK_TRAVEL, ROPE_RADIUS } from "../../../src/sim/presets/hoist";
 import { evaluatePair, isOverlapping } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
@@ -111,5 +111,61 @@ describe("createHoistPreset", () => {
     for (const gear of layout.gears) {
       expect(Math.abs(gear.rotation)).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("createHoistProps", () => {
+  it("hoists the hook block and its crate on the drum's rope, bounded by the gantry", () => {
+    const props = createHoistProps();
+    const hoisted = props.filter((p) => p.windWith);
+    // The hook block and the crate slung under it both ride the drum's rope.
+    expect(hoisted).toHaveLength(2);
+    for (const p of hoisted) {
+      expect(p.windWith!.gear).toBe("기중기_대형풀리");
+      expect(p.windWith!.radius).toBe(ROPE_RADIUS);
+      expect(p.windWith!.direction).toEqual([0, 1, 0]); // straight up
+      expect(p.windWith!.travel).toEqual([0, HOOK_TRAVEL]);
+    }
+  });
+
+  it("makes the drum's own rotation visible with bars attached to it", () => {
+    const bars = createHoistProps().filter((p) => p.attachTo === "기중기_대형풀리");
+    expect(bars.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("stands the gantry clear of the drum's disc, so the posts don't run through it", () => {
+    // Drum: centre x=30, pitch radius (1*32)/2 = 16 -> its disc reaches x=46.
+    const uprights = createHoistProps().filter(
+      (p) => p.kind === "box" && p.size[1] > 20 && p.position[1] > 0,
+    );
+    expect(uprights.length).toBe(2);
+    for (const u of uprights) expect(u.position[0]).toBeGreaterThan(46);
+  });
+
+  it("lifts the hook at drumRotation * ROPE_RADIUS and parks it at the travel limit", () => {
+    let layout = createHoistPreset();
+    const dt = 1 / 60;
+    const liftAt = (rotation: number) => Math.min(Math.max(rotation * ROPE_RADIUS, 0), HOOK_TRAVEL);
+
+    // 10 real seconds: the drum turns at 0.25 rad/s, so 2.5 rad -> 7.5 units of lift, still
+    // short of the 22-unit stop.
+    for (let i = 0; i < 600; i++) {
+      const r = tick(layout, dt, 1);
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+    }
+    const drum10s = layout.gears.find((g) => g.id === "기중기_대형풀리")!;
+    expect(drum10s.rotation).toBeCloseTo(2.5, 6);
+    expect(liftAt(drum10s.rotation)).toBeCloseTo(7.5, 6);
+    expect(liftAt(drum10s.rotation)).toBeLessThan(HOOK_TRAVEL);
+
+    // 120 real seconds: the drum has turned far past the rope's usable length, and the hook
+    // sits at the headblock rather than climbing through the beam.
+    for (let i = 0; i < 6600; i++) {
+      const r = tick(layout, dt, 1);
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+    }
+    const drum120s = layout.gears.find((g) => g.id === "기중기_대형풀리")!;
+    expect(drum120s.rotation * ROPE_RADIUS).toBeGreaterThan(HOOK_TRAVEL); // unclamped it would overshoot
+    expect(liftAt(drum120s.rotation)).toBe(HOOK_TRAVEL);
   });
 });

@@ -37,6 +37,10 @@ function seedGear(
 
 const pitchRadius = (teeth: number, module: number) => (module * teeth) / 2;
 
+/** How far the portcullis can rise before it is fully retracted into the gatehouse. Shared by
+ *  the preset (as the rack's `travelLimit`) and its tests. */
+export const GATE_TRAVEL = 22;
+
 /** 성문 (castle drawbridge / portcullis gate) -- the simplest possible mechanism in this
  *  gallery: a winch handle (crank) that meshes a rack DIRECTLY, no separate pinion
  *  object, exactly the pattern `defaultLayout.ts`'s own rack demo already establishes
@@ -114,6 +118,11 @@ export function createCastlePreset(): LayoutState {
     seedGear("성문_손잡이", "crank", [handleX, 0, 0], [1, 0, 0], 14, 1, 0.5),
     seedGear("성문_도개교", "rack", [gateX, 0, 0], [0, 1, 0], 8, 1),
   ];
+  // The gate can only rise until it is fully retracted into the gatehouse -- the lintel sits
+  // at y=20, so 22 units of travel tucks the gate up out of the archway and no further.
+  // Without this the winch is cranked forever and the gate sails 210 units into the sky
+  // within a minute (the whole gatehouse is only 34 tall).
+  gears[1].travelLimit = [0, GATE_TRAVEL];
 
   return { gears, remoteLinks: [] };
 }
