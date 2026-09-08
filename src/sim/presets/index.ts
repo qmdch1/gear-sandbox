@@ -15,6 +15,9 @@ import { createFerrisWheelPreset, createFerrisWheelProps } from "./ferriswheel";
 import { createCarouselPreset, createCarouselProps } from "./carousel";
 import { createWellPumpPreset, createWellPumpProps } from "./wellpump";
 import { createConveyorPreset, createConveyorProps } from "./conveyor";
+import { createTowerCranePreset, createTowerCraneProps } from "./towercrane";
+import { createMusicBoxPreset, createMusicBoxProps } from "./musicbox";
+import { createClockTowerPreset, createClockTowerProps } from "./clocktower";
 
 export { createClockPreset, createClockProps } from "./clock";
 export { createCarPreset, createCarProps } from "./car";
@@ -31,6 +34,9 @@ export { createFerrisWheelPreset, createFerrisWheelProps } from "./ferriswheel";
 export { createCarouselPreset, createCarouselProps } from "./carousel";
 export { createWellPumpPreset, createWellPumpProps } from "./wellpump";
 export { createConveyorPreset, createConveyorProps } from "./conveyor";
+export { createTowerCranePreset, createTowerCraneProps } from "./towercrane";
+export { createMusicBoxPreset, createMusicBoxProps } from "./musicbox";
+export { createClockTowerPreset, createClockTowerProps } from "./clocktower";
 
 export interface PresetEntry {
   id: string;
@@ -138,5 +144,23 @@ export const PRESETS: PresetEntry[] = [
     label: "컨베이어 (같은 크기 두 풀리를 벨트로 묶어 화물을 실어 나르는 이송기)",
     build: createConveyorPreset,
     buildProps: createConveyorProps,
+  },
+  {
+    id: "towercrane",
+    label: "타워크레인 (선회기어로 지브를 돌리고 권상드럼으로 후크를 올리는 2계통 크레인)",
+    build: createTowerCranePreset,
+    buildProps: createTowerCraneProps,
+  },
+  {
+    id: "musicbox",
+    label: "오르골 (태엽이 감속휠로 핀 실린더를 돌리고 조속기가 8배로 도는 소리상자)",
+    build: createMusicBoxPreset,
+    buildProps: createMusicBoxProps,
+  },
+  {
+    id: "clocktower",
+    label: "시계탑 (시침·분침이 서로 다른 휠에 달려 4:1로 도는 벽돌탑 + 흔들리는 진자)",
+    build: createClockTowerPreset,
+    buildProps: createClockTowerProps,
   },
 ];
