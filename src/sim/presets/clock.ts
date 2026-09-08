@@ -123,10 +123,10 @@ export function createClockProps(): Prop[] {
     // Backplate disc sitting just behind (below) the dial gear, so the movement reads
     // against a solid face instead of the open grid. Cylinder default axis is Y, which is
     // exactly the flat-disc orientation we want here (no rotation).
-    { kind: "cylinder", position: [HOUR_X, -0.8, 0], radius: bezelR + 1, height: 0.6, color: backplate, roughness: 0.85, metalness: 0.1 },
+    { kind: "cylinder", position: [HOUR_X, -0.8, 0], radius: bezelR + 1, height: 0.6, color: backplate, texture: "metal", roughness: 0.85, metalness: 0.1 },
     // Brass bezel ring around the dial. A torus defaults to the XY plane; rotate 90° about
     // X to lay it flat in XZ, encircling the hour wheel.
-    { kind: "ring", position: [HOUR_X, 0.4, 0], radius: bezelR, tube: 1.2, color: brass, rotation: [Math.PI / 2, 0, 0], metalness: 0.7, roughness: 0.3 },
+    { kind: "ring", position: [HOUR_X, 0.4, 0], radius: bezelR, tube: 1.2, color: brass, texture: "metal", rotation: [Math.PI / 2, 0, 0], metalness: 0.7, roughness: 0.3 },
   ];
 
   // Twelve hour tick marks around the bezel, every 30°, pointing radially. A box's long
@@ -142,6 +142,7 @@ export function createClockProps(): Prop[] {
       position: [HOUR_X + Math.cos(a) * tickRingR, 0.5, Math.sin(a) * tickRingR],
       size: [cardinal ? 2.6 : 1.6, 0.5, cardinal ? 0.9 : 0.6],
       color: tickColor,
+      texture: "metal",
       rotation: [0, -a, 0],
       metalness: 0.3,
       roughness: 0.6,
@@ -160,6 +161,7 @@ export function createClockProps(): Prop[] {
     position: [HOUR_X + handLen / 2, 1.1, 0],
     size: [handLen, 0.7, 0.9],
     color: handColor,
+    texture: "metal",
     metalness: 0.4,
     roughness: 0.4,
     attachTo: "시계_시침휠",
@@ -171,6 +173,7 @@ export function createClockProps(): Prop[] {
     position: [HOUR_X - 2, 1.1, 0],
     size: [4, 0.7, 0.9],
     color: handColor,
+    texture: "metal",
     metalness: 0.4,
     roughness: 0.4,
     attachTo: "시계_시침휠",
@@ -182,6 +185,7 @@ export function createClockProps(): Prop[] {
     radius: 1.4,
     height: 0.8,
     color: 0xc9a227,
+    texture: "metal",
     metalness: 0.7,
     roughness: 0.3,
     attachTo: "시계_시침휠",

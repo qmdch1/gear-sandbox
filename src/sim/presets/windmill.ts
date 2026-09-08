@@ -83,9 +83,9 @@ export function createWindmillProps(): Prop[] {
   const props: Prop[] = [
     // Tower: a big cylinder from the ground up to just under the cap. (A cylinder with
     // equal top/bottom radius; the taper is faked by a slightly narrower cap on top.)
-    { kind: "cylinder", position: [0, 10, 0], radius: 7, height: 32, color: stone, radialSegments: 24, roughness: 0.92, metalness: 0.03 },
+    { kind: "cylinder", position: [0, 10, 0], radius: 7, height: 32, color: stone, texture: "stone", radialSegments: 24, roughness: 0.92, metalness: 0.03 },
     // Cap sitting on top of the tower, where the sail hub is mounted.
-    { kind: "cylinder", position: [0, 27, 0], radius: 5.5, height: 6, color: cap, radialSegments: 24, roughness: 0.85, metalness: 0.05 },
+    { kind: "cylinder", position: [0, 27, 0], radius: 5.5, height: 6, color: cap, texture: "wood", radialSegments: 24, roughness: 0.85, metalness: 0.05 },
   ];
 
   // Four sails fanning off the hub, in the XY plane (facing +Z toward the viewer). Each
@@ -99,7 +99,7 @@ export function createWindmillProps(): Prop[] {
       kind: "box",
       position: [Math.cos(a) * reach, SAILS_Y + Math.sin(a) * reach, SAILS_Z + 1.5],
       size: [22, 1.4, 0.6],
-      color: sailFrame,
+      color: sailFrame, texture: "wood",
       rotation: [0, 0, a],
       metalness: 0.1,
       roughness: 0.7,
@@ -110,7 +110,7 @@ export function createWindmillProps(): Prop[] {
       kind: "box",
       position: [Math.cos(a) * reach - Math.sin(a) * 2.5, SAILS_Y + Math.sin(a) * reach + Math.cos(a) * 2.5, SAILS_Z + 1.5],
       size: [18, 4, 0.3],
-      color: sail,
+      color: sail, texture: "fabric",
       rotation: [0, 0, a],
       metalness: 0.05,
       roughness: 0.8,

@@ -37,6 +37,7 @@ export function wheelSpokesX(opts: {
       // Long axis is the box's local Y; rotating about X by `a` points local Y along (0,dY,dZ).
       size: [thickness, radius, thickness],
       color,
+      texture: "metal",
       rotation: [a, 0, 0],
       attachTo,
       metalness: 0.55,
@@ -50,6 +51,7 @@ export function wheelSpokesX(opts: {
     radius: Math.max(thickness * 1.6, radius * 0.14),
     height: thickness * 1.4,
     color,
+    texture: "metal",
     rotation: [0, 0, Math.PI / 2], // lay the default-Y cylinder along X (the wheel axis)
     attachTo,
     metalness: 0.6,

@@ -177,14 +177,14 @@ export function createCarProps(): Prop[] {
     ...spokes,
     // Axle rods running left<->right through each wheel pair (cylinders default to the Y
     // axis, so rotate 90° about Z to lay them along X).
-    { kind: "cylinder", position: [midX, WHEEL_Y, 0], radius: 0.7, height: TRACK_X + 2, color: rod, rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
-    { kind: "cylinder", position: [midX, WHEEL_Y, -WHEELBASE_Z], radius: 0.7, height: TRACK_X + 2, color: rod, rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
+    { kind: "cylinder", position: [midX, WHEEL_Y, 0], radius: 0.7, height: TRACK_X + 2, color: rod, texture: "metal", rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
+    { kind: "cylinder", position: [midX, WHEEL_Y, -WHEELBASE_Z], radius: 0.7, height: TRACK_X + 2, color: rod, texture: "metal", rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
     // Side rails running front<->rear, linking the axle ends into a chassis rectangle.
-    { kind: "box", position: [0, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame },
-    { kind: "box", position: [TRACK_X, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame },
+    { kind: "box", position: [0, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame, texture: "metal" },
+    { kind: "box", position: [TRACK_X, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame, texture: "metal" },
     // Lower body shell sitting above the axles.
-    { kind: "box", position: [midX, WHEEL_Y + 5, midZ], size: [TRACK_X - 3, 5, WHEELBASE_Z + 6], color: body, metalness: 0.55, roughness: 0.35 },
+    { kind: "box", position: [midX, WHEEL_Y + 5, midZ], size: [TRACK_X - 3, 5, WHEELBASE_Z + 6], color: body, texture: "metal", metalness: 0.55, roughness: 0.35 },
     // Cabin / greenhouse, set back toward the rear and narrower.
-    { kind: "box", position: [midX, WHEEL_Y + 9.5, midZ - 3], size: [TRACK_X - 7, 4.5, WHEELBASE_Z - 4], color: cabin, metalness: 0.55, roughness: 0.35 },
+    { kind: "box", position: [midX, WHEEL_Y + 9.5, midZ - 3], size: [TRACK_X - 7, 4.5, WHEELBASE_Z - 4], color: cabin, texture: "metal", metalness: 0.55, roughness: 0.35 },
   ];
 }

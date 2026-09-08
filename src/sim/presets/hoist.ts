@@ -147,14 +147,14 @@ export function createHoistProps(): Prop[] {
   const beamY = 25;
   const props: Prop[] = [
     // Base sill running along the ground from the crank (x=0) out under the gantry.
-    { kind: "box", position: [gantryX / 2, -6, 0], size: [gantryX + 12, 2, 6], color: darkTimber, roughness: 0.85, metalness: 0.05 },
+    { kind: "box", position: [gantryX / 2, -6, 0], size: [gantryX + 12, 2, 6], color: darkTimber, texture: "wood", roughness: 0.85, metalness: 0.05 },
     // Two gantry uprights, clear of the drum.
-    { kind: "box", position: [gantryX, 9, -5], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
-    { kind: "box", position: [gantryX, 9, 5], size: [2, 34, 2], color: timber, roughness: 0.8, metalness: 0.05 },
+    { kind: "box", position: [gantryX, 9, -5], size: [2, 34, 2], color: timber, texture: "wood", roughness: 0.8, metalness: 0.05 },
+    { kind: "box", position: [gantryX, 9, 5], size: [2, 34, 2], color: timber, texture: "wood", roughness: 0.8, metalness: 0.05 },
     // Top cross-beam bridging the uprights.
-    { kind: "box", position: [gantryX, beamY, 0], size: [3, 2.5, 14], color: darkTimber, roughness: 0.8, metalness: 0.05 },
+    { kind: "box", position: [gantryX, beamY, 0], size: [3, 2.5, 14], color: darkTimber, texture: "wood", roughness: 0.8, metalness: 0.05 },
     // The guide cable the hook rides, hanging the full travel from the beam down to the sill.
-    { kind: "cylinder", position: [gantryX, 11, 0], radius: 0.35, height: 26, color: steel, metalness: 0.7, roughness: 0.35 },
+    { kind: "cylinder", position: [gantryX, 11, 0], radius: 0.35, height: 26, color: steel, texture: "metal", metalness: 0.7, roughness: 0.35 },
   ];
 
   // The rope running from the drum's rim up to the beam head -- a static line showing where
@@ -169,7 +169,7 @@ export function createHoistProps(): Prop[] {
     position: [(ropeFrom[0] + ropeTo[0]) / 2, (ropeFrom[1] + ropeTo[1]) / 2, 0],
     radius: 0.3,
     height: Math.hypot(dx, dy),
-    color: rope,
+    color: rope, texture: "fabric",
     rotation: [0, 0, -Math.atan2(dx, dy)],
     roughness: 0.8,
     metalness: 0.1,
@@ -185,7 +185,7 @@ export function createHoistProps(): Prop[] {
       kind: "box",
       position: [drumX + Math.cos(a) * (barLen / 2), 1.2, Math.sin(a) * (barLen / 2)],
       size: [barLen, 0.6, 1.1],
-      color: steel,
+      color: steel, texture: "metal",
       rotation: [0, -a, 0],
       metalness: 0.6,
       roughness: 0.4,
@@ -200,8 +200,8 @@ export function createHoistProps(): Prop[] {
     direction: [0, 1, 0] as [number, number, number],
     travel: [0, HOOK_TRAVEL] as [number, number],
   };
-  props.push({ kind: "box", position: [gantryX, -1, 0], size: [2, 2, 2], color: steel, metalness: 0.7, roughness: 0.35, windWith: lift });
-  props.push({ kind: "box", position: [gantryX, -3.5, 0], size: [4, 3, 4], color: crate, roughness: 0.8, metalness: 0.05, windWith: lift });
+  props.push({ kind: "box", position: [gantryX, -1, 0], size: [2, 2, 2], color: steel, texture: "metal", metalness: 0.7, roughness: 0.35, windWith: lift });
+  props.push({ kind: "box", position: [gantryX, -3.5, 0], size: [4, 3, 4], color: crate, texture: "wood", roughness: 0.8, metalness: 0.05, windWith: lift });
 
   return props;
 }

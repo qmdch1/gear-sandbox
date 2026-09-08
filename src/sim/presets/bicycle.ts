@@ -116,6 +116,7 @@ export function createBicycleProps(): Prop[] {
       position: [0, (from[1] + to[1]) / 2, (from[2] + to[2]) / 2],
       size: [thickness, len, thickness],
       color,
+      texture: "metal",
       // A box's long axis is Y; rotate about X by -angle so it points along the (dy,dz) vector.
       rotation: [-angle, 0, 0],
       metalness: 0.4,
@@ -126,9 +127,9 @@ export function createBicycleProps(): Prop[] {
   return [
     // Tires (torus) + rims, front and rear.
     { kind: "ring", position: rearHub, radius: WHEEL_R, tube: 1.1, color: tire, rotation: [0, Math.PI / 2, 0], roughness: 0.8, metalness: 0.05 },
-    { kind: "ring", position: rearHub, radius: WHEEL_R - 1.2, tube: 0.35, color: rim, rotation: [0, Math.PI / 2, 0], metalness: 0.6, roughness: 0.35 },
+    { kind: "ring", position: rearHub, radius: WHEEL_R - 1.2, tube: 0.35, color: rim, texture: "metal", rotation: [0, Math.PI / 2, 0], metalness: 0.6, roughness: 0.35 },
     { kind: "ring", position: frontHub, radius: WHEEL_R, tube: 1.1, color: tire, rotation: [0, Math.PI / 2, 0], roughness: 0.8, metalness: 0.05 },
-    { kind: "ring", position: frontHub, radius: WHEEL_R - 1.2, tube: 0.35, color: rim, rotation: [0, Math.PI / 2, 0], metalness: 0.6, roughness: 0.35 },
+    { kind: "ring", position: frontHub, radius: WHEEL_R - 1.2, tube: 0.35, color: rim, texture: "metal", rotation: [0, Math.PI / 2, 0], metalness: 0.6, roughness: 0.35 },
     // Diamond frame: bottom bracket to rear hub (chainstay), BB to seat top (seat tube),
     // seat top to rear hub (seatstay), BB to head top (down tube), seat top to head top
     // (top tube), head top to front hub (fork).
@@ -139,8 +140,8 @@ export function createBicycleProps(): Prop[] {
     tube(seatTop, headTop),
     tube(headTop, frontHub, 0.7),
     // Seat and handlebars.
-    { kind: "box", position: [0, seatTop[1] + 1, seatTop[2] - 1], size: [2, 0.8, 5], color: seatCol, roughness: 0.6, metalness: 0.1 },
-    { kind: "box", position: [0, headTop[1] + 1, headTop[2]], size: [7, 0.8, 1], color: seatCol, roughness: 0.6, metalness: 0.1 },
+    { kind: "box", position: [0, seatTop[1] + 1, seatTop[2] - 1], size: [2, 0.8, 5], color: seatCol, texture: "fabric", roughness: 0.6, metalness: 0.1 },
+    { kind: "box", position: [0, headTop[1] + 1, headTop[2]], size: [7, 0.8, 1], color: seatCol, texture: "fabric", roughness: 0.6, metalness: 0.1 },
     // Spokes attached to each wheel hub, so the wheels visibly turn (a plain torus tire is
     // rotationally symmetric and would otherwise show no motion). Radius sits just inside the
     // rim.

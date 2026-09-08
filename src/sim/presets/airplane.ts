@@ -72,13 +72,13 @@ export function createAirplaneProps(): Prop[] {
   const props: Prop[] = [
     // Fuselage: a long cylinder lying along Z (rotate 90° about X to lay the default-Y
     // cylinder down along Z). Runs from the nose (z=NOSE_Z) back past the tail.
-    { kind: "cylinder", position: [0, PROP_Y, -2], radius: 3, height: 38, color: body, rotation: [Math.PI / 2, 0, 0], metalness: 0.5, roughness: 0.45 },
+    { kind: "cylinder", position: [0, PROP_Y, -2], radius: 3, height: 38, color: body, texture: "metal", rotation: [Math.PI / 2, 0, 0], metalness: 0.5, roughness: 0.45 },
     // Main wings: a wide, thin box spanning left-right (X), mid-fuselage.
-    { kind: "box", position: [0, PROP_Y, 2], size: [40, 1, 8], color: wing, metalness: 0.4, roughness: 0.5 },
+    { kind: "box", position: [0, PROP_Y, 2], size: [40, 1, 8], color: wing, texture: "metal", metalness: 0.4, roughness: 0.5 },
     // Horizontal tailplane at the rear.
-    { kind: "box", position: [0, PROP_Y, -18], size: [16, 0.8, 5], color: wing, metalness: 0.4, roughness: 0.5 },
+    { kind: "box", position: [0, PROP_Y, -18], size: [16, 0.8, 5], color: wing, texture: "metal", metalness: 0.4, roughness: 0.5 },
     // Vertical tail fin at the rear (a thin box standing up in the XZ... i.e. spanning Y and Z).
-    { kind: "box", position: [0, PROP_Y + 4, -19], size: [0.8, 8, 6], color: accent, metalness: 0.4, roughness: 0.5 },
+    { kind: "box", position: [0, PROP_Y + 4, -19], size: [0.8, 8, 6], color: accent, texture: "metal", metalness: 0.4, roughness: 0.5 },
   ];
 
   // Four propeller blades fanning off the hub at the nose, in the XY plane (the prop disc
@@ -89,7 +89,7 @@ export function createAirplaneProps(): Prop[] {
       kind: "box",
       position: [Math.cos(a) * 4.5, PROP_Y + Math.sin(a) * 4.5, NOSE_Z + 1],
       size: [9, 1.2, 0.4],
-      color: accent,
+      color: accent, texture: "metal",
       rotation: [0, 0, a],
       metalness: 0.5,
       roughness: 0.4,

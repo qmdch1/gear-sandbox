@@ -147,12 +147,12 @@ export function createCastleProps(): Prop[] {
 
   const props: Prop[] = [
     // Left and right towers flanking the gate.
-    { kind: "box", position: [gateX - towerHalfGap, 6, 0], size: [4, 34, 4], color: stone, roughness: 0.9, metalness: 0.05 },
-    { kind: "box", position: [gateX + towerHalfGap, 6, 0], size: [4, 34, 4], color: stone, roughness: 0.9, metalness: 0.05 },
+    { kind: "box", position: [gateX - towerHalfGap, 6, 0], size: [4, 34, 4], color: stone, texture: "stone", roughness: 0.9, metalness: 0.05 },
+    { kind: "box", position: [gateX + towerHalfGap, 6, 0], size: [4, 34, 4], color: stone, texture: "stone", roughness: 0.9, metalness: 0.05 },
     // Lintel / archway across the top, spanning between the towers.
-    { kind: "box", position: [gateX, 20, 0], size: [2 * towerHalfGap + 4, 3.5, 4], color: darkStone, roughness: 0.9, metalness: 0.05 },
+    { kind: "box", position: [gateX, 20, 0], size: [2 * towerHalfGap + 4, 3.5, 4], color: darkStone, texture: "stone", roughness: 0.9, metalness: 0.05 },
     // Threshold wall at the base, so the gate has something to seat down into.
-    { kind: "box", position: [gateX, -6, 0], size: [2 * towerHalfGap + 4, 3, 4], color: darkStone, roughness: 0.9, metalness: 0.05 },
+    { kind: "box", position: [gateX, -6, 0], size: [2 * towerHalfGap + 4, 3, 4], color: darkStone, texture: "stone", roughness: 0.9, metalness: 0.05 },
   ];
 
   // Crenellations (merlons) along the top of the lintel, for a castle silhouette.
@@ -161,7 +161,7 @@ export function createCastleProps(): Prop[] {
       kind: "box",
       position: [gateX + i * 4, 23, 0],
       size: [2, 3, 4],
-      color: stone,
+      color: stone, texture: "stone",
       roughness: 0.9,
       metalness: 0.05,
     });
@@ -179,7 +179,7 @@ export function createCastleProps(): Prop[] {
     kind: "box",
     position: [gateX, 4, 0],
     size: [openW, 22, 1.2],
-    color: wood,
+    color: wood, texture: "wood",
     roughness: 0.85,
     metalness: 0.08,
     slideWith: "성문_도개교",
@@ -189,7 +189,7 @@ export function createCastleProps(): Prop[] {
       kind: "box",
       position: [gateX, bandY, 0.8],
       size: [openW + 0.6, 1.4, 0.5],
-      color: iron,
+      color: iron, texture: "rust",
       roughness: 0.6,
       metalness: 0.5,
       slideWith: "성문_도개교",
