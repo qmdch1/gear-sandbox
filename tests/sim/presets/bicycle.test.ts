@@ -5,13 +5,15 @@ import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
 
 describe("createBicyclePreset", () => {
-  it("builds pedals+chainring (coincident), a rear cog+hub (coincident), and one drive chain", () => {
+  it("builds pedals+chainring (coincident), a rear cog+hub, a front hub+motor, and one drive chain", () => {
     const layout = createBicyclePreset();
     expect(layout.gears.map((g) => g.id)).toEqual([
       "자전거_페달",
       "자전거_체인링",
       "자전거_뒷스프로킷",
       "자전거_뒷바퀴허브",
+      "자전거_앞바퀴모터",
+      "자전거_앞바퀴허브",
     ]);
     expect(layout.remoteLinks).toEqual([
       { a: "자전거_체인링", b: "자전거_뒷스프로킷", kind: "chain" },
@@ -22,6 +24,18 @@ describe("createBicyclePreset", () => {
     expect(pedal.type).toBe("crank");
     expect(chainring.type).toBe("sprocket");
     expect(chainring.position).toEqual(pedal.position); // coincident
+  });
+
+  it("spins the front wheel hub at the same 2.0 speed as the rear wheel (both wheels roll together)", () => {
+    let layout = createBicyclePreset();
+    for (let i = 0; i < 120; i++) {
+      const r = tick(layout, 1 / 60, 1);
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+    }
+    const front = layout.gears.find((g) => g.id === "자전거_앞바퀴허브")!;
+    const rear = layout.gears.find((g) => g.id === "자전거_뒷바퀴허브")!;
+    expect(front.angularVelocity).toBeCloseTo(2.0, 9);
+    expect(front.angularVelocity).toBeCloseTo(rear.angularVelocity, 9); // both wheels same speed
   });
 
   it("forms coincident couplings (pedal<->chainring, rear cog<->hub) and no overlaps anywhere", () => {

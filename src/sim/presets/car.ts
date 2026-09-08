@@ -1,6 +1,7 @@
 import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
 import type { Prop } from "../../render/props";
+import { wheelSpokesX } from "./wheels";
 
 /** Builds one gear instance for a preset layout. Mirrors `defaultLayout.ts`'s own
  *  `seedGear` helper exactly (same "freshly placed, caller-supplied stable id" shape) --
@@ -157,8 +158,23 @@ export function createCarProps(): Prop[] {
   const rod = 0x8b929c; // steel axle rod
   const body = 0xc0392b; // car-red body shell
   const cabin = 0x9a2f24; // slightly darker cabin
+  const spoke = 0xe8ecf0; // bright spokes, so the wheels' spin is actually visible
+
+  // The four wheels are pulley gears -- they already spin, but a pulley disc is near
+  // rotationally symmetric, so the spin doesn't read. Bright spokes attached to each wheel
+  // gear make it obvious the wheels are turning. Wheel pitch radius = (1*16)/2 = 8.
+  const wheels: Array<{ id: string; center: [number, number, number] }> = [
+    { id: "자동차_좌앞바퀴", center: [0, WHEEL_Y, 0] },
+    { id: "자동차_우앞바퀴", center: [TRACK_X, WHEEL_Y, 0] },
+    { id: "자동차_좌뒷바퀴", center: [0, WHEEL_Y, -WHEELBASE_Z] },
+    { id: "자동차_우뒷바퀴", center: [TRACK_X, WHEEL_Y, -WHEELBASE_Z] },
+  ];
+  const spokes = wheels.flatMap((w) =>
+    wheelSpokesX({ attachTo: w.id, center: w.center, radius: 8, count: 6, thickness: 0.6, color: spoke }),
+  );
 
   return [
+    ...spokes,
     // Axle rods running left<->right through each wheel pair (cylinders default to the Y
     // axis, so rotate 90° about Z to lay them along X).
     { kind: "cylinder", position: [midX, WHEEL_Y, 0], radius: 0.7, height: TRACK_X + 2, color: rod, rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },

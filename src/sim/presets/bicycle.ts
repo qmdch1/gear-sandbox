@@ -1,6 +1,7 @@
 import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
 import type { Prop } from "../../render/props";
+import { wheelSpokesX } from "./wheels";
 
 /** Builds one gear instance for a preset layout. Mirrors the other preset modules'
  *  self-contained `seedGear` helper exactly. */
@@ -53,9 +54,15 @@ const FRONT_Z = 14;
  *  "chain"` remote link), so with a 28-tooth chainring and a 14-tooth rear cog the rear
  *  wheel turns at exactly 2x the pedal speed -- the honest, verifiable claim, matching a
  *  real bike where a big front ring and small rear cog gear UP for speed. Same direction
- *  (chain/coupling edges never reverse sign). The front wheel is decorative only (a real
- *  bike's front wheel isn't driven), so it lives entirely in the props. */
+ *  (chain/coupling edges never reverse sign).
+ *
+ *  The front wheel isn't driven by the chain on a real bike -- it just rolls -- but for the
+ *  wheels to visibly turn together here it's given its own hub (a pulley) spun by a small
+ *  hidden crank inside it, set to the same 2.0 speed the rear wheel reaches, so both wheels
+ *  roll at a matching rate. That little front crank is a stand-in for "the ground rolling the
+ *  front wheel," kept its own separate (fully powered) component so diagnostics stay clean. */
 export function createBicyclePreset(): LayoutState {
+  const REAR_WHEEL_SPEED = 1.0 * (28 / 14); // pedal 1.0 stepped up 2x through the chain = 2.0
   const gears: GearInstance[] = [
     // Pedals (the rider's input) at the bottom bracket, rolling about X.
     seedGear("자전거_페달", "crank", [0, BB_Y, 0], [1, 0, 0], 10, 0.7, 1.0),
@@ -65,6 +72,11 @@ export function createBicyclePreset(): LayoutState {
     seedGear("자전거_뒷스프로킷", "sprocket", [0, HUB_Y, REAR_Z], [1, 0, 0], 14, 0.6),
     // Rear wheel hub coincident with the rear cog -> the wheel spins with it.
     seedGear("자전거_뒷바퀴허브", "pulley", [0, HUB_Y, REAR_Z], [1, 0, 0], 8, 1),
+    // Front wheel: a tiny hidden crank driving a coincident hub, spun at the rear wheel's
+    // speed so both wheels roll together. Small teeth so the crank's handle stays inside the
+    // tire rather than poking out.
+    seedGear("자전거_앞바퀴모터", "crank", [0, HUB_Y, FRONT_Z], [1, 0, 0], 6, 0.5, REAR_WHEEL_SPEED),
+    seedGear("자전거_앞바퀴허브", "pulley", [0, HUB_Y, FRONT_Z], [1, 0, 0], 8, 1),
   ];
 
   return {
@@ -129,5 +141,10 @@ export function createBicycleProps(): Prop[] {
     // Seat and handlebars.
     { kind: "box", position: [0, seatTop[1] + 1, seatTop[2] - 1], size: [2, 0.8, 5], color: seatCol, roughness: 0.6, metalness: 0.1 },
     { kind: "box", position: [0, headTop[1] + 1, headTop[2]], size: [7, 0.8, 1], color: seatCol, roughness: 0.6, metalness: 0.1 },
+    // Spokes attached to each wheel hub, so the wheels visibly turn (a plain torus tire is
+    // rotationally symmetric and would otherwise show no motion). Radius sits just inside the
+    // rim.
+    ...wheelSpokesX({ attachTo: "자전거_뒷바퀴허브", center: rearHub, radius: WHEEL_R - 1, count: 8, thickness: 0.4, color: rim }),
+    ...wheelSpokesX({ attachTo: "자전거_앞바퀴허브", center: frontHub, radius: WHEEL_R - 1, count: 8, thickness: 0.4, color: rim }),
   ];
 }
