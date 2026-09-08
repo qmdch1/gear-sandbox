@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getProceduralTexture, type TextureKind } from "./textures";
 
 /** A decorative, NON-SIMULATED scene prop. Props exist purely to give a preset a
  *  recognizable physical body -- a car's chassis frame, a clock's bezel and tick marks,
@@ -44,6 +45,33 @@ interface PropCommon {
     direction: [number, number, number]; // world direction travelled per positive rotation
     travel: [number, number]; // [min, max] world units of travel, clamped
   };
+  /** Procedural surface finish (see `render/textures.ts`). The pattern is greyscale and is
+   *  multiplied against `color`, so "wood" on a pale colour reads as pine and on a dark one
+   *  as walnut; the same pattern doubles as a bump map so the grain catches the key light.
+   *  Omit for a plain flat-coloured surface. */
+  texture?: TextureKind;
+  /** How many times the texture tiles across this prop, [u, v]. Bigger numbers = finer
+   *  grain. Defaults to [2, 2]. */
+  textureRepeat?: [number, number];
+  /** If set, this prop is part of a CRANK-SLIDER LINKAGE driven by `gear`: a pin fixed at
+   *  `crankRadius` from the gear's centre sweeps round with it, a rigid rod of `rodLength`
+   *  connects that pin to a slider, and the slider is constrained to the line through the
+   *  gear's centre along `slideAxis`. This is the mechanism behind a piston engine, a
+   *  locomotive's driving rods and a pumpjack -- rotation converted into reciprocating
+   *  straight-line motion, the one linkage this sandbox could not previously express.
+   *
+   *  `role` says which member THIS prop is: the `rod` is re-posed to span pin -> slider each
+   *  frame (its authored length should equal `rodLength`, and its long axis must be local Y),
+   *  the `slider` slides along the axis, and a `pin` simply rides the crank pin (a crank
+   *  throw, a wrist boss). `rodLength` must exceed `crankRadius` or the linkage cannot
+   *  close; `slideAxis` must not be parallel to the gear's own axis. */
+  linkTo?: {
+    gear: string;
+    crankRadius: number;
+    rodLength: number;
+    slideAxis: [number, number, number];
+    role: "rod" | "slider" | "pin";
+  };
 }
 
 export type Prop =
@@ -63,6 +91,16 @@ export type Prop =
       radius: number;
       /** Thickness of the ring's tube. */
       tube: number;
+    })
+  | (PropCommon & {
+      kind: "sphere";
+      radius: number;
+    })
+  | (PropCommon & {
+      kind: "cone";
+      radius: number;
+      height: number;
+      radialSegments?: number;
     });
 
 function applyCommon(
@@ -78,6 +116,24 @@ function applyCommon(
     material.transparent = true;
     material.opacity = prop.opacity;
   }
+  if (prop.texture) {
+    // Shared, cached texture -- null wherever there is no canvas backend (jsdom, headless),
+    // in which case the prop just stays flat-coloured. The clone gives this material its own
+    // repeat setting without disturbing other props using the same cached pattern.
+    const base = getProceduralTexture(prop.texture);
+    if (base) {
+      const [u, v] = prop.textureRepeat ?? [2, 2];
+      const map = base.clone();
+      map.needsUpdate = true;
+      map.repeat.set(u, v);
+      material.map = map;
+      material.bumpMap = map;
+      material.bumpScale = 0.35;
+      material.needsUpdate = true;
+    }
+  }
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
   return mesh;
 }
 
@@ -96,6 +152,14 @@ export function buildPropMesh(prop: Prop): THREE.Mesh {
     }
     case "ring": {
       const geo = new THREE.TorusGeometry(prop.radius, prop.tube, 16, 48);
+      return applyCommon(new THREE.Mesh(geo, material), prop, material);
+    }
+    case "sphere": {
+      const geo = new THREE.SphereGeometry(prop.radius, 32, 20);
+      return applyCommon(new THREE.Mesh(geo, material), prop, material);
+    }
+    case "cone": {
+      const geo = new THREE.ConeGeometry(prop.radius, prop.height, prop.radialSegments ?? 24);
       return applyCommon(new THREE.Mesh(geo, material), prop, material);
     }
   }

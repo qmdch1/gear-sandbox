@@ -29,6 +29,70 @@ export function spinAttachedPose(
   outQuat.copy(spin).multiply(baseQuat);
 }
 
+/** An orthonormal pair spanning the plane perpendicular to `axis`, chosen deterministically
+ *  (seeded from whichever world axis `axis` is least aligned with) so a crank pin starts at a
+ *  stable, reproducible clock position rather than one that flips between runs. */
+function planeBasis(axis: THREE.Vector3, outU: THREE.Vector3, outV: THREE.Vector3): void {
+  const a = axis.clone().normalize();
+  const seed =
+    Math.abs(a.x) < 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+  outU.copy(seed).addScaledVector(a, -seed.dot(a)).normalize();
+  outV.crossVectors(a, outU).normalize();
+}
+
+/** Solves a planar CRANK-SLIDER linkage and reports where each member sits.
+ *
+ *  A pin fixed `crankRadius` from the crank's centre sweeps round as the crank turns; a rigid
+ *  rod of `rodLength` joins that pin to a slider that can only move along the line through the
+ *  centre in direction `slideAxis`. Writing the slider as `centre + s * a` and requiring the
+ *  rod to stay exactly `rodLength` long gives
+ *
+ *      |w - s*a| = L,  where w = pin - centre
+ *   => s^2 - 2 s (w.a) + |w|^2 - L^2 = 0
+ *   => s = (w.a) + sqrt((w.a)^2 - |w|^2 + L^2)
+ *
+ *  taking the outer root, which is the branch a real piston stays on (the slider never passes
+ *  through the crank centre). The discriminant is non-negative for any pin position whenever
+ *  `rodLength > crankRadius`; it is clamped at 0 anyway so a mis-specified linkage degenerates
+ *  gracefully instead of producing NaN transforms that would blank the whole scene.
+ *
+ *  Pure and renderer-free so the geometry is unit-testable: it writes the pin position, the
+ *  slider position, and the rod's midpoint and orientation (mapping the rod's local +Y onto
+ *  the pin->slider direction, which is how the rod props are authored). */
+export function crankSliderPose(
+  centre: THREE.Vector3,
+  axis: THREE.Vector3,
+  angle: number,
+  crankRadius: number,
+  rodLength: number,
+  slideAxis: THREE.Vector3,
+  out: { pin: THREE.Vector3; slider: THREE.Vector3; rodMid: THREE.Vector3; rodQuat: THREE.Quaternion },
+): void {
+  const u = new THREE.Vector3();
+  const v = new THREE.Vector3();
+  planeBasis(axis, u, v);
+
+  out.pin
+    .copy(centre)
+    .addScaledVector(u, Math.cos(angle) * crankRadius)
+    .addScaledVector(v, Math.sin(angle) * crankRadius);
+
+  const a = slideAxis.clone().normalize();
+  const w = out.pin.clone().sub(centre);
+  const wa = w.dot(a);
+  const disc = Math.max(0, wa * wa - w.lengthSq() + rodLength * rodLength);
+  const sOffset = wa + Math.sqrt(disc);
+  out.slider.copy(centre).addScaledVector(a, sOffset);
+
+  out.rodMid.copy(out.pin).add(out.slider).multiplyScalar(0.5);
+  const along = out.slider.clone().sub(out.pin);
+  if (along.lengthSq() > 1e-12) {
+    out.rodQuat.setFromUnitVectors(new THREE.Vector3(0, 1, 0), along.normalize());
+  } else {
+    out.rodQuat.identity();
+  }
+}
+
 /** Order-independent identity for a remote link, so a pair stored as {a:"x", b:"y"} and
  *  one stored as {a:"y", b:"x"} resolve to the same ribbon mesh rather than two
  *  overlapping ones. Matches how the rest of the sim treats a linked pair as unordered. */
@@ -76,6 +140,16 @@ export class SceneSync {
     radius: number;
     travel: [number, number];
   }> = [];
+  // Props that are members of a crank-slider linkage (see Prop.linkTo).
+  private linkedProps: Array<{
+    mesh: THREE.Mesh;
+    gearId: string;
+    baseQuat: THREE.Quaternion;
+    crankRadius: number;
+    rodLength: number;
+    slideAxis: THREE.Vector3;
+    role: "rod" | "slider" | "pin";
+  }> = [];
   private previewId: string | null = null;
 
   constructor(private ctx: SceneContext) {}
@@ -97,6 +171,7 @@ export class SceneSync {
     this.attachedProps = [];
     this.slidingProps = [];
     this.windingProps = [];
+    this.linkedProps = [];
     for (const prop of props) {
       const mesh = buildPropMesh(prop);
       this.propMeshes.push(mesh);
@@ -113,6 +188,17 @@ export class SceneSync {
       }
       if (prop.slideWith) {
         this.slidingProps.push({ mesh, gearId: prop.slideWith, basePos: mesh.position.clone() });
+      }
+      if (prop.linkTo) {
+        this.linkedProps.push({
+          mesh,
+          gearId: prop.linkTo.gear,
+          baseQuat: mesh.quaternion.clone(),
+          crankRadius: prop.linkTo.crankRadius,
+          rodLength: prop.linkTo.rodLength,
+          slideAxis: new THREE.Vector3(...prop.linkTo.slideAxis),
+          role: prop.linkTo.role,
+        });
       }
       if (prop.windWith) {
         this.windingProps.push({
@@ -156,6 +242,38 @@ export class SceneSync {
       if (!gear) continue;
       axis.set(gear.axis[0], gear.axis[1], gear.axis[2]).normalize();
       p.mesh.position.copy(p.basePos).addScaledVector(axis, gear.linearPosition ?? 0);
+    }
+  }
+
+  /** Re-poses every crank-slider linkage member (see Prop.linkTo) from its crank's current
+   *  rotation: the pin rides the crank throw, the slider reciprocates along its axis, and the
+   *  rod swings to span the two. Called every frame from `sync()`. */
+  private updateLinkedProps(byId: Map<string, GearInstance>): void {
+    if (this.linkedProps.length === 0) return;
+    const centre = new THREE.Vector3();
+    const axis = new THREE.Vector3();
+    const out = {
+      pin: new THREE.Vector3(),
+      slider: new THREE.Vector3(),
+      rodMid: new THREE.Vector3(),
+      rodQuat: new THREE.Quaternion(),
+    };
+    for (const p of this.linkedProps) {
+      const gear = byId.get(p.gearId);
+      if (!gear) continue;
+      centre.set(gear.position[0], gear.position[1], gear.position[2]);
+      axis.set(gear.axis[0], gear.axis[1], gear.axis[2]);
+      crankSliderPose(centre, axis, gear.rotation, p.crankRadius, p.rodLength, p.slideAxis, out);
+      if (p.role === "rod") {
+        p.mesh.position.copy(out.rodMid);
+        p.mesh.quaternion.copy(out.rodQuat);
+      } else if (p.role === "slider") {
+        p.mesh.position.copy(out.slider);
+        p.mesh.quaternion.copy(p.baseQuat);
+      } else {
+        p.mesh.position.copy(out.pin);
+        p.mesh.quaternion.copy(p.baseQuat);
+      }
     }
   }
 
@@ -226,6 +344,7 @@ export class SceneSync {
     this.updateAttachedProps(byId); // spin windmill sails, propeller blades, wheel spokes, etc.
     this.updateSlidingProps(byId); // slide a castle gate panel with its rack's linear travel
     this.updateWindingProps(byId); // hoist the crane's hook on its drum's rope
+    this.updateLinkedProps(byId); // swing pistons/connecting rods on their cranks
     const currentLinkKeys = new Set(remoteLinks.map(remoteLinkKey));
     for (const [key, mesh] of this.linkMeshes) {
       if (!currentLinkKeys.has(key)) {

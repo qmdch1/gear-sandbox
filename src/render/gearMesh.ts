@@ -122,6 +122,10 @@ export class GearMeshObject {
     });
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.name = gear.id;
+    // Gears occlude and are occluded like everything else in the scene, so a gear train lands
+    // a real contact shadow on the ground and on the body it drives.
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
     this.update(gear);
   }
 

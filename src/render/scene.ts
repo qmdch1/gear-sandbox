@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 export interface SceneContext {
   scene: THREE.Scene;
@@ -19,6 +20,24 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   renderer.setSize(canvas.clientWidth || 1, canvas.clientHeight || 1);
+  // Renderer capabilities that only exist once a real WebGL context was acquired. Under jsdom
+  // (the render tests' environment) there is no context, and THREE leaves `shadowMap` and
+  // friends undefined -- so this is guarded and the scene degrades to an unshadowed but
+  // otherwise valid graph rather than throwing during construction.
+  if (renderer.shadowMap) {
+    // Real shadows: the raking key light below now actually occludes, so a car body sits ON
+    // the ground instead of hovering over it, and a windmill's sails sweep a shadow across its
+    // tower. Soft (PCF) rather than hard-edged, which at this scale reads as daylight rather
+    // than a stencil.
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // Filmic tone mapping + correct output colour space. Without these the bright key light
+    // clips metal highlights to flat white; ACES rolls them off so brass, steel and painted
+    // bodywork keep their shading where they are brightest.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+  }
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -43,6 +62,19 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   // tooth walls -- not just flat tops -- catch real contrast.
   const key = new THREE.DirectionalLight(0xfff4e0, 1.35);
   key.position.set(60, 18, 40);
+  // Only the key casts -- one shadow-casting light keeps the cost to a single map while still
+  // giving every object a definite contact shadow. The ortho frustum is sized to the whole
+  // showroom yard (machines are laid out across roughly 140 world units), since anything
+  // outside it would silently stop casting.
+  key.castShadow = true;
+  key.shadow.mapSize.set(2048, 2048);
+  key.shadow.camera.left = -160;
+  key.shadow.camera.right = 160;
+  key.shadow.camera.top = 160;
+  key.shadow.camera.bottom = -160;
+  key.shadow.camera.near = 1;
+  key.shadow.camera.far = 400;
+  key.shadow.bias = -0.0006; // clears the shadow acne that flat gear faces show without it
   // Fill: dim, opposite side, keeps the away-from-key side from crushing to pure black
   // without washing out the key light's own contrast.
   const fill = new THREE.DirectionalLight(0xc9d8ff, 0.28);
@@ -64,7 +96,25 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     new THREE.MeshStandardMaterial({ color: 0x3d434e, roughness: 0.95 }),
   );
   groundPlane.rotation.x = -Math.PI / 2;
+  groundPlane.receiveShadow = true;
   scene.add(groundPlane);
+
+  // A generated room environment gives every metal something to REFLECT. Physically metal is
+  // pure reflection -- with no environment a metalness:0.8 surface has nothing to mirror and
+  // renders near-black, which is why the brass and steel here previously read as flat plastic.
+  // Guarded: a jsdom/headless run has no working WebGL context to build the PMREM with, and
+  // must degrade to the unlit-but-valid scene rather than throwing.
+  try {
+    if (!renderer.shadowMap) throw new Error("no WebGL context"); // headless: skip entirely
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    const environment = new RoomEnvironment();
+    scene.environment = pmrem.fromScene(environment, 0.04).texture;
+    scene.environmentIntensity = 0.35; // a hint of reflection, not a chrome showroom
+    environment.dispose?.();
+    pmrem.dispose();
+  } catch {
+    scene.environment = null;
+  }
 
   const grid = new THREE.GridHelper(500, 50, 0x5a6270, 0x454b56);
   grid.position.y = 0.01; // avoid z-fighting with the ground plane
