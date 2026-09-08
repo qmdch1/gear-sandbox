@@ -4,7 +4,7 @@ import { createGear } from "./sim/gearFactory";
 import { createShowroomLayout, createShowroomProps } from "./sim/showroom";
 import { removeGear } from "./sim/removeGear";
 import { tick } from "./sim/simulation";
-import { createScene } from "./render/scene";
+import { createScene, resizeToContainer } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
 import { DragControls } from "./interaction/dragControls";
 import { PlacementControls } from "./interaction/placementControls";
@@ -368,11 +368,14 @@ window.addEventListener("beforeunload", (event) => {
   }
 });
 
-window.addEventListener("resize", () => {
-  ctx.camera.aspect = canvas.clientWidth / canvas.clientHeight;
-  ctx.camera.updateProjectionMatrix();
-  ctx.renderer.setSize(canvas.clientWidth, canvas.clientHeight);
-});
+// Keep the viewport fitted to its container. A window "resize" listener alone misses every
+// resize that does not change the window -- a sidebar opening, a split pane being dragged, a
+// devtools dock -- so observe the container box itself and re-fit from that.
+window.addEventListener("resize", () => resizeToContainer(ctx));
+if (typeof ResizeObserver !== "undefined" && canvas.parentElement) {
+  new ResizeObserver(() => resizeToContainer(ctx)).observe(canvas.parentElement);
+}
+resizeToContainer(ctx); // fit once up front, in case the container settled after createScene
 
 // Small, visible (non-console) indicator for the render-loop resilience below -- this app's
 // audience is non-technical, so a console.error alone would never be seen. Kept as a slim,

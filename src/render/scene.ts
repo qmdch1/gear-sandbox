@@ -10,16 +10,39 @@ export interface SceneContext {
   groundPlane: THREE.Mesh;
 }
 
+/** The box the canvas should fill. `renderer.setSize` writes the size it is given straight
+ *  onto the canvas as an INLINE style, so `canvas.clientWidth` afterwards just reports back
+ *  whatever was last set -- measuring the canvas to decide how big the canvas should be is a
+ *  feedback loop that can only ever preserve the current size. (Concretely: a first load in a
+ *  small pane pinned the canvas at 24x12px, and every later resize re-measured that same 24x12
+ *  and "resized" it to itself, so the viewport could never grow back.) Measuring the PARENT
+ *  element instead breaks the loop, since nothing writes an inline size onto it. */
+function containerSize(canvas: HTMLCanvasElement): { width: number; height: number } {
+  const box = canvas.parentElement;
+  const width = box?.clientWidth || canvas.clientWidth || 1;
+  const height = box?.clientHeight || canvas.clientHeight || 1;
+  return { width, height };
+}
+
+/** Re-fits the renderer and camera to the canvas's container. Safe to call at any time. */
+export function resizeToContainer(ctx: SceneContext): void {
+  const { width, height } = containerSize(ctx.renderer.domElement as HTMLCanvasElement);
+  ctx.camera.aspect = width / height;
+  ctx.camera.updateProjectionMatrix();
+  ctx.renderer.setSize(width, height, true);
+}
+
 export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x1a1d22);
 
-  const camera = new THREE.PerspectiveCamera(50, canvas.clientWidth / canvas.clientHeight || 1, 0.1, 1000);
+  const initial = containerSize(canvas);
+  const camera = new THREE.PerspectiveCamera(50, initial.width / initial.height, 0.1, 1000);
   camera.position.set(30, 30, 30);
   camera.lookAt(0, 0, 0);
 
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setSize(canvas.clientWidth || 1, canvas.clientHeight || 1);
+  renderer.setSize(initial.width, initial.height, true);
   // Renderer capabilities that only exist once a real WebGL context was acquired. Under jsdom
   // (the render tests' environment) there is no context, and THREE leaves `shadowMap` and
   // friends undefined -- so this is guarded and the scene degrades to an unshadowed but
@@ -30,7 +53,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     // tower. Soft (PCF) rather than hard-edged, which at this scale reads as daylight rather
     // than a stencil.
     renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     // Filmic tone mapping + correct output colour space. Without these the bright key light
     // clips metal highlights to flat white; ACES rolls them off so brass, steel and painted
     // bodywork keep their shading where they are brightest.
