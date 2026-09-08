@@ -103,21 +103,40 @@ describe("createCastlePreset", () => {
     expect(Math.abs(finalHandle.rotation)).toBeGreaterThan(0);
   });
 
-  it("parks the gate at its travel limit instead of sailing out of the scene when cranked forever", () => {
+  it("reciprocates the gate over exactly [0, GATE_TRAVEL] instead of sailing out of the scene", () => {
     let layout = createCastlePreset();
-    // 60 real seconds. Unlimited, the gate advances 3.5 units/s -> 210 units, on a gatehouse
-    // only 34 tall; the travelLimit must stop it at the fully-retracted position.
-    for (let i = 0; i < 3600; i++) {
+    // 120 real seconds -- many full up/down cycles. Without any bound the gate would advance
+    // 3.5 units/s to 420 units, on a gatehouse only 34 tall.
+    let min = Infinity;
+    let max = -Infinity;
+    let sawUp = false;
+    let sawDown = false;
+    let previous = 0;
+    for (let i = 0; i < 7200; i++) {
       const r = tick(layout, 1 / 60, 1);
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+      const y = layout.gears.find((g) => g.id === "성문_도개교")!.linearPosition!;
+      if (y > previous) sawUp = true;
+      if (y < previous) sawDown = true;
+      previous = y;
+      min = Math.min(min, y);
+      max = Math.max(max, y);
     }
-    const gate = layout.gears.find((g) => g.id === "성문_도개교")!;
-    expect(gate.linearPosition).toBe(GATE_TRAVEL);
 
-    // The winch itself keeps turning -- the gate is at its stop, not the mechanism seized.
-    const handle = layout.gears.find((g) => g.id === "성문_손잡이")!;
-    expect(handle.angularVelocity).toBe(0.5);
+    // It genuinely goes both ways -- opening AND closing, not just clamped at a stop.
+    expect(sawUp).toBe(true);
+    expect(sawDown).toBe(true);
+    // And it sweeps the full designed stroke without overrunning it.
+    expect(max).toBeGreaterThan(GATE_TRAVEL - 0.2);
+    expect(max).toBeLessThanOrEqual(GATE_TRAVEL + 0.2);
+    expect(min).toBeGreaterThanOrEqual(-0.2);
+    expect(min).toBeLessThan(0.2);
+
+    const gate = layout.gears.find((g) => g.id === "성문_도개교")!;
     expect(gate.broken).toBe(false);
+    // The winch never stops; it only changes direction.
+    const handle = layout.gears.find((g) => g.id === "성문_손잡이")!;
+    expect(Math.abs(handle.angularVelocity)).toBe(0.5);
   });
 
   it("supplies a portcullis gate panel that slides with the rack (slideWith), plus the stone gatehouse", () => {

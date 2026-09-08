@@ -113,7 +113,20 @@ export function tick(layout: LayoutState, dt: number, timeScale: number): SimTic
         linearPosition = Math.min(Math.max(linearPosition, lo), hi);
       }
     }
-    return { ...g, durabilityCurrent, broken, rotation, angularVelocity, linearPosition };
+    // A reciprocating crank (see `reverseAt`) flips its own commanded speed once it has
+    // swept out to a bound, which reverses everything it drives on the next tick. The
+    // rotation itself is deliberately NOT snapped back to the bound: letting it overshoot by
+    // the same sub-tick amount at each end keeps `rotation` and a driven rack's separately
+    // integrated `linearPosition` in lockstep, instead of drifting apart by whatever the
+    // snap discarded.
+    let commandedVelocity = angularVelocity;
+    if (g.type === "crank" && g.reverseAt && !broken) {
+      const [lo, hi] = g.reverseAt;
+      if ((rotation >= hi && commandedVelocity > 0) || (rotation <= lo && commandedVelocity < 0)) {
+        commandedVelocity = -commandedVelocity;
+      }
+    }
+    return { ...g, durabilityCurrent, broken, rotation, angularVelocity: commandedVelocity, linearPosition };
   });
 
   return { gears: updatedGears, diagnostics };

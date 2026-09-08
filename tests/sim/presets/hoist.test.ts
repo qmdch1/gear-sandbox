@@ -142,30 +142,47 @@ describe("createHoistProps", () => {
     for (const u of uprights) expect(u.position[0]).toBeGreaterThan(46);
   });
 
-  it("lifts the hook at drumRotation * ROPE_RADIUS and parks it at the travel limit", () => {
+  it("raises AND lowers the hook over exactly [0, HOOK_TRAVEL] as the winch reciprocates", () => {
     let layout = createHoistPreset();
-    const dt = 1 / 60;
-    const liftAt = (rotation: number) => Math.min(Math.max(rotation * ROPE_RADIUS, 0), HOOK_TRAVEL);
+    const liftAt = (drumRotation: number) => drumRotation * ROPE_RADIUS;
 
-    // 10 real seconds: the drum turns at 0.25 rad/s, so 2.5 rad -> 7.5 units of lift, still
-    // short of the 22-unit stop.
+    // 10 real seconds: the drum turns at 0.25 rad/s -> 2.5 rad -> 7.5 units of lift, still
+    // climbing and well short of the headblock.
     for (let i = 0; i < 600; i++) {
-      const r = tick(layout, dt, 1);
+      const r = tick(layout, 1 / 60, 1);
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
     }
     const drum10s = layout.gears.find((g) => g.id === "기중기_대형풀리")!;
     expect(drum10s.rotation).toBeCloseTo(2.5, 6);
     expect(liftAt(drum10s.rotation)).toBeCloseTo(7.5, 6);
-    expect(liftAt(drum10s.rotation)).toBeLessThan(HOOK_TRAVEL);
 
-    // 120 real seconds: the drum has turned far past the rope's usable length, and the hook
-    // sits at the headblock rather than climbing through the beam.
-    for (let i = 0; i < 6600; i++) {
-      const r = tick(layout, dt, 1);
+    // 180 more seconds -- several full raise/lower cycles.
+    let min = Infinity;
+    let max = -Infinity;
+    let sawUp = false;
+    let sawDown = false;
+    let previous = liftAt(drum10s.rotation);
+    for (let i = 0; i < 10800; i++) {
+      const r = tick(layout, 1 / 60, 1);
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+      const lift = liftAt(layout.gears.find((g) => g.id === "기중기_대형풀리")!.rotation);
+      if (lift > previous) sawUp = true;
+      if (lift < previous) sawDown = true;
+      previous = lift;
+      min = Math.min(min, lift);
+      max = Math.max(max, lift);
     }
-    const drum120s = layout.gears.find((g) => g.id === "기중기_대형풀리")!;
-    expect(drum120s.rotation * ROPE_RADIUS).toBeGreaterThan(HOOK_TRAVEL); // unclamped it would overshoot
-    expect(liftAt(drum120s.rotation)).toBe(HOOK_TRAVEL);
+
+    expect(sawUp).toBe(true);
+    expect(sawDown).toBe(true);
+    // The hook sweeps its whole designed travel and never climbs through the gantry beam.
+    expect(max).toBeGreaterThan(HOOK_TRAVEL - 0.2);
+    expect(max).toBeLessThanOrEqual(HOOK_TRAVEL + 0.2);
+    expect(min).toBeGreaterThanOrEqual(-0.2);
+    expect(min).toBeLessThan(0.2);
+
+    // The crank keeps its commanded speed throughout -- it only ever changes direction.
+    const crank = layout.gears.find((g) => g.id === "기중기_손잡이")!;
+    expect(Math.abs(crank.angularVelocity)).toBe(1.0);
   });
 });

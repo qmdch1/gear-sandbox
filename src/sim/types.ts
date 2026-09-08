@@ -23,6 +23,15 @@ export interface GearInstance {
    *  gatehouse only 34 tall). Omit for an unlimited rack -- the previous, still-default
    *  behaviour. */
   travelLimit?: [number, number];
+  /** "crank" only: makes this crank RECIPROCATE instead of turning forever. Once its
+   *  accumulated `rotation` reaches either bound while travelling outward, the simulation
+   *  flips the sign of its `angularVelocity`, so the whole train it drives runs back the other
+   *  way -- a hand winch being cranked up, then back down, or a limit switch reversing a
+   *  motor. Because a crank's stored `angularVelocity` is what seeds `propagateRotation`
+   *  every tick, flipping it here reverses every gear downstream too. Omit for a crank that
+   *  simply runs one way forever -- the default for every continuously-rotating machine
+   *  (wheels, sails, propellers, clock trains). */
+  reverseAt?: [number, number];
 }
 
 export interface MeshEdge {

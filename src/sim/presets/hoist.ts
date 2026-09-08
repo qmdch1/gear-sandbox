@@ -33,6 +33,19 @@ function seedGear(
   };
 }
 
+/** The belt's speed reduction from the crank's small pulley to the drum: pitchRadius 4 / 16.
+ *  Kept as a named constant because the reciprocating stroke below is derived from it. */
+const BELT_RATIO = 0.25;
+
+/** How far the hook can rise before it reaches the headblock under the gantry beam. */
+export const HOOK_TRAVEL = 22;
+
+/** The effective radius the rope spools at on the drum -- the drum's inner rope hub, not its
+ *  full pitch radius (16), which would whip the hook to the top in five seconds. Rope-on-drum
+ *  kinematics give the hook `drumRotation * ROPE_RADIUS` of lift, so at the drum's 0.25 rad/s
+ *  this is 0.75 world units per second: a lift you can actually watch. */
+export const ROPE_RADIUS = 3;
+
 /** A hand-cranked hoist/winch -- a belt-and-pulley demo of REAL mechanical advantage,
  *  the opposite pedagogical point from `car.ts`. `car.ts` uses four pulleys of
  *  IDENTICAL size to show "one engine, four wheels, locked to the same speed" (a
@@ -95,6 +108,13 @@ export function createHoistPreset(): LayoutState {
     seedGear("기중기_대형풀리", "pulley", [30, 0, 0], [0, 1, 0], 32, 1),
   ];
 
+  // The hook RECIPROCATES: the winch lifts the load to the headblock, then lowers it back to
+  // the sill, over and over. The lift is `drumRotation * ROPE_RADIUS`, and the drum turns at
+  // 0.25x the crank (the 4:1 belt reduction above), so the hook travels
+  // `crankRotation * 0.25 * ROPE_RADIUS` -- reversing the crank at 0 and
+  // HOOK_TRAVEL / (0.25 * ROPE_RADIUS) radians sweeps the hook over exactly [0, HOOK_TRAVEL].
+  gears[0].reverseAt = [0, HOOK_TRAVEL / (BELT_RATIO * ROPE_RADIUS)];
+
   return {
     gears,
     remoteLinks: [
@@ -102,15 +122,6 @@ export function createHoistPreset(): LayoutState {
     ],
   };
 }
-
-/** How far the hook can rise before it reaches the headblock under the gantry beam. */
-export const HOOK_TRAVEL = 22;
-
-/** The effective radius the rope spools at on the drum -- the drum's inner rope hub, not its
- *  full pitch radius (16), which would whip the hook to the top in five seconds. Rope-on-drum
- *  kinematics give the hook `drumRotation * ROPE_RADIUS` of lift, so at the drum's 0.25 rad/s
- *  this is 0.75 world units per second: a lift you can actually watch. */
-export const ROPE_RADIUS = 3;
 
 /** The hoist's body -- visual props (see `render/props.ts`), no simulation. A timber gantry
  *  stands clear of the drum, and the hook block and its crate RIDE UP the guide cable as the

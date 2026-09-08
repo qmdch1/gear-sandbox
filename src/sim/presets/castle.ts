@@ -118,11 +118,17 @@ export function createCastlePreset(): LayoutState {
     seedGear("성문_손잡이", "crank", [handleX, 0, 0], [1, 0, 0], 14, 1, 0.5),
     seedGear("성문_도개교", "rack", [gateX, 0, 0], [0, 1, 0], 8, 1),
   ];
-  // The gate can only rise until it is fully retracted into the gatehouse -- the lintel sits
-  // at y=20, so 22 units of travel tucks the gate up out of the archway and no further.
-  // Without this the winch is cranked forever and the gate sails 210 units into the sky
-  // within a minute (the whole gatehouse is only 34 tall).
-  gears[1].travelLimit = [0, GATE_TRAVEL];
+  // The gate RECIPROCATES: the winch is cranked up until the gate is fully retracted into the
+  // gatehouse (GATE_TRAVEL units, which the lintel at y=20 allows), then wound back down, over
+  // and over. Since the rack's travel is `crankRotation * pitchRadius(crank)` = rotation * 7,
+  // reversing the crank at 0 and GATE_TRAVEL/7 radians sweeps the gate over exactly [0,
+  // GATE_TRAVEL]. Without any of this the winch turns forever and the gate sails 210 units
+  // into the sky within a minute (the whole gatehouse is only 34 tall).
+  gears[0].reverseAt = [0, GATE_TRAVEL / pitchRadius(14, 1)];
+  // A hard safety stop, set deliberately WIDER than the reciprocating stroke so it never binds
+  // during normal operation -- if it clamped mid-stroke, the rack's separately integrated
+  // linearPosition would drift out of step with the crank's rotation cycle after cycle.
+  gears[1].travelLimit = [-1, GATE_TRAVEL + 1];
 
   return { gears, remoteLinks: [] };
 }

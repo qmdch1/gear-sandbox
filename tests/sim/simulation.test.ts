@@ -866,3 +866,61 @@ describe("pulley / belt end-to-end power path (spec §3.4)", () => {
     expect(lonelyResult.diagnostics.unconnectedIds).toEqual(["pulleyA"]);
   });
 });
+
+describe("tick -- reciprocating cranks (reverseAt)", () => {
+  it("flips a crank's commanded direction at each bound and keeps its rotation inside them", () => {
+    let layout = {
+      gears: [makeGear({ id: "c", type: "crank", angularVelocity: 1, reverseAt: [0, 2] as [number, number] })],
+      remoteLinks: [] as RemoteLink[],
+    };
+    let min = Infinity;
+    let max = -Infinity;
+    const signs = new Set<number>();
+    for (let i = 0; i < 2000; i++) {
+      layout = { gears: tick(layout, 1 / 60, 1).gears, remoteLinks: layout.remoteLinks };
+      const c = layout.gears[0];
+      min = Math.min(min, c.rotation);
+      max = Math.max(max, c.rotation);
+      signs.add(Math.sign(c.angularVelocity));
+    }
+    // It ran in both directions, and its speed magnitude never changed -- only the sign.
+    expect(signs).toEqual(new Set([1, -1]));
+    expect(Math.abs(layout.gears[0].angularVelocity)).toBe(1);
+    // It swept the whole stroke, overshooting each bound by at most one tick's worth
+    // (1 rad/s * 1/60 s), which is what keeps a driven rack's separately integrated travel
+    // in step with this rotation.
+    expect(max).toBeGreaterThan(2 - 0.02);
+    expect(max).toBeLessThan(2 + 0.02);
+    expect(min).toBeGreaterThan(-0.02);
+    expect(min).toBeLessThan(0.02);
+  });
+
+  it("reverses everything the crank drives, not just the crank", () => {
+    let layout = {
+      gears: [
+        makeGear({ id: "crank", type: "crank", teeth: 20, module: 1, position: [0, 0, 0], angularVelocity: 1, reverseAt: [0, 1] as [number, number] }),
+        makeGear({ id: "driven", teeth: 10, module: 1, position: [15, 0, 0] }),
+      ],
+      remoteLinks: [] as RemoteLink[],
+    };
+    const drivenSigns = new Set<number>();
+    for (let i = 0; i < 400; i++) {
+      layout = { gears: tick(layout, 1 / 60, 1).gears, remoteLinks: layout.remoteLinks };
+      drivenSigns.add(Math.sign(layout.gears.find((g) => g.id === "driven")!.angularVelocity));
+    }
+    expect(drivenSigns.has(1)).toBe(true);
+    expect(drivenSigns.has(-1)).toBe(true);
+  });
+
+  it("leaves a crank without reverseAt turning one way forever", () => {
+    let layout = {
+      gears: [makeGear({ id: "c", type: "crank", angularVelocity: 1 })],
+      remoteLinks: [] as RemoteLink[],
+    };
+    for (let i = 0; i < 600; i++) {
+      layout = { gears: tick(layout, 1 / 60, 1).gears, remoteLinks: layout.remoteLinks };
+    }
+    expect(layout.gears[0].angularVelocity).toBe(1);
+    expect(layout.gears[0].rotation).toBeCloseTo(10, 6);
+  });
+});
