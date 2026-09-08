@@ -12,6 +12,9 @@ import { createPistonEnginePreset, createPistonEngineProps } from "./pistonengin
 import { createFactoryPreset, createFactoryProps } from "./factory";
 import { createWatermillPreset, createWatermillProps } from "./watermill";
 import { createFerrisWheelPreset, createFerrisWheelProps } from "./ferriswheel";
+import { createCarouselPreset, createCarouselProps } from "./carousel";
+import { createWellPumpPreset, createWellPumpProps } from "./wellpump";
+import { createConveyorPreset, createConveyorProps } from "./conveyor";
 
 export { createClockPreset, createClockProps } from "./clock";
 export { createCarPreset, createCarProps } from "./car";
@@ -25,6 +28,9 @@ export { createPistonEnginePreset, createPistonEngineProps } from "./pistonengin
 export { createFactoryPreset, createFactoryProps } from "./factory";
 export { createWatermillPreset, createWatermillProps } from "./watermill";
 export { createFerrisWheelPreset, createFerrisWheelProps } from "./ferriswheel";
+export { createCarouselPreset, createCarouselProps } from "./carousel";
+export { createWellPumpPreset, createWellPumpProps } from "./wellpump";
+export { createConveyorPreset, createConveyorProps } from "./conveyor";
 
 export interface PresetEntry {
   id: string;
@@ -114,5 +120,23 @@ export const PRESETS: PresetEntry[] = [
     label: "관람차 (감속기어로 큰 바퀴와 곤돌라를 함께 돌리는 대회전차)",
     build: createFerrisWheelPreset,
     buildProps: createFerrisWheelProps,
+  },
+  {
+    id: "carousel",
+    label: "회전목마 (모터가 6:1 감속기어로 목마 실은 회전판을 돌리는 놀이기구)",
+    build: createCarouselPreset,
+    buildProps: createCarouselProps,
+  },
+  {
+    id: "wellpump",
+    label: "두레우물 (손잡이를 감았다 풀며 두레박을 올렸다 내리는 도르래 우물)",
+    build: createWellPumpPreset,
+    buildProps: createWellPumpProps,
+  },
+  {
+    id: "conveyor",
+    label: "컨베이어 (같은 크기 두 풀리를 벨트로 묶어 화물을 실어 나르는 이송기)",
+    build: createConveyorPreset,
+    buildProps: createConveyorProps,
   },
 ];
