@@ -4,6 +4,11 @@ import { createCarPreset, createCarProps } from "./presets/car";
 import { createAirplanePreset, createAirplaneProps } from "./presets/airplane";
 import { createWindmillPreset, createWindmillProps } from "./presets/windmill";
 import { createBicyclePreset, createBicycleProps } from "./presets/bicycle";
+import { createLocomotivePreset, createLocomotiveProps } from "./presets/locomotive";
+import { createPistonEnginePreset, createPistonEngineProps } from "./presets/pistonengine";
+import { createFactoryPreset, createFactoryProps } from "./presets/factory";
+import { createWatermillPreset, createWatermillProps } from "./presets/watermill";
+import { createFerrisWheelPreset, createFerrisWheelProps } from "./presets/ferriswheel";
 
 type Vec3 = [number, number, number];
 
@@ -30,21 +35,40 @@ function translateProps(props: Prop[], d: Vec3): Prop[] {
   }));
 }
 
-/** The four finished-object presets, each placed at a corner of a compact 2x2 grid so none
- *  of their gears or bodies overlap. The offsets were chosen against each preset's real gear
- *  and prop extents (car body ~26 wide, airplane wings ~40, windmill tower + sails ~22,
- *  bicycle ~36 long) so the whole showroom reads as a little yard of complete machines --
- *  which is what a first-time visitor now sees instead of an abstract bench of loose gears. */
+/** The nine finished machines, on a 3x3 yard.
+ *
+ *  The grid pitch (170 across X, 150 along Z) was chosen against each preset's REAL measured
+ *  extent, not by eye. The two widest cases set it: the factory line shaft spans 114 units of
+ *  X, and the locomotive 103 units of Z. Every machine is also kept inside the 500x500 ground
+ *  plane (+/-250), which is why the grid is centred on the origin instead of growing out from
+ *  a corner -- the far column would otherwise hang off the edge of the world.
+ *
+ *  Placement matters for more than looks: `classify()` flags any two gears that sit inside
+ *  each other's overlap radius, and it does not care that they belong to different machines.
+ *  The spacing below leaves at least ~50 units of clear air between neighbouring machines'
+ *  gear clusters, and tests/sim/showroom.test.ts asserts the combined layout really does
+ *  report zero overlap pairs rather than trusting that.
+ *
+ *  The bench-style demos (clock, castle gate, hoist) stay out of the yard and remain
+ *  available from the preset panel: they read as mechanisms on a workbench rather than
+ *  vehicles and buildings standing in a field. */
 const SHOWROOM: Array<{ layout: LayoutState; props: Prop[]; offset: Vec3 }> = [
+  // Centre column.
   { layout: createCarPreset(), props: createCarProps(), offset: [0, 0, 0] },
-  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [0, 0, 70] },
-  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [70, 0, 0] },
-  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [70, 0, 70] },
+  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [0, 0, 150] },
+  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [0, 0, -150] },
+  // Left column.
+  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [-170, 0, 0] },
+  { layout: createFerrisWheelPreset(), props: createFerrisWheelProps(), offset: [-170, 0, 150] },
+  { layout: createLocomotivePreset(), props: createLocomotiveProps(), offset: [-170, 0, -150] },
+  // Right column.
+  { layout: createWatermillPreset(), props: createWatermillProps(), offset: [170, 0, 0] },
+  { layout: createPistonEnginePreset(), props: createPistonEngineProps(), offset: [170, 0, 150] },
+  { layout: createFactoryPreset(), props: createFactoryProps(), offset: [170, 0, -150] },
 ];
 
-/** The default first-visit scene: the four finished-object presets (car, airplane,
- *  windmill, bicycle) arranged in a yard, replacing the old abstract 12-gear-type
- *  showcase. Gear ids are unique across presets (each is prefixed with its machine's
+/** The default first-visit scene: nine finished machines arranged in a yard, replacing the
+ *  old abstract 12-gear-type showcase. Gear ids are unique across presets (each is prefixed with its machine's
  *  Korean name), so the combined gear list and remote-link list are just concatenations. */
 export function createShowroomLayout(): LayoutState {
   const gears: GearInstance[] = [];
