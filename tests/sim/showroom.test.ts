@@ -88,3 +88,30 @@ describe("createShowroomLayout", () => {
     }
   });
 });
+
+describe("showroom framing", () => {
+  it("fits inside the camera's zoom-out ceiling, so 전체 보기 can actually frame the whole yard", () => {
+    // `SceneSync.fitAll` CLAMPS the standoff it computes to controls.maxDistance. A ceiling
+    // below what the scene needs therefore crops the view silently rather than failing, which
+    // is exactly what happened when the yard grew from four machines to nine. Recomputing the
+    // requirement here means a future machine that pushes the yard past the ceiling breaks a
+    // test instead of quietly hiding half the scene.
+    const MAX_DISTANCE = 1200; // scene.ts
+    const FOV_DEG = 50; // scene.ts
+
+    const pts: Array<[number, number, number]> = [
+      ...createShowroomLayout().gears.map((g) => g.position),
+      ...createShowroomProps().map((p) => p.position),
+    ];
+    const span = (i: number) => {
+      const vs = pts.map((v) => v[i]);
+      return Math.max(...vs) - Math.min(...vs);
+    };
+    // Half-diagonal of the content box, the same bounding-sphere stand-in fitAll uses. A
+    // generous pad covers prop SIZES, which are not in these centre points.
+    const radius = Math.hypot(span(0), span(1), span(2)) / 2 + 30;
+    const needed = radius / Math.sin((FOV_DEG / 2) * (Math.PI / 180));
+
+    expect(needed).toBeLessThan(MAX_DISTANCE);
+  });
+});

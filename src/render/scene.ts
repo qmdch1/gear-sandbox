@@ -65,7 +65,13 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.minDistance = 5;
-  controls.maxDistance = 300; // enables the requested zoom-in/zoom-out range
+  // Far enough out to frame the WHOLE showroom yard. `SceneSync.fitAll` clamps the distance
+  // it computes to this ceiling, so a ceiling below what the scene needs silently crops the
+  // view instead of failing loudly: with nine machines the yard's bounding half-diagonal is
+  // roughly 285 units, and at the camera's 50-degree fov that needs 285 / sin(25 deg) ~= 674
+  // units of standoff -- more than twice the old 300 ceiling, which is exactly why the
+  // expanded yard would not fit on screen. 1200 clears that with room for the scene to grow.
+  controls.maxDistance = 1200;
 
   // Ambient is kept low -- it's just a floor so nothing goes pure black -- with most of
   // the shading coming from the directional lights below, so tooth flanks and gear-face

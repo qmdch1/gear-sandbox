@@ -14,7 +14,7 @@ const CHAIN_MIN_LINKS = 3;
 /** Hard ceiling on chain link count. Without one, `linkCount` scales linearly and
  *  unbounded with the distance between the two remote-linked endpoints -- and that
  *  distance is *not* meaningfully bounded by the camera: `scene.ts`'s
- *  `controls.maxDistance` (300) only limits how far the camera sits from its orbit
+ *  `controls.maxDistance` only limits how far the camera sits from its orbit
  *  *target*, and OrbitControls' default panning lets that target move anywhere (nothing
  *  in this codebase clamps `controls.target`), so a user can always pan-then-zoom-in to
  *  precisely click-to-place (`placementControls.ts`) on any point of the actual bound:
