@@ -9,6 +9,26 @@ import { buildPropMesh, type Prop } from "./props";
 const PROBLEM_HIGHLIGHT = new THREE.Color(0xff3b30);
 const PREVIEW_HIGHLIGHT = new THREE.Color(0x2ecc71);
 
+/** Pose (position + orientation) a prop should take when spun with its gear: rotate it
+ *  about the gear's `axis`, around the gear's `center`, by `angle` radians, starting from
+ *  the prop's rest pose (`basePos`/`baseQuat` -- where it sits at gear rotation 0). Pure
+ *  and side-effect free (writes into the caller's `outPos`/`outQuat`) so it's unit-testable
+ *  without a renderer. This is the math behind Prop.attachTo (windmill sails / propeller
+ *  blades turning with their hub gear). */
+export function spinAttachedPose(
+  basePos: THREE.Vector3,
+  baseQuat: THREE.Quaternion,
+  center: THREE.Vector3,
+  axis: THREE.Vector3,
+  angle: number,
+  outPos: THREE.Vector3,
+  outQuat: THREE.Quaternion,
+): void {
+  const spin = new THREE.Quaternion().setFromAxisAngle(axis.clone().normalize(), angle);
+  outPos.copy(basePos).sub(center).applyQuaternion(spin).add(center);
+  outQuat.copy(spin).multiply(baseQuat);
+}
+
 /** Order-independent identity for a remote link, so a pair stored as {a:"x", b:"y"} and
  *  one stored as {a:"y", b:"x"} resolve to the same ribbon mesh rather than two
  *  overlapping ones. Matches how the rest of the sim treats a linked pair as unordered. */
@@ -31,6 +51,15 @@ export class SceneSync {
   private objects = new Map<string, GearMeshObject>();
   private linkMeshes = new Map<string, THREE.Mesh>();
   private propMeshes: THREE.Mesh[] = [];
+  // Props that spin with a gear (see Prop.attachTo). Each keeps the id of the gear it
+  // follows plus its rest pose (position/orientation at gear rotation 0), so `sync()` can
+  // re-derive its transform every frame from the gear's current rotation.
+  private attachedProps: Array<{
+    mesh: THREE.Mesh;
+    gearId: string;
+    basePos: THREE.Vector3;
+    baseQuat: THREE.Quaternion;
+  }> = [];
   private previewId: string | null = null;
 
   constructor(private ctx: SceneContext) {}
@@ -48,10 +77,39 @@ export class SceneSync {
       (mesh.material as THREE.Material).dispose();
     }
     this.propMeshes = [];
+    this.attachedProps = [];
     for (const prop of props) {
       const mesh = buildPropMesh(prop);
       this.propMeshes.push(mesh);
       this.ctx.scene.add(mesh);
+      if (prop.attachTo) {
+        // Record the prop's rest pose (as built, at gear rotation 0) so `sync()` can spin
+        // it around its gear each frame from that baseline.
+        this.attachedProps.push({
+          mesh,
+          gearId: prop.attachTo,
+          basePos: mesh.position.clone(),
+          baseQuat: mesh.quaternion.clone(),
+        });
+      }
+    }
+  }
+
+  /** Spins each attached prop (see Prop.attachTo) to follow its gear's current rotation:
+   *  rotate the prop about the gear's axis, around the gear's centre, by the gear's
+   *  accumulated `rotation`, from the prop's rest pose. This is what makes windmill sails
+   *  and propeller blades -- which are props, not gears -- actually turn with the hub gear
+   *  driving them. Called every frame from `sync()`. */
+  private updateAttachedProps(byId: Map<string, GearInstance>): void {
+    if (this.attachedProps.length === 0) return;
+    const axis = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    for (const p of this.attachedProps) {
+      const gear = byId.get(p.gearId);
+      if (!gear) continue;
+      axis.set(gear.axis[0], gear.axis[1], gear.axis[2]);
+      center.set(gear.position[0], gear.position[1], gear.position[2]);
+      spinAttachedPose(p.basePos, p.baseQuat, center, axis, gear.rotation, p.mesh.position, p.mesh.quaternion);
     }
   }
 
@@ -104,6 +162,7 @@ export class SceneSync {
     }
 
     const byId = new Map(gears.map((g) => [g.id, g] as const));
+    this.updateAttachedProps(byId); // spin windmill sails, propeller blades, etc. with their gears
     const currentLinkKeys = new Set(remoteLinks.map(remoteLinkKey));
     for (const [key, mesh] of this.linkMeshes) {
       if (!currentLinkKeys.has(key)) {

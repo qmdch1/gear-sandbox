@@ -95,7 +95,7 @@ export function createWindmillProps(): Prop[] {
     const a = (i / 4) * Math.PI * 2 + Math.PI / 4; // +45° so they read as an "X", not a "+"
     const reach = 11;
     props.push({
-      // Spar
+      // Spar -- attached to the sail hub so it actually turns with the wind-driven crank.
       kind: "box",
       position: [Math.cos(a) * reach, SAILS_Y + Math.sin(a) * reach, SAILS_Z + 1.5],
       size: [22, 1.4, 0.6],
@@ -103,6 +103,7 @@ export function createWindmillProps(): Prop[] {
       rotation: [0, 0, a],
       metalness: 0.1,
       roughness: 0.7,
+      attachTo: "풍차_날개축",
     });
     props.push({
       // Canvas sail panel, offset to one side of the spar (like a real windmill's cloth).
@@ -113,6 +114,7 @@ export function createWindmillProps(): Prop[] {
       rotation: [0, 0, a],
       metalness: 0.05,
       roughness: 0.8,
+      attachTo: "풍차_날개축",
     });
   }
 

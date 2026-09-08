@@ -11,43 +11,40 @@ import * as THREE from "three";
  *  Deliberately a small, declarative set of primitives (box beam, cylinder/rod, ring,
  *  flat panel) rather than arbitrary geometry -- enough to sketch the silhouette of a
  *  real object out of simple parts, while staying trivially serializable and testable. */
+/** Fields shared by every prop kind. `attachTo`, if set, is the id of a gear this prop
+ *  should SPIN WITH: every frame `SceneSync` rotates the prop about that gear's axis,
+ *  around the gear's centre, by the gear's current rotation -- so props that ought to
+ *  move (windmill sails, propeller blades, wheel spokes) actually turn with the hub gear
+ *  driving them, instead of hanging static while only the little hub gear spins. */
+interface PropCommon {
+  position: [number, number, number];
+  color: number;
+  /** Euler XYZ radians. */
+  rotation?: [number, number, number];
+  metalness?: number;
+  roughness?: number;
+  opacity?: number;
+  attachTo?: string;
+}
+
 export type Prop =
-  | {
+  | (PropCommon & {
       kind: "box";
-      position: [number, number, number];
       size: [number, number, number];
-      color: number;
-      /** Euler XYZ radians. */
-      rotation?: [number, number, number];
-      metalness?: number;
-      roughness?: number;
-      opacity?: number;
-    }
-  | {
+    })
+  | (PropCommon & {
       kind: "cylinder";
-      position: [number, number, number];
       radius: number;
       height: number;
-      color: number;
-      rotation?: [number, number, number];
       radialSegments?: number;
-      metalness?: number;
-      roughness?: number;
-      opacity?: number;
-    }
-  | {
+    })
+  | (PropCommon & {
       kind: "ring";
-      position: [number, number, number];
       /** Center-line radius of the torus. */
       radius: number;
       /** Thickness of the ring's tube. */
       tube: number;
-      color: number;
-      rotation?: [number, number, number];
-      metalness?: number;
-      roughness?: number;
-      opacity?: number;
-    };
+    });
 
 function applyCommon(
   mesh: THREE.Mesh,

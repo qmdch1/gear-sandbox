@@ -93,6 +93,7 @@ export function createAirplaneProps(): Prop[] {
       rotation: [0, 0, a],
       metalness: 0.5,
       roughness: 0.4,
+      attachTo: "비행기_프로펠러", // blades spin with the propeller hub gear
     });
   }
 
