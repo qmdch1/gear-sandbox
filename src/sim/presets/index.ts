@@ -7,6 +7,11 @@ import { createHoistPreset, createHoistProps } from "./hoist";
 import { createAirplanePreset, createAirplaneProps } from "./airplane";
 import { createWindmillPreset, createWindmillProps } from "./windmill";
 import { createBicyclePreset, createBicycleProps } from "./bicycle";
+import { createLocomotivePreset, createLocomotiveProps } from "./locomotive";
+import { createPistonEnginePreset, createPistonEngineProps } from "./pistonengine";
+import { createFactoryPreset, createFactoryProps } from "./factory";
+import { createWatermillPreset, createWatermillProps } from "./watermill";
+import { createFerrisWheelPreset, createFerrisWheelProps } from "./ferriswheel";
 
 export { createClockPreset, createClockProps } from "./clock";
 export { createCarPreset, createCarProps } from "./car";
@@ -15,6 +20,11 @@ export { createHoistPreset, createHoistProps } from "./hoist";
 export { createAirplanePreset, createAirplaneProps } from "./airplane";
 export { createWindmillPreset, createWindmillProps } from "./windmill";
 export { createBicyclePreset, createBicycleProps } from "./bicycle";
+export { createLocomotivePreset, createLocomotiveProps } from "./locomotive";
+export { createPistonEnginePreset, createPistonEngineProps } from "./pistonengine";
+export { createFactoryPreset, createFactoryProps } from "./factory";
+export { createWatermillPreset, createWatermillProps } from "./watermill";
+export { createFerrisWheelPreset, createFerrisWheelProps } from "./ferriswheel";
 
 export interface PresetEntry {
   id: string;
@@ -74,5 +84,35 @@ export const PRESETS: PresetEntry[] = [
     label: "자전거 (페달→체인→뒷바퀴 2배 증속 드라이브트레인)",
     build: createBicyclePreset,
     buildProps: createBicycleProps,
+  },
+  {
+    id: "locomotive",
+    label: "증기기관차 (피스톤·주행봉이 동륜을 잇는 증기기관 — 크랭크-슬라이더 연동)",
+    build: createLocomotivePreset,
+    buildProps: createLocomotiveProps,
+  },
+  {
+    id: "pistonengine",
+    label: "피스톤엔진 (한 크랭크축에 여러 실린더가 물린 직렬 엔진 컷어웨이)",
+    build: createPistonEnginePreset,
+    buildProps: createPistonEngineProps,
+  },
+  {
+    id: "factory",
+    label: "공장 (증기기관 하나가 라인샤프트로 세 작업대를 함께 돌리는 연동 설비)",
+    build: createFactoryPreset,
+    buildProps: createFactoryProps,
+  },
+  {
+    id: "watermill",
+    label: "물레방아 (수차가 베벨기어로 수직축을 돌려 맷돌을 가는 3배 증속)",
+    build: createWatermillPreset,
+    buildProps: createWatermillProps,
+  },
+  {
+    id: "ferriswheel",
+    label: "관람차 (감속기어로 큰 바퀴와 곤돌라를 함께 돌리는 대회전차)",
+    build: createFerrisWheelPreset,
+    buildProps: createFerrisWheelProps,
   },
 ];
