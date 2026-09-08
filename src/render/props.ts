@@ -25,6 +25,12 @@ interface PropCommon {
   roughness?: number;
   opacity?: number;
   attachTo?: string;
+  /** If set, the id of a RACK this prop should SLIDE WITH: every frame `SceneSync` shifts
+   *  the prop along that rack's axis by the rack's current `linearPosition` -- so a castle
+   *  gate panel (a prop) rises and falls with the rack the winch drives, instead of the
+   *  only moving thing being the little toothed rack bar itself. Mutually exclusive with
+   *  `attachTo` in practice (a rack doesn't rotate; a rotating gear has no linearPosition). */
+  slideWith?: string;
 }
 
 export type Prop =

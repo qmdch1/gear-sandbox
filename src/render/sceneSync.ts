@@ -60,6 +60,13 @@ export class SceneSync {
     basePos: THREE.Vector3;
     baseQuat: THREE.Quaternion;
   }> = [];
+  // Props that slide with a rack's linear travel (see Prop.slideWith). Each keeps the id of
+  // the rack it follows plus its rest position (at rack linearPosition 0).
+  private slidingProps: Array<{
+    mesh: THREE.Mesh;
+    gearId: string;
+    basePos: THREE.Vector3;
+  }> = [];
   private previewId: string | null = null;
 
   constructor(private ctx: SceneContext) {}
@@ -78,6 +85,7 @@ export class SceneSync {
     }
     this.propMeshes = [];
     this.attachedProps = [];
+    this.slidingProps = [];
     for (const prop of props) {
       const mesh = buildPropMesh(prop);
       this.propMeshes.push(mesh);
@@ -91,6 +99,9 @@ export class SceneSync {
           basePos: mesh.position.clone(),
           baseQuat: mesh.quaternion.clone(),
         });
+      }
+      if (prop.slideWith) {
+        this.slidingProps.push({ mesh, gearId: prop.slideWith, basePos: mesh.position.clone() });
       }
     }
   }
@@ -110,6 +121,20 @@ export class SceneSync {
       axis.set(gear.axis[0], gear.axis[1], gear.axis[2]);
       center.set(gear.position[0], gear.position[1], gear.position[2]);
       spinAttachedPose(p.basePos, p.baseQuat, center, axis, gear.rotation, p.mesh.position, p.mesh.quaternion);
+    }
+  }
+
+  /** Slides each sliding prop (see Prop.slideWith) along its rack's axis by the rack's
+   *  current `linearPosition`, from the prop's rest position -- so e.g. a castle gate panel
+   *  rises and falls with the rack the winch drives. Called every frame from `sync()`. */
+  private updateSlidingProps(byId: Map<string, GearInstance>): void {
+    if (this.slidingProps.length === 0) return;
+    const axis = new THREE.Vector3();
+    for (const p of this.slidingProps) {
+      const gear = byId.get(p.gearId);
+      if (!gear) continue;
+      axis.set(gear.axis[0], gear.axis[1], gear.axis[2]).normalize();
+      p.mesh.position.copy(p.basePos).addScaledVector(axis, gear.linearPosition ?? 0);
     }
   }
 
@@ -162,7 +187,8 @@ export class SceneSync {
     }
 
     const byId = new Map(gears.map((g) => [g.id, g] as const));
-    this.updateAttachedProps(byId); // spin windmill sails, propeller blades, etc. with their gears
+    this.updateAttachedProps(byId); // spin windmill sails, propeller blades, wheel spokes, etc.
+    this.updateSlidingProps(byId); // slide a castle gate panel with its rack's linear travel
     const currentLinkKeys = new Set(remoteLinks.map(remoteLinkKey));
     for (const [key, mesh] of this.linkMeshes) {
       if (!currentLinkKeys.has(key)) {

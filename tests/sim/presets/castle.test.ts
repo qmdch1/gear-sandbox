@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createCastlePreset } from "../../../src/sim/presets/castle";
+import { createCastlePreset, createCastleProps } from "../../../src/sim/presets/castle";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
@@ -101,5 +101,15 @@ describe("createCastlePreset", () => {
     // The winch handle itself has genuinely turned (not stalled at rotation 0).
     const finalHandle = layout.gears.find((g) => g.id === "성문_손잡이")!;
     expect(Math.abs(finalHandle.rotation)).toBeGreaterThan(0);
+  });
+
+  it("supplies a portcullis gate panel that slides with the rack (slideWith), plus the stone gatehouse", () => {
+    const props = createCastleProps();
+    const gatePanels = props.filter((p) => p.slideWith === "성문_도개교");
+    // The wooden panel + its iron cross-bands all follow the rack's vertical travel.
+    expect(gatePanels.length).toBeGreaterThanOrEqual(2);
+    expect(gatePanels.every((p) => p.kind === "box")).toBe(true);
+    // And there's still a static stone frame (towers/lintel) that does NOT slide.
+    expect(props.some((p) => p.slideWith === undefined)).toBe(true);
   });
 });

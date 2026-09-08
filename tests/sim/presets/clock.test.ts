@@ -1,8 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { createClockPreset } from "../../../src/sim/presets/clock";
+import { createClockPreset, createClockProps } from "../../../src/sim/presets/clock";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
+
+describe("createClockProps", () => {
+  it("supplies a clock hand (and hub) attached to the hour wheel, so a moving hand sweeps the dial", () => {
+    const props = createClockProps();
+    const handParts = props.filter((p) => p.attachTo === "시계_시침휠");
+    // The hand, its counterweight tail, and the centre hub cap all spin with the hour wheel.
+    expect(handParts.length).toBeGreaterThanOrEqual(2);
+    // The dial (bezel + tick marks) stays static (not attached).
+    expect(props.some((p) => p.attachTo === undefined)).toBe(true);
+  });
+});
 
 describe("createClockPreset", () => {
   it("builds a valid LayoutState: three gears, unique ids, no remote links", () => {

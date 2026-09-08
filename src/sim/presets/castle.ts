@@ -152,5 +152,34 @@ export function createCastleProps(): Prop[] {
     });
   }
 
+  // The portcullis gate itself -- a wooden panel filling the archway opening, that RISES
+  // with the rack (성문_도개교) as the winch turns: `slideWith` shifts it along the rack's
+  // +Y axis by the rack's linearPosition, so cranking the winch visibly lifts the whole
+  // gate, not just the little toothed rack bar. Iron cross-bands on the face make the lift
+  // obvious.
+  const wood = 0x6b4a2a;
+  const iron = 0x3a3a40;
+  const openW = 2 * towerHalfGap - 2; // fits snugly between the towers
+  props.push({
+    kind: "box",
+    position: [gateX, 4, 0],
+    size: [openW, 22, 1.2],
+    color: wood,
+    roughness: 0.85,
+    metalness: 0.08,
+    slideWith: "성문_도개교",
+  });
+  for (const bandY of [-2, 4, 10]) {
+    props.push({
+      kind: "box",
+      position: [gateX, bandY, 0.8],
+      size: [openW + 0.6, 1.4, 0.5],
+      color: iron,
+      roughness: 0.6,
+      metalness: 0.5,
+      slideWith: "성문_도개교",
+    });
+  }
+
   return props;
 }

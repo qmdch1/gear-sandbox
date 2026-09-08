@@ -148,5 +148,44 @@ export function createClockProps(): Prop[] {
     });
   }
 
+  // The clock hand: a long pointer attached to the hour wheel, sweeping around the dial as
+  // that gear turns (attachTo spins it about the wheel's Y axis, around the dial centre).
+  // The hour wheel turns 1/12 as fast as the minute drive, so this hand sweeps the dial
+  // slowly -- the visible "clock is running" motion. A box's long axis is X, so at rest it
+  // points to 3 o'clock; the sweep carries it round from there.
+  const handColor = 0x1a1a1e;
+  const handLen = HOUR_PITCH_RADIUS + 1.5; // reaches just inside the bezel
+  props.push({
+    kind: "box",
+    position: [HOUR_X + handLen / 2, 1.1, 0],
+    size: [handLen, 0.7, 0.9],
+    color: handColor,
+    metalness: 0.4,
+    roughness: 0.4,
+    attachTo: "시계_시침휠",
+  });
+  // A counterweight tail on the opposite side, so the hand reads as a proper clock hand
+  // pivoting at the centre rather than a bar stuck out one side.
+  props.push({
+    kind: "box",
+    position: [HOUR_X - 2, 1.1, 0],
+    size: [4, 0.7, 0.9],
+    color: handColor,
+    metalness: 0.4,
+    roughness: 0.4,
+    attachTo: "시계_시침휠",
+  });
+  // Centre hub cap the hand pivots on (also spins, harmlessly, being round).
+  props.push({
+    kind: "cylinder",
+    position: [HOUR_X, 1.3, 0],
+    radius: 1.4,
+    height: 0.8,
+    color: 0xc9a227,
+    metalness: 0.7,
+    roughness: 0.3,
+    attachTo: "시계_시침휠",
+  });
+
   return props;
 }
