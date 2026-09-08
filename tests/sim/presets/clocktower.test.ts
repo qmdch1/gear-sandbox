@@ -15,8 +15,11 @@ import {
   IDLER_HOUR_DISTANCE,
   MINUTE_TO_HOUR,
   DRIVE_SPEED,
-  PENDULUM_CRANK_R,
-  PENDULUM_ROD_L,
+  PENDULUM_ID,
+  BOB_ID,
+  PENDULUM_SWING,
+  PENDULUM_SPEED,
+  PENDULUM_LENGTH,
 } from "../../../src/sim/presets/clocktower";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
@@ -28,14 +31,16 @@ const byId = (gears: ReturnType<typeof createClockTowerPreset>["gears"], id: str
 describe("createClockTowerPreset", () => {
   it("builds a four-wheel going train, all on one axis behind the dial", () => {
     const layout = createClockTowerPreset();
-    expect(layout.gears.map((g) => g.id)).toEqual([DRIVE_ID, MINUTE_ID, IDLER_ID, HOUR_ID]);
+    expect(layout.gears.map((g) => g.id)).toEqual([DRIVE_ID, MINUTE_ID, IDLER_ID, HOUR_ID, PENDULUM_ID, BOB_ID]);
     expect(layout.remoteLinks).toEqual([]);
-    for (const g of layout.gears) {
-      expect(g.axis).toEqual([0, 0, 1]); // dial-facing wheels
-      expect(g.position[0]).toBe(0);
-      expect(g.position[2]).toBe(0);
+    for (const g of layout.gears) expect(g.axis).toEqual([0, 0, 1]); // dial-facing wheels
+    // The going train stacks on one vertical line; the pendulum pivot sits out in front of it.
+    for (const id of [DRIVE_ID, MINUTE_ID, IDLER_ID, HOUR_ID]) {
+      expect(byId(layout.gears, id).position[0]).toBe(0);
+      expect(byId(layout.gears, id).position[2]).toBe(0);
     }
-    expect(layout.gears.filter((g) => g.type === "crank")).toHaveLength(1);
+    // Two cranks: the going train's drive wheel, and the pendulum's own rocking pivot.
+    expect(layout.gears.filter((g) => g.type === "crank")).toHaveLength(2);
   });
 
   it("stacks all three meshes at exactly their summed pitch radii", () => {
@@ -73,6 +78,18 @@ describe("createClockTowerPreset", () => {
     expect(d.overlapPairs).toEqual([]);
   });
 
+  it("couples the bob to the pivot so the pendulum is part of the graph, not a lone crank", () => {
+    const layout = createClockTowerPreset();
+    const pivot = byId(layout.gears, PENDULUM_ID);
+    const bob = byId(layout.gears, BOB_ID);
+    expect(bob.type).toBe("load");
+    expect(bob.position).toEqual(pivot.position);
+    expect(bob.axis).toEqual(pivot.axis);
+    const edge = evaluatePair(pivot, bob);
+    expect(edge).not.toBeNull();
+    expect(edge!.kind).toBe("coupling");
+  });
+
   it("turns the hour wheel at exactly 1/4 the minute wheel, in the SAME direction", () => {
     let layout = createClockTowerPreset();
     for (let i = 0; i < 600; i++) {
@@ -107,21 +124,39 @@ describe("createClockTowerProps", () => {
     expect(new Set(props.filter((p) => p.attachTo).map((p) => p.attachTo)).size).toBeGreaterThanOrEqual(2);
   });
 
-  it("swings the pendulum on a closable crank-slider linkage", () => {
-    const linked = createClockTowerProps().filter((p) => p.linkTo);
-    expect(linked.length).toBe(2); // the rod and the bob
-    const roles = new Set(linked.map((p) => p.linkTo!.role));
-    expect(roles.has("rod")).toBe(true);
-    expect(roles.has("slider")).toBe(true);
+  it("swings the pendulum about its own pivot, rather than sliding it sideways", () => {
+    const props = createClockTowerProps();
+    const pendulum = props.filter((p) => p.attachTo === PENDULUM_ID);
+    expect(pendulum.length).toBe(2); // the rod and the bob
 
-    const gearIds = new Set(createClockTowerPreset().gears.map((g) => g.id));
-    for (const p of linked) {
-      expect(gearIds.has(p.linkTo!.gear)).toBe(true);
-      // A rod shorter than the crank throw could never close the linkage: the solver would
-      // clamp its discriminant and the pendulum would collapse instead of swinging.
-      expect(p.linkTo!.rodLength).toBeGreaterThan(p.linkTo!.crankRadius);
+    // A crank-slider (linkTo) was the wrong tool here: it produces straight-line motion, so the
+    // pendulum slid sideways instead of swinging. Nothing in this preset should use it.
+    expect(props.filter((p) => p.linkTo)).toHaveLength(0);
+
+    // Both members hang BELOW the pivot, which is what makes them swing about it.
+    const pivot = createClockTowerPreset().gears.find((g) => g.id === PENDULUM_ID)!;
+    for (const p of pendulum) expect(p.position[1]).toBeLessThan(pivot.position[1]);
+  });
+
+  it("rocks the pivot back and forth over its swing bound instead of turning through", () => {
+    let layout = createClockTowerPreset();
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < 3600; i++) {
+      const r = tick(layout, 1 / 60, 1);
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+      const rot = byId(layout.gears, PENDULUM_ID).rotation;
+      min = Math.min(min, rot);
+      max = Math.max(max, rot);
     }
-    expect(PENDULUM_ROD_L).toBeGreaterThan(PENDULUM_CRANK_R);
+    // It really oscillates -- and never runs away past its swing, which is exactly what would
+    // happen to a pendulum modelled as an ordinary continuously-turning crank.
+    expect(max).toBeGreaterThan(PENDULUM_SWING - 0.05);
+    expect(max).toBeLessThan(PENDULUM_SWING + 0.05);
+    expect(min).toBeLessThan(-PENDULUM_SWING + 0.05);
+    expect(min).toBeGreaterThan(-PENDULUM_SWING - 0.05);
+    expect(Math.abs(byId(layout.gears, PENDULUM_ID).angularVelocity)).toBe(PENDULUM_SPEED);
+    expect(PENDULUM_LENGTH).toBeGreaterThan(0);
   });
 
   it("points every moving prop at a gear that actually exists", () => {

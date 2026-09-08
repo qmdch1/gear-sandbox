@@ -70,10 +70,22 @@ export const DIAL_Y = 62; // height of the dial's centre
 export const DIAL_Z = TOWER_HALF; // the dial face sits on the tower's front wall
 export const DIAL_R = 20;
 
-/** Crank radius and rod length for the pendulum's swing linkage (see `Prop.linkTo`). The
- *  swing is `2 * PENDULUM_CRANK_R` wide, exactly as a crank-slider's stroke always is. */
-export const PENDULUM_CRANK_R = 4;
-export const PENDULUM_ROD_L = 26;
+export const PENDULUM_ID = "시계탑_진자축";
+export const BOB_ID = "시계탑_진자추";
+/** Half-amplitude of the pendulum's swing, in radians (~18 degrees each way). The pivot gear
+ *  carries this as its `reverseAt` bound, so its accumulated rotation oscillates over
+ *  [-PENDULUM_SWING, +PENDULUM_SWING] forever -- and anything `attachTo`-ed to it swings with
+ *  it, about the pivot.
+ *
+ *  A crank-slider (`Prop.linkTo`) was the wrong tool here and looked it: it converts rotation
+ *  into STRAIGHT-LINE reciprocation, so the "pendulum" slid sideways on a horizontal rail
+ *  instead of swinging, and read as a rod poking out of the tower. A pendulum needs oscillating
+ *  ROTATION about a fixed pivot, which is exactly what a reciprocating crank plus `attachTo`
+ *  gives. */
+export const PENDULUM_SWING = 0.32;
+export const PENDULUM_SPEED = 0.9;
+export const PENDULUM_PIVOT: [number, number, number] = [0, 24, 24];
+export const PENDULUM_LENGTH = 18;
 
 /** 시계탑 (tower clock) -- a stone belfry carrying a big dial, driven by a going train whose
  *  minute and hour hands hang off DIFFERENT wheels, geared 4:1 apart, with a pendulum swinging
@@ -110,9 +122,12 @@ export const PENDULUM_ROD_L = 26;
  *  hour hand to 시침휠 -- so they genuinely sweep at different rates rather than being one
  *  assembly faked onto a single gear.
  *
- *  The pendulum swings on a `linkTo` crank-slider off the drive wheel: the bob is the slider,
- *  constrained to a horizontal line, and the rod spans the crank pin to it. A crank-slider's
- *  stroke is exactly twice the crank radius, so the bob sweeps 8 units side to side. */
+ *  The pendulum hangs on its OWN little pivot gear (시계탑_진자축), a crank whose `reverseAt`
+ *  bound makes its rotation oscillate over +/-PENDULUM_SWING rather than turning through. The
+ *  rod and bob are `attachTo`-ed to it, so they swing about that pivot the way a pendulum
+ *  actually does. It is a separate, self-powered cluster -- as a real pendulum is independent
+ *  of the motion work it regulates -- and sits far enough from the big hour wheel to stay clear
+ *  of the overlap check (see PENDULUM_PIVOT). */
 export function createClockTowerPreset(): LayoutState {
   const driveY = DIAL_Y + DRIVE_MESH_DISTANCE; // 80
   const idlerY = DIAL_Y - MINUTE_IDLER_DISTANCE; // 42
@@ -123,7 +138,16 @@ export function createClockTowerPreset(): LayoutState {
     seedGear(MINUTE_ID, "spur", [0, DIAL_Y, 0], [0, 0, 1], MINUTE_TEETH, TOWER_MODULE),
     seedGear(IDLER_ID, "spur", [0, idlerY, 0], [0, 0, 1], IDLER_TEETH, TOWER_MODULE),
     seedGear(HOUR_ID, "spur", [0, hourY, 0], [0, 0, 1], HOUR_TEETH, HOUR_MODULE),
+    seedGear(PENDULUM_ID, "crank", PENDULUM_PIVOT, [0, 0, 1], 4, TOWER_MODULE, PENDULUM_SPEED),
+    // The bob, as the load riding the pivot: coincident with it, same axis, so
+    // `evaluatePair`'s COINCIDENT_ONLY branch resolves a 1:1 coupling. It also keeps the pivot
+    // from being a lone crank with no edges at all, which `classify` would (correctly) flag as
+    // unconnected -- a gear driving nothing but props still has to be part of the graph.
+    seedGear(BOB_ID, "load", PENDULUM_PIVOT, [0, 0, 1], 0, TOWER_MODULE),
   ];
+  // The pivot rocks back and forth instead of turning through -- that is what makes the rod
+  // hung from it read as a swinging pendulum rather than a spinning arm.
+  gears[4].reverseAt = [-PENDULUM_SWING, PENDULUM_SWING];
   return { gears, remoteLinks: [] };
 }
 
@@ -204,28 +228,21 @@ export function createClockTowerProps(): Prop[] {
     roughness: 0.25,
   });
 
-  // The pendulum, swinging on a crank-slider off the drive wheel: the bob is the slider on a
-  // horizontal line, the rod spans the crank pin to it.
-  const swing = {
-    gear: DRIVE_ID,
-    crankRadius: PENDULUM_CRANK_R,
-    rodLength: PENDULUM_ROD_L,
-    slideAxis: [1, 0, 0] as [number, number, number],
-  };
+  // The pendulum: a rod hanging from the pivot with a bob at its end. Both are attached to the
+  // rocking pivot gear, so they swing about it.
   props.push({
-    kind: "cylinder",
-    position: [0, DIAL_Y + DRIVE_MESH_DISTANCE, DIAL_Z - 2],
-    radius: 0.5,
-    height: PENDULUM_ROD_L,
+    kind: "box",
+    position: [PENDULUM_PIVOT[0], PENDULUM_PIVOT[1] - PENDULUM_LENGTH / 2, PENDULUM_PIVOT[2]],
+    size: [0.9, PENDULUM_LENGTH, 0.9],
     color: brass,
     texture: "metal",
     metalness: 0.75,
     roughness: 0.3,
-    linkTo: { ...swing, role: "rod" },
+    attachTo: PENDULUM_ID,
   });
   props.push({
     kind: "cylinder",
-    position: [0, DIAL_Y + DRIVE_MESH_DISTANCE, DIAL_Z - 2],
+    position: [PENDULUM_PIVOT[0], PENDULUM_PIVOT[1] - PENDULUM_LENGTH, PENDULUM_PIVOT[2]],
     radius: 3.4,
     height: 1.2,
     color: brass,
@@ -233,7 +250,7 @@ export function createClockTowerProps(): Prop[] {
     rotation: [Math.PI / 2, 0, 0],
     metalness: 0.8,
     roughness: 0.25,
-    linkTo: { ...swing, role: "slider" },
+    attachTo: PENDULUM_ID,
   });
 
   // Spokes across the big hour wheel and the minute wheel, so the movement itself reads as
