@@ -47,17 +47,52 @@ export const TAIL_R = pitchRadius(TAIL_TEETH, CONVEYOR_MODULE); // 4
  *  which is precisely what equal-diameter pulleys enforce. */
 export const PULLEY_RATIO = HEAD_R / TAIL_R; // 1
 
+/** The motor is keyed COINCIDENT with the head pulley (that is the only way a COINCIDENT_ONLY
+ *  type can receive power), so the two gear bodies are drawn at the same point and the bigger
+ *  of the two is what you see. The pulley's rim just touches the belt slab's underside at
+ *  `BELT_Y + HEAD_R`, so the motor must fit inside that same radius -- counting its TOOTH TIPS,
+ *  which stand one module proud of the pitch circle (gearGeometry's `ADDENDUM_FACTOR = 1`).
+ *  6 teeth at module 1 gives a tip radius of 3 + 1 = 4: flush, and clear of the belt. */
+export const MOTOR_TEETH = 6;
 export const MOTOR_SPEED = 1.0;
 export const BELT_Y = 10;
 export const HEAD_Z = 26;
 export const TAIL_Z = -26;
-/** How far a parcel rides before the belt reverses and carries it back. */
-export const CARRY_TRAVEL = 44;
+
+export const PARCEL_COUNT = 3;
+/** A parcel's length along the run (its z extent) -- used both to draw the crate and to work
+ *  out how far one may ride before it would hang off the end of the belt slab. */
+export const PARCEL_LENGTH = 6;
+/** Distance between parcel centres, so three crates read as separate boxes on the run. */
+export const PARCEL_SPACING = 10;
+
+/** The band of z a parcel CENTRE may occupy while the whole crate is still on the belt slab,
+ *  which spans TAIL_Z..HEAD_Z. */
+export const RUN_MAX_Z = HEAD_Z - PARCEL_LENGTH / 2; // 23
+export const RUN_MIN_Z = TAIL_Z + PARCEL_LENGTH / 2; // -23
+
+/** Where parcel `i` starts along the run: the first crate sits at the head end, the rest
+ *  follow it down the belt one `PARCEL_SPACING` apart, so the run never looks empty. */
+export function parcelStartZ(i: number): number {
+  return RUN_MAX_Z - i * PARCEL_SPACING; // 23, 13, 3
+}
+
+/** How far EVERY parcel rides before the belt reverses and carries it back.
+ *
+ *  Every parcel sits on the same belt, so they all travel the same distance -- which makes the
+ *  binding constraint the LAST crate in the line, the one nearest the tail. Once that crate
+ *  reaches `RUN_MIN_Z` the belt has to turn round, or it rides off the end of the slab and
+ *  hangs in mid-air (`windWith` clamps travel, it does not wrap). Deriving the stroke from
+ *  `parcelStartZ(PARCEL_COUNT - 1)` rather than from the full 52-unit run is the whole point:
+ *  a run-length stroke would carry the two trailing crates 10 and 22 units past the tail
+ *  pulley. The leading crate correspondingly stops short of the tail -- which is what a line
+ *  of parcels spread along a shuttling belt actually does. */
+export const CARRY_TRAVEL = parcelStartZ(PARCEL_COUNT - 1) - RUN_MIN_Z; // 3 - (-23) = 26
 
 /** Radians of pulley rotation that carry a parcel over exactly [0, CARRY_TRAVEL]. A belt on a
  *  pulley of radius r advances r * angle, the same angle x radius relation `rotation.ts` uses
  *  to drive a rack from a pinion. */
-export const CARRY_STROKE = CARRY_TRAVEL / HEAD_R;
+export const CARRY_STROKE = CARRY_TRAVEL / HEAD_R; // 26 / 4 = 6.5
 
 /** 컨베이어 (reversing belt conveyor) -- a motor on the head pulley, a belt to the tail pulley,
  *  and parcels riding the top run.
@@ -78,13 +113,18 @@ export const CARRY_STROKE = CARRY_TRAVEL / HEAD_R;
  *  the constraint a real belt imposes -- both ends run together, or the belt would have to
  *  stretch. Verified numerically over hundreds of ticks in tests/sim/presets/conveyor.test.ts.
  *
- *  The belt REVERSES: the motor carries a `reverseAt` stroke sized so parcels ride the full
- *  length of the top run and are then carried back, instead of accumulating travel forever and
- *  sliding off the end of the world. Parcels use `windWith` along -Z, which is the same
- *  rope-on-drum kinematics (radius x angle) a belt on a pulley obeys. */
+ *  The belt REVERSES: the motor carries a `reverseAt` stroke sized (see `CARRY_TRAVEL`) so the
+ *  TRAILING parcel just reaches the tail end of the slab and is then carried back, instead of
+ *  accumulating travel forever and sliding off the end of the world. Parcels use `windWith`
+ *  along -Z, which is the same rope-on-drum kinematics (radius x angle) a belt on a pulley
+ *  obeys.
+ *
+ *  Purely kinematic, like the rest of this sandbox: this says where the belt and the crates on
+ *  it are at each instant, and nothing at all about what the motor could pull or how heavy a
+ *  parcel may be. */
 export function createConveyorPreset(): LayoutState {
   const gears: GearInstance[] = [
-    seedGear(MOTOR_ID, "crank", [0, BELT_Y, HEAD_Z], [1, 0, 0], 10, CONVEYOR_MODULE, MOTOR_SPEED),
+    seedGear(MOTOR_ID, "crank", [0, BELT_Y, HEAD_Z], [1, 0, 0], MOTOR_TEETH, CONVEYOR_MODULE, MOTOR_SPEED),
     seedGear(HEAD_ID, "pulley", [0, BELT_Y, HEAD_Z], [1, 0, 0], HEAD_TEETH, CONVEYOR_MODULE),
     seedGear(TAIL_ID, "pulley", [0, BELT_Y, TAIL_Z], [1, 0, 0], TAIL_TEETH, CONVEYOR_MODULE),
   ];
@@ -93,13 +133,6 @@ export function createConveyorPreset(): LayoutState {
     gears,
     remoteLinks: [{ a: HEAD_ID, b: TAIL_ID, kind: "belt" }],
   };
-}
-
-export const PARCEL_COUNT = 3;
-
-/** Where parcel `i` starts along the run, evenly spread so the belt never looks empty. */
-export function parcelStartZ(i: number): number {
-  return HEAD_Z - 6 - (i * (CARRY_TRAVEL - 8)) / PARCEL_COUNT;
 }
 
 /** The conveyor's body: a steel frame on legs, side guards, idler rollers along the run, and
@@ -170,7 +203,7 @@ export function createConveyorProps(): Prop[] {
     props.push({
       kind: "box",
       position: [0, BELT_Y + HEAD_R + 2.4, parcelStartZ(i)],
-      size: [6, 4, 6],
+      size: [PARCEL_LENGTH, 4, PARCEL_LENGTH],
       color: crateCol,
       texture: "wood",
       roughness: 0.8,

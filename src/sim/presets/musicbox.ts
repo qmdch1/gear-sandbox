@@ -37,17 +37,31 @@ export const REDUCTION_ID = "오르골_감속휠";
 export const BARREL_ID = "오르골_실린더";
 export const GOVERNOR_ID = "오르골_조속기";
 
-export const BOX_MODULE = 0.5;
+export const BOX_MODULE = 0.25;
 export const WINDER_TEETH = 8;
 export const REDUCTION_TEETH = 48;
 export const GOVERNOR_TEETH = 6;
+/** The barrel is a `pulley`: it never tooth-meshes (it only ever receives power through the
+ *  coincident 1:1 coupling with the great wheel), so its tooth count exists purely to give it
+ *  a pitch radius. It is chosen so that radius equals the brass barrel actually drawn around
+ *  it -- 40 * 0.25 / 2 = 5 -- rather than leaving the simulated body a different size from the
+ *  visible one. */
+export const BARREL_TEETH = 40;
 
-export const WINDER_R = pitchRadius(WINDER_TEETH, BOX_MODULE); // 2
-export const REDUCTION_R = pitchRadius(REDUCTION_TEETH, BOX_MODULE); // 12
-export const GOVERNOR_R = pitchRadius(GOVERNOR_TEETH, BOX_MODULE); // 1.5
+export const WINDER_R = pitchRadius(WINDER_TEETH, BOX_MODULE); // 1
+export const REDUCTION_R = pitchRadius(REDUCTION_TEETH, BOX_MODULE); // 6
+export const GOVERNOR_R = pitchRadius(GOVERNOR_TEETH, BOX_MODULE); // 0.75
+export const BARREL_R = pitchRadius(BARREL_TEETH, BOX_MODULE); // 5
 
-export const WIND_MESH_DISTANCE = WINDER_R + REDUCTION_R; // 14
-export const GOVERNOR_MESH_DISTANCE = REDUCTION_R + GOVERNOR_R; // 13.5
+export const WIND_MESH_DISTANCE = WINDER_R + REDUCTION_R; // 7
+export const GOVERNOR_MESH_DISTANCE = REDUCTION_R + GOVERNOR_R; // 6.75
+
+/** A rendered tooth reaches one full module PAST the pitch circle (`gearGeometry.ts`:
+ *  `addendumRadius = pitchRadius + module * ADDENDUM_FACTOR`, ADDENDUM_FACTOR = 1). Every
+ *  clearance below is measured against these tip radii, not the pitch radii -- using the pitch
+ *  radius would silently leave a 0.25 interference at each rim. */
+export const REDUCTION_TIP_R = REDUCTION_R + BOX_MODULE; // 6.25
+export const GOVERNOR_TIP_R = GOVERNOR_R + BOX_MODULE; // 1
 
 /** The winding key steps DOWN into the barrel: 8 / 48, so the pinned cylinder turns at one
  *  sixth of the key. A music box needs exactly this -- the key is turned briskly by hand, but
@@ -62,17 +76,50 @@ export const GOVERNOR_STEP_UP = REDUCTION_TEETH / GOVERNOR_TEETH; // 8
 export const WINDER_SPEED = 1.2;
 
 const BASE_Y = 4;
+/** Height of the barrel arbor -- the shared centre of the great wheel and the barrel. */
+export const ARBOR_Y = BASE_Y + 8; // 12
 export const BARREL_LEN = 20;
 export const PIN_ROWS = 10;
-export const PIN_RADIUS = 3.2;
+export const PIN_RADIUS = 5.4;
+/** Half the length of one pin box (`size[0] / 2`), so `PIN_TIP_RADIUS` is how far a pin's tip
+ *  actually reaches from the arbor -- the number every clearance below is measured against. */
+const PIN_HALF_LENGTH = 0.55;
+export const PIN_TIP_RADIUS = PIN_RADIUS + PIN_HALF_LENGTH; // 5.95
+const COMB_HALF_HEIGHT = 0.5;
+/** What actually fixes the comb's height is the GREAT WHEEL, not the pins. The wheel is
+ *  coincident with the barrel, so it is drawn as a disc straight across the barrel's mid-plane,
+ *  and the comb runs the barrel's whole length -- so the comb has to hang below the wheel's tip
+ *  circle or the wheel saws through it (which it did, by 4.4, before `BOX_MODULE` came down).
+ *  0.25 of clearance under the tip circle leaves the pins sweeping 0.55 above the comb: close
+ *  enough to read as plucking, with nothing interpenetrating. */
+export const COMB_Y = ARBOR_Y - REDUCTION_TIP_R - 0.25 - COMB_HALF_HEIGHT; // 5
+
+/** Case dimensions, kept as named constants because every clearance in this preset is checked
+ *  against them (see tests/sim/presets/musicbox.test.ts). Walls are 22 tall centred on
+ *  BASE_Y + 8, so their top edge is BASE_Y + 19. */
+export const CASE_WIDTH = 32;
+export const CASE_DEPTH = 26;
+export const CASE_WALL_TOP = BASE_Y + 19; // 23
+
+export const GOVERNOR_Y = ARBOR_Y + GOVERNOR_MESH_DISTANCE; // 18.75
+/** The governor gear has to mesh the great wheel at the barrel's mid-plane (z = 0), but its FAN
+ *  cannot whir there: a blade long enough to be worth watching would sweep straight through the
+ *  brass barrel and the raised lid. So the fan rides the far end of the governor arbor, 1.5
+ *  beyond the barrel's end, in the open front of the case where nothing else stands. */
+export const FAN_Z = BARREL_LEN / 2 + 1.5; // 11.5
+const FAN_OFFSET = 1.8;
+const FAN_BLADE: [number, number, number] = [3.6, 1.8, 0.3];
+/** How far the outermost corner of a fan blade is from the governor's axis -- the radius of the
+ *  circle the fan actually sweeps, which is what has to stay inside the case. */
+export const FAN_SWEEP_R = Math.hypot(FAN_OFFSET + FAN_BLADE[0] / 2, FAN_BLADE[1] / 2); // 3.711
 
 /** 오르골 (music box) -- a wind-up key driving a pinned barrel that plucks a tuned comb, with a
  *  governor fan holding the tempo.
  *
- *  Four gears, three tooth meshes in a line:
+ *  Four gears: TWO tooth meshes in a line, plus one coincident shaft coupling.
  *
  *    오르골_태엽 (crank, 8T) --mesh-- 오르골_감속휠 (spur, 48T) --mesh-- 오르골_조속기 (spur, 6T)
- *    오르골_감속휠 --coincident--> 오르골_실린더 (pulley, the pinned barrel)
+ *    오르골_감속휠 --coincident coupling (1:1)--> 오르골_실린더 (pulley, the pinned barrel)
  *
  *  The big 48-tooth wheel is the hub of the movement: the key steps down into it (8/48), the
  *  barrel is keyed straight onto it (a coincident 1:1 coupling, exactly how a music-box barrel
@@ -86,33 +133,40 @@ export const PIN_RADIUS = 3.2;
  *  the same direction as the key. All of it is verified numerically over hundreds of real ticks
  *  in tests/sim/presets/musicbox.test.ts rather than only derived here.
  *
+ *  This sandbox models angular velocity and rotation only. Nothing here says anything about the
+ *  torque a mainspring would deliver, how long a real movement would run, or how hard the pins
+ *  would strike -- only how fast each part turns relative to the others.
+ *
  *  Everything runs about world Z so the barrel lies across the case with its pins facing the
  *  comb, the way a real movement is laid out.
+ *
+ *  PROPORTIONS (why `BOX_MODULE` is 0.25): the great wheel is coincident with the barrel, so it
+ *  is drawn as a disc at the barrel's mid-plane. Anything the pins are supposed to reach -- the
+ *  comb, first of all -- therefore has to sit OUTSIDE that disc, which caps the wheel's pitch
+ *  radius at roughly the pins' own reach. At module 0.5 the 48-tooth wheel had a 12 radius: it
+ *  cut straight through the comb it was meant to drive, stood 5 above the case walls, and
+ *  speared the raised lid, while the governor and its fan orbited outside the case entirely.
+ *  At 0.25 the wheel is a 6-radius flange just proud of the pinned barrel, and the whole
+ *  movement sits inside its case. Module changes no ratio: every mesh ratio here is a tooth
+ *  count ratio.
  *
  *  The barrel is a plain cylinder -- rotationally symmetric, so on its own it would look
  *  motionless however fast it turned. The rows of pins standing off it are what make the
  *  rotation readable, and each is `attachTo`-ed to the barrel so `SceneSync` sweeps it round. */
 export function createMusicBoxPreset(): LayoutState {
   const gears: GearInstance[] = [
-    seedGear(REDUCTION_ID, "spur", [0, BASE_Y + 12, 0], [0, 0, 1], REDUCTION_TEETH, BOX_MODULE),
+    seedGear(REDUCTION_ID, "spur", [0, ARBOR_Y, 0], [0, 0, 1], REDUCTION_TEETH, BOX_MODULE),
     seedGear(
       WINDER_ID,
       "crank",
-      [WIND_MESH_DISTANCE, BASE_Y + 12, 0],
+      [WIND_MESH_DISTANCE, ARBOR_Y, 0],
       [0, 0, 1],
       WINDER_TEETH,
       BOX_MODULE,
       WINDER_SPEED,
     ),
-    seedGear(BARREL_ID, "pulley", [0, BASE_Y + 12, 0], [0, 0, 1], 10, BOX_MODULE),
-    seedGear(
-      GOVERNOR_ID,
-      "spur",
-      [0, BASE_Y + 12 + GOVERNOR_MESH_DISTANCE, 0],
-      [0, 0, 1],
-      GOVERNOR_TEETH,
-      BOX_MODULE,
-    ),
+    seedGear(BARREL_ID, "pulley", [0, ARBOR_Y, 0], [0, 0, 1], BARREL_TEETH, BOX_MODULE),
+    seedGear(GOVERNOR_ID, "spur", [0, GOVERNOR_Y, 0], [0, 0, 1], GOVERNOR_TEETH, BOX_MODULE),
   ];
   return { gears, remoteLinks: [] };
 }
@@ -132,26 +186,32 @@ export function createMusicBoxProps(): Prop[] {
   const steel = 0xb8bec6;
   const felt = 0x7c2d2d;
 
+  const halfW = CASE_WIDTH / 2; // 16
+  const halfD = CASE_DEPTH / 2; // 13
+
   const props: Prop[] = [
     // Case: floor, two ends, a back, and a raised lid.
-    { kind: "box", position: [0, BASE_Y - 2, 0], size: [40, 3, 26], color: walnut, texture: "wood", textureRepeat: [5, 3], roughness: 0.7, metalness: 0.05 },
-    { kind: "box", position: [-20, BASE_Y + 8, 0], size: [2, 22, 26], color: walnut, texture: "wood", roughness: 0.7, metalness: 0.05 },
-    { kind: "box", position: [20, BASE_Y + 8, 0], size: [2, 22, 26], color: walnut, texture: "wood", roughness: 0.7, metalness: 0.05 },
-    { kind: "box", position: [0, BASE_Y + 8, -13], size: [40, 22, 2], color: walnut, texture: "wood", textureRepeat: [5, 3], roughness: 0.7, metalness: 0.05 },
-    { kind: "box", position: [0, BASE_Y + 20, -4], size: [40, 1.5, 20], color: lidCol, texture: "wood", textureRepeat: [5, 3], rotation: [-0.5, 0, 0], roughness: 0.65, metalness: 0.06 },
+    { kind: "box", position: [0, BASE_Y - 2, 0], size: [CASE_WIDTH, 3, CASE_DEPTH], color: walnut, texture: "wood", textureRepeat: [5, 3], roughness: 0.7, metalness: 0.05 },
+    { kind: "box", position: [-halfW, BASE_Y + 8, 0], size: [2, 22, CASE_DEPTH], color: walnut, texture: "wood", roughness: 0.7, metalness: 0.05 },
+    { kind: "box", position: [halfW, BASE_Y + 8, 0], size: [2, 22, CASE_DEPTH], color: walnut, texture: "wood", roughness: 0.7, metalness: 0.05 },
+    { kind: "box", position: [0, BASE_Y + 8, -halfD], size: [CASE_WIDTH, 22, 2], color: walnut, texture: "wood", textureRepeat: [5, 3], roughness: 0.7, metalness: 0.05 },
+    { kind: "box", position: [0, BASE_Y + 20, -4], size: [CASE_WIDTH, 1.5, 20], color: lidCol, texture: "wood", textureRepeat: [5, 3], rotation: [-0.5, 0, 0], roughness: 0.65, metalness: 0.06 },
     // Felt lining on the case floor.
-    { kind: "box", position: [0, BASE_Y - 0.2, 4], size: [34, 0.4, 14], color: felt, texture: "fabric", textureRepeat: [6, 3], roughness: 0.95, metalness: 0.02 },
+    { kind: "box", position: [0, BASE_Y - 0.2, 4], size: [CASE_WIDTH - 6, 0.4, 14], color: felt, texture: "fabric", textureRepeat: [6, 3], roughness: 0.95, metalness: 0.02 },
     // The barrel itself, lying across the case along Z.
-    { kind: "cylinder", position: [0, BASE_Y + 12, 0], radius: PIN_RADIUS - 0.4, height: BARREL_LEN, color: brass, texture: "metal", rotation: [Math.PI / 2, 0, 0], metalness: 0.8, roughness: 0.25 },
+    { kind: "cylinder", position: [0, ARBOR_Y, 0], radius: BARREL_R, height: BARREL_LEN, color: brass, texture: "metal", rotation: [Math.PI / 2, 0, 0], metalness: 0.8, roughness: 0.25 },
     // The tuned comb the pins pluck: a steel bar with teeth, set just under the barrel.
-    { kind: "box", position: [0, BASE_Y + 7.4, 0], size: [3, 1, BARREL_LEN], color: steel, texture: "metal", metalness: 0.85, roughness: 0.2 },
+    { kind: "box", position: [0, COMB_Y, 0], size: [3, COMB_HALF_HEIGHT * 2, BARREL_LEN], color: steel, texture: "metal", metalness: 0.85, roughness: 0.2 },
+    // The governor arbor: a slim shaft carrying the fan out past the end of the barrel, so the
+    // little escape gear at z = 0 and the fan at z = FAN_Z visibly belong to each other.
+    { kind: "cylinder", position: [0, GOVERNOR_Y, FAN_Z / 2], radius: 0.25, height: FAN_Z, color: steel, texture: "metal", rotation: [Math.PI / 2, 0, 0], metalness: 0.85, roughness: 0.2 },
   ];
 
   // Comb teeth, cut across the bar -- static, they are plucked rather than driven.
   for (let i = 0; i < 14; i++) {
     props.push({
       kind: "box",
-      position: [1.6, BASE_Y + 7.4, -BARREL_LEN / 2 + 1 + (i * (BARREL_LEN - 2)) / 13],
+      position: [1.6, COMB_Y, -BARREL_LEN / 2 + 1 + (i * (BARREL_LEN - 2)) / 13],
       size: [3.4, 0.5, 0.7],
       color: steel,
       texture: "metal",
@@ -167,8 +227,8 @@ export function createMusicBoxProps(): Prop[] {
     const z = -BARREL_LEN / 2 + 1.5 + (i * (BARREL_LEN - 3)) / (PIN_ROWS - 1);
     props.push({
       kind: "box",
-      position: [Math.cos(a) * PIN_RADIUS, BASE_Y + 12 + Math.sin(a) * PIN_RADIUS, z],
-      size: [1.1, 0.5, 0.5],
+      position: [Math.cos(a) * PIN_RADIUS, ARBOR_Y + Math.sin(a) * PIN_RADIUS, z],
+      size: [PIN_HALF_LENGTH * 2, 0.5, 0.5],
       color: brass,
       texture: "metal",
       rotation: [0, 0, a],
@@ -178,17 +238,14 @@ export function createMusicBoxProps(): Prop[] {
     });
   }
 
-  // The governor fan: two blades that whir round with the fast little escape gear.
+  // The governor fan: two blades that whir round with the fast little escape gear, out at the
+  // end of its arbor where there is clear air for them.
   for (let i = 0; i < 2; i++) {
     const a = (i / 2) * Math.PI * 2;
     props.push({
       kind: "box",
-      position: [
-        Math.cos(a) * 2.6,
-        BASE_Y + 12 + GOVERNOR_MESH_DISTANCE + Math.sin(a) * 2.6,
-        0,
-      ],
-      size: [5, 2.6, 0.3],
+      position: [Math.cos(a) * FAN_OFFSET, GOVERNOR_Y + Math.sin(a) * FAN_OFFSET, FAN_Z],
+      size: FAN_BLADE,
       color: steel,
       texture: "metal",
       rotation: [0, 0, a],

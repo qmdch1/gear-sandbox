@@ -12,7 +12,13 @@ import {
   CARRY_TRAVEL,
   CARRY_STROKE,
   PARCEL_COUNT,
+  PARCEL_LENGTH,
   parcelStartZ,
+  HEAD_Z,
+  TAIL_Z,
+  MOTOR_TEETH,
+  HEAD_TEETH,
+  BELT_Y,
 } from "../../../src/sim/presets/conveyor";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
@@ -33,6 +39,17 @@ describe("createConveyorPreset", () => {
     // Equal pulleys are what force both ends of the belt to the same rim speed.
     expect(HEAD_R).toBe(TAIL_R);
     expect(PULLEY_RATIO).toBe(1);
+  });
+
+  it("keeps the motor's tooth tips clear of the belt it drives", () => {
+    // Motor and head pulley are drawn at the SAME point (that is what a coincident coupling
+    // means), so the larger body is what you see. The pulley's rim just touches the belt slab's
+    // underside at BELT_Y + HEAD_R; a motor whose TOOTH TIPS (pitch radius + one module of
+    // addendum, gearGeometry's ADDENDUM_FACTOR = 1) reach past that pokes up through the belt.
+    expect(MOTOR_TEETH).toBeLessThanOrEqual(HEAD_TEETH);
+    const motor = createConveyorPreset().gears[0];
+    const motorTipRadius = (motor.module * motor.teeth) / 2 + motor.module;
+    expect(BELT_Y + motorTipRadius).toBeLessThanOrEqual(BELT_Y + HEAD_R);
   });
 
   it("forms a real coincident coupling and a real belt edge via the real buildEdges", () => {
@@ -79,7 +96,10 @@ describe("createConveyorPreset", () => {
     expect(createConveyorPreset().gears[0].reverseAt).toEqual([0, CARRY_STROKE]);
   });
 
-  it("carries parcels the full length and back, never off the end of the belt", () => {
+  // NOTE: this checks the SHARED belt travel only -- that it runs out, comes back, and never
+  // escapes [0, CARRY_TRAVEL]. Whether each individual crate stays on the slab is a separate
+  // question about where the crates START, pinned in the createConveyorProps suite below.
+  it("runs the belt travel out and back, never past its bounds", () => {
     let layout = createConveyorPreset();
     const carryAt = (rot: number) => Math.min(Math.max(rot * HEAD_R, 0), CARRY_TRAVEL);
     let min = Infinity;
@@ -118,6 +138,32 @@ describe("createConveyorProps", () => {
       expect(p.windWith!.direction).toEqual([0, 0, -1]); // head toward tail
       expect(p.windWith!.travel).toEqual([0, CARRY_TRAVEL]);
     }
+  });
+
+  it("keeps EVERY parcel fully on the belt slab across the whole stroke", () => {
+    // The bug this pins: all parcels share one stroke, but they start at different points, so
+    // a stroke sized for the LEADING crate carries the trailing ones clean off the tail end
+    // and leaves them hanging in mid-air. Checked against the real prop data (position, size
+    // and windWith), not against the constants alone, and at BOTH ends of the travel.
+    const parcels = createConveyorProps().filter((p) => p.windWith);
+    expect(parcels.length).toBe(PARCEL_COUNT);
+    for (const p of parcels) {
+      const halfLength = (p as { size: [number, number, number] }).size[2] / 2;
+      const [lo, hi] = p.windWith!.travel;
+      const dirZ = p.windWith!.direction[2];
+      for (const lift of [lo, hi]) {
+        const centreZ = p.position[2] + dirZ * lift;
+        expect(centreZ - halfLength).toBeGreaterThanOrEqual(TAIL_Z);
+        expect(centreZ + halfLength).toBeLessThanOrEqual(HEAD_Z);
+      }
+    }
+  });
+
+  it("uses the whole belt: the trailing crate reaches the tail end at full stroke", () => {
+    // The other half of the previous test -- without this, shrinking the stroke to zero would
+    // also "keep every parcel on the slab".
+    const trailing = parcelStartZ(PARCEL_COUNT - 1) - CARRY_TRAVEL;
+    expect(trailing - PARCEL_LENGTH / 2).toBeCloseTo(TAIL_Z, 12);
   });
 
   it("spreads the parcels along the run instead of stacking them at one spot", () => {

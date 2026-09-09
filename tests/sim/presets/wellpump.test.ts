@@ -12,6 +12,10 @@ import {
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
+import type { Prop } from "../../../src/render/props";
+
+type CylinderProp = Extract<Prop, { kind: "cylinder" }>;
+type RingProp = Extract<Prop, { kind: "ring" }>;
 
 const liftAt = (drumRotation: number) =>
   Math.min(Math.max(drumRotation * ROPE_RADIUS, 0), BUCKET_TRAVEL);
@@ -88,14 +92,38 @@ describe("createWellPumpPreset", () => {
 
   it("turns the drum at exactly the handle's speed -- a coupling never changes it", () => {
     let layout = createWellPumpPreset();
-    for (let i = 0; i < 300; i++) {
+    // Four full strokes, so the run crosses several reversals. The previous version of this
+    // test stopped at 300 ticks -- the first reversal lands at tick 606 -- so it asserted the
+    // easy half of the claim and never saw the interesting tick.
+    const ticksPerStroke = Math.ceil((STROKE / HANDLE_SPEED) * 60);
+    let previousHandleVelocity = createWellPumpPreset().gears[0].angularVelocity;
+    let reversalsSeen = 0;
+
+    for (let i = 0; i < ticksPerStroke * 4; i++) {
       const r = tick(layout, 1 / 60, 1);
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
       const handle = layout.gears.find((g) => g.id === HANDLE_ID)!;
       const drum = layout.gears.find((g) => g.id === DRUM_ID)!;
-      expect(drum.angularVelocity).toBe(handle.angularVelocity);
       expect(drum.broken).toBe(false);
+      // The claim that actually matters for a barrel keyed onto its handle: the two shafts
+      // stand at exactly the same angle, forever, reversals included. Both integrate the same
+      // propagated velocity each tick, so this is bit-for-bit equality, not an approximation.
+      expect(drum.rotation).toBe(handle.rotation);
+      expect(Math.abs(drum.angularVelocity)).toBe(HANDLE_SPEED);
+
+      // Their STORED velocities agree too, except on the single tick a reversal lands on: the
+      // crank flips its own commanded velocity at the end of that tick (simulation.ts's
+      // `reverseAt` block) while the drum still carries the velocity it was actually driven
+      // at, and the drum picks up the new sign on the very next tick. That one-tick lag is the
+      // engine's, not this preset's, and it never reaches `rotation` -- hence the strict
+      // equality above and this exemption here.
+      const reversedThisTick = handle.angularVelocity !== previousHandleVelocity;
+      if (reversedThisTick) reversalsSeen++;
+      else expect(drum.angularVelocity).toBe(handle.angularVelocity);
+      previousHandleVelocity = handle.angularVelocity;
     }
+
+    expect(reversalsSeen).toBeGreaterThanOrEqual(3); // the run really did cross reversals
   });
 });
 
@@ -109,6 +137,27 @@ describe("createWellPumpProps", () => {
       expect(p.windWith!.direction).toEqual([0, 1, 0]);
       expect(p.windWith!.travel).toEqual([0, BUCKET_TRAVEL]);
     }
+  });
+
+  it("stops the raised bucket clear of the windlass barrel instead of inside it", () => {
+    const props = createWellPumpProps();
+    const cylinders = props.filter((p): p is CylinderProp => p.kind === "cylinder");
+    // The barrel is the cylinder whose radius IS the rope radius; it lies along X (rotated a
+    // quarter turn about Z), so its radial extent is what it occupies in Y.
+    const barrel = cylinders.find((p) => p.radius === ROPE_RADIUS);
+    expect(barrel).toBeDefined();
+    const barrelUnderside = barrel!.position[1] - barrel!.radius;
+
+    // The bucket's rim, carried BUCKET_TRAVEL up the rope, must finish below that underside --
+    // otherwise the bucket ends every draw buried inside the barrel it hangs from.
+    const bucket = cylinders.find((p) => p.windWith);
+    expect(bucket).toBeDefined();
+    expect(bucket!.position[1] + bucket!.height / 2 + BUCKET_TRAVEL).toBeLessThan(barrelUnderside);
+
+    // ...and so must the iron hoop riding with it (a flat ring, so `tube` is its Y half-extent).
+    const hoop = props.filter((p): p is RingProp => p.kind === "ring").find((p) => p.windWith);
+    expect(hoop).toBeDefined();
+    expect(hoop!.position[1] + hoop!.tube + BUCKET_TRAVEL).toBeLessThan(barrelUnderside);
   });
 
   it("puts spokes across the barrel so the drum's own rotation is visible", () => {

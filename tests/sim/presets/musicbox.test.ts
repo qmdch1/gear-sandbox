@@ -16,6 +16,19 @@ import {
   WINDER_SPEED,
   PIN_ROWS,
   pinRowAngle,
+  ARBOR_Y,
+  BARREL_LEN,
+  BARREL_R,
+  BOX_MODULE,
+  REDUCTION_TIP_R,
+  GOVERNOR_TIP_R,
+  PIN_RADIUS,
+  COMB_Y,
+  CASE_WALL_TOP,
+  FAN_SWEEP_R,
+  FAN_Z,
+  GOVERNOR_Y,
+  PIN_TIP_RADIUS,
 } from "../../../src/sim/presets/musicbox";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
@@ -141,5 +154,46 @@ describe("createMusicBoxProps", () => {
   it("gives the case timber, the felt lining and the brass movement their real finishes", () => {
     const used = new Set(createMusicBoxProps().map((p) => p.texture).filter(Boolean));
     for (const kind of ["wood", "fabric", "metal"]) expect(used.has(kind as never)).toBe(true);
+  });
+});
+
+/** The great wheel is coincident with the barrel, so it renders as a disc at the barrel's
+ *  mid-plane; the governor sits one pitch-sum above it and its fan sweeps a circle. Nothing in
+ *  the simulation stops those from being drawn straight through the case, the lid or the comb --
+ *  at BOX_MODULE 0.5 they were, so this suite pins the clearances that keep the movement inside
+ *  the box it is supposed to live in. */
+describe("music box clearances", () => {
+  it("measures rims at the tooth tip, not the pitch circle", () => {
+    // gearGeometry.ts: addendumRadius = pitchRadius + module * 1.0.
+    expect(REDUCTION_TIP_R).toBe(REDUCTION_R + BOX_MODULE);
+    expect(GOVERNOR_TIP_R).toBe(GOVERNOR_R + BOX_MODULE);
+  });
+
+  it("keeps the great wheel inside the case instead of spearing the lid", () => {
+    // Wheel rim, top and bottom, against the case walls and the comb it runs across.
+    expect(ARBOR_Y + REDUCTION_TIP_R).toBeLessThan(CASE_WALL_TOP);
+    expect(ARBOR_Y - REDUCTION_TIP_R).toBeGreaterThan(COMB_Y + 0.5);
+  });
+
+  it("keeps the governor and its whole fan sweep under the case wall top", () => {
+    expect(GOVERNOR_Y + GOVERNOR_TIP_R).toBeLessThan(CASE_WALL_TOP);
+    expect(GOVERNOR_Y + FAN_SWEEP_R).toBeLessThan(CASE_WALL_TOP);
+  });
+
+  it("whirs the fan clear of the barrel, past the end of it", () => {
+    // The fan's circle would otherwise cut through the brass barrel: it reaches to within
+    // GOVERNOR_MESH_DISTANCE - FAN_SWEEP_R of the arbor, which is inside the barrel's radius.
+    expect(GOVERNOR_MESH_DISTANCE - FAN_SWEEP_R).toBeLessThan(BARREL_R);
+    // ...so it has to live beyond the barrel's end instead.
+    expect(FAN_Z).toBeGreaterThan(BARREL_LEN / 2);
+  });
+
+  it("sweeps the pins just past the comb without driving them through it", () => {
+    const combTop = COMB_Y + 0.5;
+    const pinLow = ARBOR_Y - PIN_TIP_RADIUS;
+    expect(pinLow).toBeGreaterThan(combTop);
+    expect(pinLow - combTop).toBeLessThan(0.7); // close enough to read as plucking
+    // The pins must also be rooted IN the barrel, not floating off it.
+    expect(PIN_RADIUS - (PIN_TIP_RADIUS - PIN_RADIUS)).toBeLessThan(BARREL_R);
   });
 });

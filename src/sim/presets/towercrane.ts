@@ -53,25 +53,47 @@ export const HOIST_MOTOR_SPEED = 1.4;
 /** Effective radius the hoist rope spools at. Rope-on-drum kinematics: the hook moves
  *  `drumRotation * ROPE_RADIUS`. */
 export const ROPE_RADIUS = 2.5;
-/** How far the hook can travel between the ground and the jib. */
-export const HOOK_TRAVEL = 30;
-/** The winding stroke that carries the hook over exactly [0, HOOK_TRAVEL]. */
-export const HOIST_STROKE = HOOK_TRAVEL / ROPE_RADIUS;
 
 export const SLEW_Y = 46; // top of the mast, where the jib pivots
 const MAST_HALF = 3; // half-width of the lattice mast
 export const JIB_REACH = 40; // how far the jib extends from the mast
 const COUNTER_REACH = 24; // how far the counter-jib extends the other way
 export const HOOK_X = 26; // where the trolley (and so the hook) hangs along the jib
-const HOOK_REST_Y = 2;
+
+const TROLLEY_H = 1.6;
+/** Underside of the trolley -- the headblock the hoist rope drops from, and so the ceiling
+ *  the hook block can rise to. Exported because `HOOK_TRAVEL` is measured against it. */
+export const TROLLEY_UNDERSIDE = SLEW_Y + TROLLEY_H - TROLLEY_H / 2; // 46.8
+
+const HOOK_HALF = 1.2;      // half-height of the hook block
+const CRATE_HEIGHT = 3.5;   // the slung crate's height
+const CRATE_DROP = 3.2;     // how far the crate's centre hangs below the hook block's centre
+/** Where the hook block's CENTRE sits with the rope fully paid out. Derived, not guessed:
+ *  the crate slung `CRATE_DROP` below it must come to rest ON the ground plane (y = 0, an
+ *  opaque plane -- see render/scene.ts), not buried in it, so the hook centre has to clear
+ *  the drop plus half the crate. At the previous hand-picked 2 the crate spanned
+ *  y = -2.95 .. 0.55, i.e. it started 84% underground and only surfaced once hoisted. */
+export const HOOK_REST_Y = CRATE_DROP + CRATE_HEIGHT / 2; // 4.95
+
+/** How far the hook climbs. Bounded by the trolley it hangs from, so "lifts to the jib" is
+ *  literally true: the hook block's top at full travel is
+ *  HOOK_REST_Y + HOOK_TRAVEL + HOOK_HALF = 46.15, which noses up just under
+ *  TROLLEY_UNDERSIDE = 46.8 rather than stopping a third of the mast short of it. */
+export const HOOK_TRAVEL = 40;
+/** The winding stroke that carries the hook over exactly [0, HOOK_TRAVEL]. 40 / 2.5 = 16. */
+export const HOIST_STROKE = HOOK_TRAVEL / ROPE_RADIUS;
 
 /** 타워크레인 (tower crane) -- a mast, a jib that slews on a big ring gear, and a hoist drum
  *  that raises and lowers the hook.
  *
  *  Four gears in TWO independent, separately powered clusters:
  *
- *    타워크레인_선회모터 (crank, 8T) --mesh-- 타워크레인_선회기어 (spur, 40T)   [slewing]
- *    타워크레인_권상모터 (crank) --coincident--> 타워크레인_권상드럼 (pulley)   [hoisting]
+ *    타워크레인_선회모터 (crank, 8T) --mesh-- 타워크레인_선회기어 (spur, 40T)        [slewing]
+ *    타워크레인_권상모터 (crank, 10T) --coincident--> 타워크레인_권상드럼 (pulley, 8T) [hoisting]
+ *
+ *  (The hoist pair's tooth counts do NOT set its ratio -- a coincident coupling is always 1:1
+ *  whatever the teeth say. They only size the two bodies, and so decide how far the cluster
+ *  has to sit from the big slew ring to clear the overlap floor; see the geometry note below.)
  *
  *  Two clusters, and so two cranks, is the honest model: on a real tower crane slewing and
  *  hoisting are driven by separate motors that run independently -- you can swing the jib while
@@ -86,12 +108,24 @@ const HOOK_REST_Y = 2;
  *  ring turning inside a jib that stays put.
  *
  *  Hoisting: the drum is keyed coincident to its own motor (1:1 -- a coupling never changes
- *  speed) and the hook rides `windWith` on the rope. That motor carries a `reverseAt` stroke so
- *  the hook lifts to the jib and lowers back, forever, instead of winding on until it climbs
- *  out through the top of the world.
+ *  speed) and the hook rides `windWith` on the rope. That motor carries a `reverseAt` stroke of
+ *  [0, 16] rad, which at ROPE_RADIUS = 2.5 is exactly HOOK_TRAVEL = 40 world units of hook, so
+ *  the hook lifts from the ground right up under the trolley and lowers back, forever, instead
+ *  of winding on until it climbs out through the top of the world. A bare drum is a lathed,
+ *  rotationally symmetric body and would show no motion at all spinning about its own axis, so
+ *  four bars are `attachTo`-ed across its face; those, plus both cranks' offset handles, are
+ *  what make the hoist cluster visibly turn.
  *
  *  As everywhere in this sandbox, the hook's motion is pure kinematics -- where the hook goes,
  *  never what load it could lift; there is no force model here to make such a claim honest.
+ *
+ *  KNOWN LIMITATION (needs a renderer change, not a preset change): the hook and its crate use
+ *  `windWith` and therefore do NOT swing with the jib. `SceneSync.sync` runs
+ *  `updateWindingProps` after `updateAttachedProps`, and it writes `basePos + dir * lift`
+ *  outright, so a prop declaring both `attachTo` and `windWith` has the slew rotation
+ *  overwritten -- the two cannot compose today. The visible consequence is that the trolley and
+ *  rope orbit the mast while the hook stays put at x = HOOK_X, z = 0. Composing the two (apply
+ *  the wind offset in the attached prop's rotated frame) would fix it in `sceneSync.ts`.
  *
  *  Geometry: 20 + 4 = 24, so the slew motor sits 24 units from the mast centre, which also
  *  clears `classify`'s overlap floor of (20 + 4) * 0.95 = 22.8.
@@ -183,9 +217,11 @@ export function createTowerCraneProps(): Prop[] {
     { kind: "box", position: [JIB_REACH / 2, SLEW_Y + 11, 0], size: [Math.hypot(JIB_REACH, 14), 0.6, 0.6], color: steel, texture: "metal", rotation: [0, 0, -Math.atan2(14, JIB_REACH)], metalness: 0.7, roughness: 0.35, attachTo: SLEW_RING_ID },
     { kind: "box", position: [-COUNTER_REACH / 2, SLEW_Y + 11, 0], size: [Math.hypot(COUNTER_REACH, 14), 0.6, 0.6], color: steel, texture: "metal", rotation: [0, 0, Math.atan2(14, COUNTER_REACH)], metalness: 0.7, roughness: 0.35, attachTo: SLEW_RING_ID },
     // Trolley riding the jib, where the hoist rope drops from.
-    { kind: "box", position: [HOOK_X, SLEW_Y + 1.6, 0], size: [3, 1.6, 3], color: dark, texture: "metal", metalness: 0.55, roughness: 0.4, attachTo: SLEW_RING_ID },
-    // The hoist rope: a taut guide line spanning the hook's travel, which the hook climbs.
-    { kind: "cylinder", position: [HOOK_X, (HOOK_REST_Y + SLEW_Y) / 2, 0], radius: 0.22, height: SLEW_Y - HOOK_REST_Y, color: steel, texture: "metal", metalness: 0.7, roughness: 0.35, attachTo: SLEW_RING_ID },
+    { kind: "box", position: [HOOK_X, SLEW_Y + TROLLEY_H, 0], size: [3, TROLLEY_H, 3], color: dark, texture: "metal", metalness: 0.55, roughness: 0.4, attachTo: SLEW_RING_ID },
+    // The hoist rope: a taut guide line the hook climbs, spanning the hook's rest height up
+    // to the trolley's underside -- so it reaches the headblock it hangs from at one end and
+    // the hook at the other, with no floating gap at either.
+    { kind: "cylinder", position: [HOOK_X, (HOOK_REST_Y + TROLLEY_UNDERSIDE) / 2, 0], radius: 0.22, height: TROLLEY_UNDERSIDE - HOOK_REST_Y, color: steel, texture: "metal", metalness: 0.7, roughness: 0.35, attachTo: SLEW_RING_ID },
   );
 
   // Bars across the hoist drum's face so its rotation reads -- a bare drum is symmetric.
@@ -204,10 +240,11 @@ export function createTowerCraneProps(): Prop[] {
     });
   }
 
-  // The hook block and the crate slung under it, both hoisted on the drum's rope.
+  // The hook block and the crate slung under it, both hoisted on the drum's rope. At rest
+  // the crate sits exactly on the ground plane (y = 0) -- see HOOK_REST_Y's derivation.
   props.push(
-    { kind: "box", position: [HOOK_X, HOOK_REST_Y, 0], size: [2.4, 2.4, 2.4], color: dark, texture: "metal", metalness: 0.7, roughness: 0.35, windWith: lift },
-    { kind: "box", position: [HOOK_X, HOOK_REST_Y - 3.2, 0], size: [5, 3.5, 5], color: crateCol, texture: "wood", roughness: 0.8, metalness: 0.05, windWith: lift },
+    { kind: "box", position: [HOOK_X, HOOK_REST_Y, 0], size: [HOOK_HALF * 2, HOOK_HALF * 2, HOOK_HALF * 2], color: dark, texture: "metal", metalness: 0.7, roughness: 0.35, windWith: lift },
+    { kind: "box", position: [HOOK_X, HOOK_REST_Y - CRATE_DROP, 0], size: [5, CRATE_HEIGHT, 5], color: crateCol, texture: "wood", roughness: 0.8, metalness: 0.05, windWith: lift },
   );
 
   return props;

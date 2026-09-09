@@ -20,6 +20,11 @@ import {
   PENDULUM_SWING,
   PENDULUM_SPEED,
   PENDULUM_LENGTH,
+  PENDULUM_PIVOT,
+  SUBDIAL_Y,
+  TOWER_MODULE,
+  DIAL_Y,
+  DIAL_R,
 } from "../../../src/sim/presets/clocktower";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
@@ -171,5 +176,81 @@ describe("createClockTowerProps", () => {
   it("gives the masonry, roof tiles and brass movement their real finishes", () => {
     const used = new Set(createClockTowerProps().map((p) => p.texture).filter(Boolean));
     for (const kind of ["brick", "stone", "tile", "metal"]) expect(used.has(kind as never)).toBe(true);
+  });
+});
+
+describe("createClockTowerPreset -- invariants the doc comment claims", () => {
+  it("keeps every meshing wheel on ONE module, so the teeth are the same SIZE and could really engage", () => {
+    // `evaluatePair` never checks module -- it only asks whether the centres sit
+    // pitchRadius(a) + pitchRadius(b) apart. So a preset that mixes modules across a mesh gets a
+    // perfectly happy sim edge and a rendered pair whose teeth are visibly different sizes and
+    // could not engage on any real shaft. The doc comment claims this file avoids that; this is
+    // the assertion that makes the claim true rather than aspirational.
+    const layout = createClockTowerPreset();
+    const byId = new Map(layout.gears.map((g) => [g.id, g]));
+    const meshes = buildEdges(layout.gears, layout.remoteLinks).filter((e) => e.kind === "mesh");
+    expect(meshes.length).toBeGreaterThan(0);
+    for (const e of meshes) {
+      expect(byId.get(e.a)!.module, `${e.a} <-> ${e.b}`).toBe(TOWER_MODULE);
+      expect(byId.get(e.b)!.module, `${e.a} <-> ${e.b}`).toBe(TOWER_MODULE);
+    }
+  });
+
+  it("pins each hand's dial to the centre of the wheel that actually drives it", () => {
+    // THE BUG THIS GUARDS: `attachTo` sweeps a prop about ITS GEAR'S centre
+    // (spinAttachedPose: pos = (base - centre) rotated + centre). An hour hand drawn on the main
+    // dial at y = 62 but attached to a wheel at y = 10 does not turn on the dial at all -- it
+    // swings a 52-unit circle centred 52 units below it, straight out of the tower. A hand only
+    // reads correctly when its dial's centre and its gear's centre coincide.
+    const layout = createClockTowerPreset();
+    const props = createClockTowerProps();
+    const centreOf = (id: string) => layout.gears.find((g) => g.id === id)!.position;
+
+    // The minute hand belongs on the main dial; the hour hand on the sub-dial.
+    expect(centreOf(MINUTE_ID)[1]).toBeCloseTo(DIAL_Y, 9);
+    expect(centreOf(HOUR_ID)[1]).toBeCloseTo(SUBDIAL_Y, 9);
+
+    // And nothing attached to either wheel is drawn far from that wheel's centre. This is the
+    // shape the bug took: the offending hand sat 52 units from its gear, so it swept a 52-unit
+    // circle instead of turning on a dial. Everything legitimately attached here -- hands, and
+    // the spokes across each wheel -- lives within the dial it is drawn on, so a generous
+    // dial-radius ceiling catches the real failure without flagging the spokes.
+    for (const id of [MINUTE_ID, HOUR_ID]) {
+      const centre = centreOf(id);
+      const attached = props.filter((p) => p.attachTo === id);
+      expect(attached.length, id).toBeGreaterThan(0);
+      for (const a of attached) {
+        const offset = Math.hypot(a.position[0] - centre[0], a.position[1] - centre[1]);
+        expect(offset, `${id} attached prop offset`).toBeLessThanOrEqual(DIAL_R);
+      }
+    }
+  });
+
+  it("keeps the pendulum cluster clear of every going-train wheel -- overlap floor AND mesh window", () => {
+    // The pendulum is a separate cluster and must stay that way. Two dangers, not one: sitting
+    // inside another gear's overlap radius (a diagnostics failure), and -- more subtly -- landing
+    // in the MESH window, where `evaluatePair` would happily wire it into the going train and
+    // change what the clock does.
+    const layout = createClockTowerPreset();
+    const train = layout.gears.filter((g) => ![PENDULUM_ID, BOB_ID].includes(g.id));
+    const pendulum = layout.gears.filter((g) => [PENDULUM_ID, BOB_ID].includes(g.id));
+
+    for (const p of pendulum) {
+      expect(p.position[2]).toBe(PENDULUM_PIVOT[2]); // out in front of the wall
+      for (const t of train) {
+        expect(t.position[2]).toBe(0); // the train is all at z = 0
+        const d = Math.hypot(
+          p.position[0] - t.position[0],
+          p.position[1] - t.position[1],
+          p.position[2] - t.position[2],
+        );
+        // No accidental mesh: evaluatePair only engages near the summed pitch radii, and the
+        // z-offset alone puts every pair far outside that window.
+        expect(evaluatePair(p, t), `${p.id} <-> ${t.id}`).toBeNull();
+        // No overlap either: comfortably past 0.95 * (rA + rB), whose largest case here is the
+        // hour wheel.
+        expect(d, `${p.id} <-> ${t.id}`).toBeGreaterThan((HOUR_R + 1) * 0.95);
+      }
+    }
   });
 });

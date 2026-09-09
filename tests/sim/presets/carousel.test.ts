@@ -13,6 +13,7 @@ import {
   MOTOR_SPEED,
   HORSE_COUNT,
   horseAngle,
+  horseFacing,
 } from "../../../src/sim/presets/carousel";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
@@ -97,6 +98,73 @@ describe("createCarouselProps", () => {
     expect(angles.size).toBe(HORSE_COUNT);
     expect(horseAngle(0)).toBe(0);
     expect(horseAngle(HORSE_COUNT)).toBeCloseTo(Math.PI * 2, 12);
+  });
+
+  it("turns every rider tangentially, nose-first round the ride, never splayed outward", () => {
+    // A prop's long side is its local +X, and a Three Y-rotation by `t` sends local +X to
+    // the world direction (cos t, 0, -sin t). Compare that against the ride's radial and
+    // tangential directions at the same angle; a horse must lie along the tangent.
+    for (let i = 0; i < HORSE_COUNT; i++) {
+      const a = horseAngle(i);
+      const t = horseFacing(i);
+      const longAxis: [number, number] = [Math.cos(t), -Math.sin(t)]; // (x, z)
+      const radial: [number, number] = [Math.cos(a), Math.sin(a)];
+      const tangent: [number, number] = [-Math.sin(a), Math.cos(a)];
+      expect(longAxis[0] * radial[0] + longAxis[1] * radial[1]).toBeCloseTo(0, 12);
+      // +1, not -1: the ring runs at -0.2 rad/s about +Y, which carries a rider toward
+      // INCREASING ride angle, so the tangent above is the direction of travel.
+      expect(longAxis[0] * tangent[0] + longAxis[1] * tangent[1]).toBeCloseTo(1, 12);
+    }
+  });
+
+  it("gives the horses and scallops that same tangential facing, one per ride angle", () => {
+    const boxes = createCarouselProps().filter((p) => p.kind === "box" && p.attachTo === RING_ID);
+    expect(boxes.length).toBe(HORSE_COUNT * 2); // a horse and a scallop at each angle
+    const expected = new Set<string>();
+    for (let i = 0; i < HORSE_COUNT; i++) expected.add(horseFacing(i).toFixed(9));
+    const actual = new Set(boxes.map((p) => (p.rotation?.[1] ?? 0).toFixed(9)));
+    expect(actual).toEqual(expected);
+    // Nothing is tilted out of the horizontal plane.
+    for (const p of boxes) {
+      expect(p.rotation?.[0] ?? 0).toBe(0);
+      expect(p.rotation?.[2] ?? 0).toBe(0);
+    }
+  });
+
+  it("hangs the scallops on the canopy rim instead of floating them outside the roof", () => {
+    const props = createCarouselProps();
+    const canopy = props.find((p) => p.kind === "cone")!;
+    if (canopy.kind !== "cone") throw new Error("canopy is not a cone");
+    // ConeGeometry puts the base circle half a height below the prop's position.
+    const rimY = canopy.position[1] - canopy.height / 2;
+    const scallops = props.filter(
+      (p) => p.kind === "box" && p.attachTo === RING_ID && p.color === canopy.color,
+    );
+    expect(scallops.length).toBe(HORSE_COUNT);
+    for (const s of scallops) {
+      if (s.kind !== "box") throw new Error("scallop is not a box");
+      const r = Math.hypot(s.position[0], s.position[2]);
+      expect(r).toBeCloseTo(canopy.radius, 12); // on the rim, not out past it
+      expect(s.position[1] + s.size[1] / 2).toBeCloseTo(rimY, 12); // top edge flush with the rim
+      expect(s.position[1]).toBeLessThan(rimY); // hanging BELOW it, as a valance does
+    }
+  });
+
+  it("stands the motor on something instead of floating it off the edge of the ground pad", () => {
+    const [, motor] = createCarouselPreset().gears;
+    const padRadius = RING_R + 2;
+    expect(Math.hypot(motor.position[0], motor.position[2])).toBeGreaterThan(padRadius);
+    const support = createCarouselProps().find(
+      (p) =>
+        p.kind === "cylinder" &&
+        !p.attachTo &&
+        Math.hypot(p.position[0] - motor.position[0], p.position[2] - motor.position[2]) < 1e-9,
+    );
+    expect(support).toBeDefined();
+    if (!support || support.kind !== "cylinder") throw new Error("no motor support");
+    // Reaches from the ground up to the motor's own height.
+    expect(support.position[1] - support.height / 2).toBeCloseTo(0, 12);
+    expect(support.position[1] + support.height / 2).toBeCloseTo(motor.position[1], 12);
   });
 
   it("points every moving prop at a gear that actually exists", () => {

@@ -15,6 +15,8 @@ import {
   ROPE_RADIUS,
   HOOK_TRAVEL,
   HOIST_STROKE,
+  HOOK_REST_Y,
+  TROLLEY_UNDERSIDE,
 } from "../../../src/sim/presets/towercrane";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
@@ -75,7 +77,22 @@ describe("createTowerCranePreset", () => {
     expect(d.overlapPairs).toEqual([]);
   });
 
-  it("slews the jib at exactly 1/8 the motor speed, reversed, while the hoist runs on its own", () => {
+  // Pins the ACTUAL numbers the module doc claims, as literals. Every other ratio assertion
+  // here compares the sim against SLEW_REDUCTION, which is itself derived from the same tooth
+  // counts -- so a typo in the tooth counts would move both sides together and be caught by
+  // nothing. These literals are the only thing standing between the doc's "8/40 = 1/5, so
+  // 0.8 rad/s becomes -0.16 rad/s" and a silent drift away from it.
+  it("matches the documented numbers literally: 24 apart, 1/5 reduction, -0.16 rad/s", () => {
+    expect(SLEW_RING_R).toBe(20);
+    expect(SLEW_MOTOR_R).toBe(4);
+    expect(SLEW_MESH_DISTANCE).toBe(24);
+    expect(SLEW_REDUCTION).toBeCloseTo(0.2, 12); // 8 / 40 = 1/5, NOT 1/8
+    expect(SLEW_MOTOR_SPEED).toBe(0.8);
+    expect(-SLEW_REDUCTION * SLEW_MOTOR_SPEED).toBeCloseTo(-0.16, 12);
+    expect(HOIST_STROKE).toBeCloseTo(16, 12); // 40 / 2.5
+  });
+
+  it("slews the jib at exactly 1/5 the motor speed, reversed, while the hoist runs on its own", () => {
     let layout = createTowerCranePreset();
     for (let i = 0; i < 400; i++) {
       const r = tick(layout, 1 / 60, 1);
@@ -149,6 +166,43 @@ describe("createTowerCraneProps", () => {
 
   it("puts bars on the hoist drum so its rotation is visible", () => {
     expect(createTowerCraneProps().filter((p) => p.attachTo === HOIST_DRUM_ID).length).toBeGreaterThanOrEqual(4);
+    // A pulley renders as a lathed, rotationally symmetric body -- spun about its own axis it
+    // shows NO motion whatever its speed. The bars must therefore be OFF the drum's own axis,
+    // or they are just as dead as the bare drum they were added to rescue.
+    const drum = createTowerCranePreset().gears.find((g) => g.id === HOIST_DRUM_ID)!;
+    for (const bar of createTowerCraneProps().filter((p) => p.attachTo === HOIST_DRUM_ID)) {
+      const offAxis = Math.hypot(bar.position[0] - drum.position[0], bar.position[1] - drum.position[1]);
+      expect(offAxis).toBeGreaterThan(0.5); // drum axis is [0,0,1], so X/Y offset is what orbits
+    }
+  });
+
+  it("rests the hook block and its crate ON the ground plane, never buried under it", () => {
+    // scene.ts draws an opaque ground plane at y = 0. A prop whose rest pose dips below it is
+    // invisible until hoisted -- which is exactly what a hand-picked HOOK_REST_Y of 2 did: the
+    // crate spanned y = -2.95 .. 0.55 and started 84% underground.
+    const hoisted = createTowerCraneProps().filter((p) => p.windWith);
+    expect(hoisted.length).toBe(2);
+    for (const p of hoisted) {
+      const half = p.kind === "box" ? p.size[1] / 2 : 0;
+      expect(p.position[1] - half).toBeGreaterThanOrEqual(0);
+    }
+    // ...and the lowest of them actually TOUCHES the ground, rather than dangling in mid-air.
+    const lowest = Math.min(...hoisted.map((p) => p.position[1] - (p.kind === "box" ? p.size[1] / 2 : 0)));
+    expect(lowest).toBeCloseTo(0, 10);
+    expect(HOOK_REST_Y).toBeGreaterThan(0);
+  });
+
+  it("lifts the hook right up under the trolley -- 'to the jib' is literally true", () => {
+    // The doc claims the hook lifts to the jib. Check that against the trolley's underside,
+    // the headblock the rope drops from: at full travel the hook must reach it and must not
+    // punch through it. (At HOOK_TRAVEL = 30 the hook topped out at y = 33.2, a full 13.6
+    // units short of the 46.8 trolley -- the claim was simply false.)
+    const hoisted = createTowerCraneProps().filter((p) => p.windWith);
+    const topAtFullLift = Math.max(
+      ...hoisted.map((p) => p.position[1] + (p.kind === "box" ? p.size[1] / 2 : 0) + HOOK_TRAVEL),
+    );
+    expect(topAtFullLift).toBeLessThanOrEqual(TROLLEY_UNDERSIDE);
+    expect(topAtFullLift).toBeGreaterThan(TROLLEY_UNDERSIDE - 2);
   });
 
   it("points every moving prop at a gear that actually exists", () => {
