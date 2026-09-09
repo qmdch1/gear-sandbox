@@ -4,8 +4,16 @@
     {
       "name": "gear-sandbox-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
-      "port": 5173
+      "runtimeArgs": [
+        "run",
+        "dev:client",
+        "--",
+        "--port",
+        "5200",
+        "--strictPort"
+      ],
+      "port": 5200,
+      "autoPort": false
     }
   ]
 }
