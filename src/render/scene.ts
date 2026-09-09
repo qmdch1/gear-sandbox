@@ -6,7 +6,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
  *  truth because two other places reason about it: `showroom.ts` lays machines out inside it,
  *  and `chainGeometry.ts` derives its worst-case chain length from the plane's diagonal. Those
  *  used to hardcode 500 in prose, which is exactly how such a number drifts out of date. */
-export const GROUND_SIZE = 800;
+export const GROUND_SIZE = 600;
 
 export interface SceneContext {
   scene: THREE.Scene;

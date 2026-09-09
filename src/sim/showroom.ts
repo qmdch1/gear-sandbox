@@ -44,7 +44,7 @@ function translateProps(props: Prop[], d: Vec3): Prop[] {
 
 /** The sixteen finished machines, on a 4x4 yard.
  *
- *  Cell pitch (170 across X, 150 along Z) was chosen against each preset's REAL measured extent
+ *  Cell pitch (130 across X, 120 along Z) was chosen against each preset's REAL measured extent
  *  rather than by eye. The widest cases set it: the factory line shaft spans 114 units of X, the
  *  watermill 80 and the piston engine 74; along Z the locomotive is 103 long and the conveyor
  *  56. Machines are also assigned to cells so that no two wide ones land side by side in the
@@ -60,26 +60,26 @@ function translateProps(props: Prop[], d: Vec3): Prop[] {
  *  tabletop/bench pieces, and standing them in a field would read as scale nonsense next to a
  *  locomotive and a tower crane. */
 const SHOWROOM: Array<{ layout: LayoutState; props: Prop[]; offset: Vec3 }> = [
-  // Back row (z = -225).
-  { layout: createLocomotivePreset(), props: createLocomotiveProps(), offset: [-255, 0, -225] },
-  { layout: createFactoryPreset(), props: createFactoryProps(), offset: [-85, 0, -225] },
-  { layout: createWatermillPreset(), props: createWatermillProps(), offset: [85, 0, -225] },
-  { layout: createTowerCranePreset(), props: createTowerCraneProps(), offset: [255, 0, -225] },
-  // Second row (z = -75).
-  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [-255, 0, -75] },
-  { layout: createCarPreset(), props: createCarProps(), offset: [-85, 0, -75] },
-  { layout: createPistonEnginePreset(), props: createPistonEngineProps(), offset: [85, 0, -75] },
-  { layout: createClockTowerPreset(), props: createClockTowerProps(), offset: [255, 0, -75] },
-  // Third row (z = 75).
-  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [-255, 0, 75] },
-  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [-85, 0, 75] },
-  { layout: createCarouselPreset(), props: createCarouselProps(), offset: [85, 0, 75] },
-  { layout: createFerrisWheelPreset(), props: createFerrisWheelProps(), offset: [255, 0, 75] },
-  // Front row (z = 225).
-  { layout: createCastlePreset(), props: createCastleProps(), offset: [-255, 0, 225] },
-  { layout: createWellPumpPreset(), props: createWellPumpProps(), offset: [-85, 0, 225] },
-  { layout: createConveyorPreset(), props: createConveyorProps(), offset: [85, 0, 225] },
-  { layout: createHoistPreset(), props: createHoistProps(), offset: [255, 0, 225] },
+  // Back row (z = -180).
+  { layout: createLocomotivePreset(), props: createLocomotiveProps(), offset: [-195, 0, -180] },
+  { layout: createFactoryPreset(), props: createFactoryProps(), offset: [-65, 0, -180] },
+  { layout: createWatermillPreset(), props: createWatermillProps(), offset: [65, 0, -180] },
+  { layout: createTowerCranePreset(), props: createTowerCraneProps(), offset: [195, 0, -180] },
+  // Second row (z = -60).
+  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [-195, 0, -60] },
+  { layout: createCarPreset(), props: createCarProps(), offset: [-65, 0, -60] },
+  { layout: createPistonEnginePreset(), props: createPistonEngineProps(), offset: [65, 0, -60] },
+  { layout: createClockTowerPreset(), props: createClockTowerProps(), offset: [195, 0, -60] },
+  // Third row (z = 60).
+  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [-195, 0, 60] },
+  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [-65, 0, 60] },
+  { layout: createCarouselPreset(), props: createCarouselProps(), offset: [65, 0, 60] },
+  { layout: createFerrisWheelPreset(), props: createFerrisWheelProps(), offset: [195, 0, 60] },
+  // Front row (z = 180).
+  { layout: createCastlePreset(), props: createCastleProps(), offset: [-195, 0, 180] },
+  { layout: createWellPumpPreset(), props: createWellPumpProps(), offset: [-65, 0, 180] },
+  { layout: createConveyorPreset(), props: createConveyorProps(), offset: [65, 0, 180] },
+  { layout: createHoistPreset(), props: createHoistProps(), offset: [195, 0, 180] },
 ];
 
 /** The default first-visit scene: sixteen finished machines arranged in a yard, replacing the
