@@ -116,16 +116,15 @@ export const HOIST_STROKE = HOOK_TRAVEL / ROPE_RADIUS;
  *  four bars are `attachTo`-ed across its face; those, plus both cranks' offset handles, are
  *  what make the hoist cluster visibly turn.
  *
+ *  The hook and its crate declare BOTH `attachTo` (the slew ring) and `windWith` (the drum), so
+ *  they swing round with the jib AND ride up and down the rope -- which is what a real crane's
+ *  hook does. `SceneSync` composes the two: the attached pass spins the prop about the mast
+ *  first, then the winding pass adds the lift on top of that spun position rather than
+ *  overwriting it. Before that composition existed, the jib orbited the mast while the hook
+ *  hung behind in mid-air.
+ *
  *  As everywhere in this sandbox, the hook's motion is pure kinematics -- where the hook goes,
  *  never what load it could lift; there is no force model here to make such a claim honest.
- *
- *  KNOWN LIMITATION (needs a renderer change, not a preset change): the hook and its crate use
- *  `windWith` and therefore do NOT swing with the jib. `SceneSync.sync` runs
- *  `updateWindingProps` after `updateAttachedProps`, and it writes `basePos + dir * lift`
- *  outright, so a prop declaring both `attachTo` and `windWith` has the slew rotation
- *  overwritten -- the two cannot compose today. The visible consequence is that the trolley and
- *  rope orbit the mast while the hook stays put at x = HOOK_X, z = 0. Composing the two (apply
- *  the wind offset in the attached prop's rotated frame) would fix it in `sceneSync.ts`.
  *
  *  Geometry: 20 + 4 = 24, so the slew motor sits 24 units from the mast centre, which also
  *  clears `classify`'s overlap floor of (20 + 4) * 0.95 = 22.8.
@@ -243,8 +242,8 @@ export function createTowerCraneProps(): Prop[] {
   // The hook block and the crate slung under it, both hoisted on the drum's rope. At rest
   // the crate sits exactly on the ground plane (y = 0) -- see HOOK_REST_Y's derivation.
   props.push(
-    { kind: "box", position: [HOOK_X, HOOK_REST_Y, 0], size: [HOOK_HALF * 2, HOOK_HALF * 2, HOOK_HALF * 2], color: dark, texture: "metal", metalness: 0.7, roughness: 0.35, windWith: lift },
-    { kind: "box", position: [HOOK_X, HOOK_REST_Y - CRATE_DROP, 0], size: [5, CRATE_HEIGHT, 5], color: crateCol, texture: "wood", roughness: 0.8, metalness: 0.05, windWith: lift },
+    { kind: "box", position: [HOOK_X, HOOK_REST_Y, 0], size: [HOOK_HALF * 2, HOOK_HALF * 2, HOOK_HALF * 2], color: dark, texture: "metal", metalness: 0.7, roughness: 0.35, attachTo: SLEW_RING_ID, windWith: lift },
+    { kind: "box", position: [HOOK_X, HOOK_REST_Y - CRATE_DROP, 0], size: [5, CRATE_HEIGHT, 5], color: crateCol, texture: "wood", roughness: 0.8, metalness: 0.05, attachTo: SLEW_RING_ID, windWith: lift },
   );
 
   return props;

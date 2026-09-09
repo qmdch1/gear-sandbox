@@ -219,3 +219,30 @@ describe("createTowerCraneProps", () => {
     for (const kind of ["metal", "stone", "wood"]) expect(used.has(kind as never)).toBe(true);
   });
 });
+
+describe("createTowerCraneProps -- the hook swings AND hoists", () => {
+  it("declares both attachTo and windWith on the hook and its crate", () => {
+    // These two mechanisms used to be mutually exclusive in the renderer: the winding pass
+    // rewrote the prop's position from its rest pose, throwing away the swing the attached pass
+    // had just applied. The jib would orbit the mast while the hook hung behind in mid-air.
+    // SceneSync now composes them, so a crane hook can finally do both -- as a real one does.
+    const hoisted = createTowerCraneProps().filter((p) => p.windWith);
+    expect(hoisted.length).toBe(2);
+    for (const p of hoisted) {
+      expect(p.windWith!.gear).toBe(HOIST_DRUM_ID);
+      expect(p.attachTo, "hoisted prop must also swing with the jib").toBe(SLEW_RING_ID);
+    }
+  });
+
+  it("keeps both of the gears those two mechanisms name -- they are different clusters", () => {
+    // The hook follows the SLEW ring for its swing and the HOIST drum for its lift. Those are
+    // deliberately separate, independently powered clusters, so both ids must really exist.
+    const ids = new Set(createTowerCranePreset().gears.map((g) => g.id));
+    expect(ids.has(SLEW_RING_ID)).toBe(true);
+    expect(ids.has(HOIST_DRUM_ID)).toBe(true);
+    for (const p of createTowerCraneProps().filter((x) => x.windWith)) {
+      expect(ids.has(p.attachTo!)).toBe(true);
+      expect(ids.has(p.windWith!.gear)).toBe(true);
+    }
+  });
+});

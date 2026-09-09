@@ -18,6 +18,8 @@ import { createConveyorPreset, createConveyorProps } from "./conveyor";
 import { createTowerCranePreset, createTowerCraneProps } from "./towercrane";
 import { createMusicBoxPreset, createMusicBoxProps } from "./musicbox";
 import { createClockTowerPreset, createClockTowerProps } from "./clocktower";
+import { createGearboxPreset, createGearboxProps } from "./gearbox";
+import { createPlanetaryHoistPreset, createPlanetaryHoistProps } from "./planetaryhoist";
 
 export { createClockPreset, createClockProps } from "./clock";
 export { createCarPreset, createCarProps } from "./car";
@@ -37,6 +39,8 @@ export { createConveyorPreset, createConveyorProps } from "./conveyor";
 export { createTowerCranePreset, createTowerCraneProps } from "./towercrane";
 export { createMusicBoxPreset, createMusicBoxProps } from "./musicbox";
 export { createClockTowerPreset, createClockTowerProps } from "./clocktower";
+export { createGearboxPreset, createGearboxProps } from "./gearbox";
+export { createPlanetaryHoistPreset, createPlanetaryHoistProps } from "./planetaryhoist";
 
 export interface PresetEntry {
   id: string;
@@ -162,5 +166,17 @@ export const PRESETS: PresetEntry[] = [
     label: "시계탑 (시침·분침이 서로 다른 휠에 달려 4:1로 도는 벽돌탑 + 흔들리는 진자)",
     build: createClockTowerPreset,
     buildProps: createClockTowerProps,
+  },
+  {
+    id: "gearbox",
+    label: "변속기 (입력축과 레이샤프트가 3단 서로 다른 감속비로 맞물리는 컷어웨이)",
+    build: createGearboxPreset,
+    buildProps: createGearboxProps,
+  },
+  {
+    id: "planetaryhoist",
+    label: "유성감속기 (헬리컬→유성기어 감속으로 권상드럼을 돌리는 12기어 권상기)",
+    build: createPlanetaryHoistPreset,
+    buildProps: createPlanetaryHoistProps,
   },
 ];

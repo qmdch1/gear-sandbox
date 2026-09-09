@@ -1,6 +1,15 @@
 import { describe, it, expect } from "vitest";
 import { repairGear, repairAll, needsRepair, countNeedingRepair } from "../../src/sim/repair";
-import { createShowroomLayout } from "../../src/sim/showroom";
+// A small, self-contained preset rather than the whole showroom. The invariants here -- wear
+// only subtracts, repair restores, wear:false never touches anything -- hold for ANY layout, and
+// ticking all sixteen showroom machines for minutes of simulated time made these tests take over
+// two minutes EACH (tick is superlinear in gear count, and the showroom has grown a lot).
+//
+// The CLOCK specifically: its idler and hour wheel are `spur`, which GEAR_DEFS gives
+// durabilityMax 100 and baseWearPerSecond 1.0, so they break at exactly 100 simulated seconds --
+// comfortably inside a short run. (The car was the obvious pick but its wheels are `pulley`,
+// which wears far slower and never failed inside the window.)
+import { createClockPreset } from "../../src/sim/presets/clock";
 import { tick } from "../../src/sim/simulation";
 import type { GearInstance } from "../../src/sim/types";
 
@@ -76,12 +85,12 @@ describe("repairAll / countNeedingRepair", () => {
 });
 
 describe("repair against the real simulation", () => {
-  it("brings a showroom that has worn itself to a standstill back to life", () => {
-    // The concrete failure this feature answers: wear only ever subtracts, so the bundled
-    // showroom destroys itself. Measured here, not assumed.
-    let layout = createShowroomLayout();
+  it("brings a layout that has worn itself to a standstill back to life", () => {
+    // The concrete failure this feature answers: wear only ever subtracts, so a layout left
+    // running destroys itself. Measured here, not assumed.
+    let layout = createClockPreset();
     const total = layout.gears.length;
-    for (let i = 0; i < 60 * 150; i++) {
+    for (let i = 0; i < 60 * 120; i++) {
       const r = tick(layout, 1 / 60, 1);
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
     }
@@ -100,7 +109,7 @@ describe("repair against the real simulation", () => {
     const movingAfter = after.gears.filter((g) => Math.abs(g.angularVelocity) > 1e-9).length;
     expect(movingAfter).toBeGreaterThan(movingBefore);
 
-    const fresh = createShowroomLayout();
+    const fresh = createClockPreset();
     const movingFresh = tick(fresh, 1 / 60, 1).gears.filter(
       (g) => Math.abs(g.angularVelocity) > 1e-9,
     ).length;
@@ -108,7 +117,7 @@ describe("repair against the real simulation", () => {
   });
 
   it("wears down again after repair -- repair restores the mechanic, it does not disable it", () => {
-    let layout = createShowroomLayout();
+    let layout = createClockPreset();
     for (let i = 0; i < 60 * 60; i++) {
       const r = tick(layout, 1 / 60, 1);
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
@@ -126,16 +135,17 @@ describe("repair against the real simulation", () => {
 });
 
 describe("tick with wear disabled", () => {
-  it("runs the showroom for five simulated minutes without wearing anything at all", () => {
-    // Durability is a mechanic, not a property of the mechanism. With wear on, the bundled
-    // showroom loses its first gear at ~90s and has 27 of 72 broken by 150s -- the machines
-    // stop and stay stopped. The app therefore runs with wear off; this is that guarantee.
-    let layout = createShowroomLayout();
+  it("runs for two simulated minutes without wearing anything at all", () => {
+    // Durability is a mechanic, not a property of the mechanism. With wear on, a running layout
+    // destroys itself -- measured on the bundled showroom, its first gear fails at ~90s and 27 of
+    // 72 are broken by 150s, and the machines stop for good. The app therefore runs with wear
+    // off; this is that guarantee.
+    let layout = createClockPreset();
     const movingAtStart = tick(layout, 1 / 60, 1, { wear: false }).gears.filter(
       (g) => Math.abs(g.angularVelocity) > 1e-9,
     ).length;
 
-    for (let i = 0; i < 60 * 300; i++) {
+    for (let i = 0; i < 60 * 120; i++) {
       const r = tick(layout, 1 / 60, 1, { wear: false });
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
     }
@@ -151,7 +161,7 @@ describe("tick with wear disabled", () => {
   });
 
   it("still wears by default, so every existing caller is unchanged", () => {
-    let layout = createShowroomLayout();
+    let layout = createClockPreset();
     for (let i = 0; i < 60 * 120; i++) {
       const r = tick(layout, 1 / 60, 1); // no options -- the default
       layout = { gears: r.gears, remoteLinks: layout.remoteLinks };

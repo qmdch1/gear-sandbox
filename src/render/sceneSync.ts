@@ -149,6 +149,9 @@ export class SceneSync {
     dir: THREE.Vector3;
     radius: number;
     travel: [number, number];
+    /** True when this prop ALSO declares `attachTo`, so the winding offset must be added on top
+     *  of the spun pose rather than replacing it -- see `updateWindingProps`. */
+    alsoAttached: boolean;
   }> = [];
   // Props that are members of a crank-slider linkage (see Prop.linkTo).
   private linkedProps: Array<{
@@ -218,6 +221,7 @@ export class SceneSync {
           dir: new THREE.Vector3(...prop.windWith.direction).normalize(),
           radius: prop.windWith.radius,
           travel: prop.windWith.travel,
+          alsoAttached: prop.attachTo !== undefined,
         });
       }
     }
@@ -298,7 +302,14 @@ export class SceneSync {
       if (!gear) continue;
       const [lo, hi] = p.travel;
       const lift = Math.min(Math.max(gear.rotation * p.radius, lo), hi);
-      p.mesh.position.copy(p.basePos).addScaledVector(p.dir, lift);
+      // COMPOSE with `attachTo` rather than overwriting it. `sync()` runs the attached-prop
+      // pass first, so for a prop that declares both, the mesh already holds its SPUN position
+      // -- and rewriting from `basePos` here threw that away. A tower crane's hook is exactly
+      // that case: it hangs from a trolley that orbits with the jib AND rides the hoist rope,
+      // so the jib would swing round the mast while the hook stayed behind in mid-air.
+      // Starting from the already-spun position instead adds the lift on top of the swing.
+      if (!p.alsoAttached) p.mesh.position.copy(p.basePos);
+      p.mesh.position.addScaledVector(p.dir, lift);
     }
   }
 
