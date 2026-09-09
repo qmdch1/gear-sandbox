@@ -462,7 +462,9 @@ function animate(): void {
   lastTime = now;
 
   const keepGoing = frameRunner.runFrame(() => {
-    const result = tick({ gears, remoteLinks }, dt, timeScale);
+    // Wear off: see TickOptions. Durability is a mechanic, not part of the mechanism, and with
+    // it on the machines destroy themselves and stop for good.
+    const result = tick({ gears, remoteLinks }, dt, timeScale, { wear: false });
     gears = result.gears;
     sceneSync.sync(gears, remoteLinks, result.diagnostics);
     diagnosticsPanel.render(result.diagnostics, gears);

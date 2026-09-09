@@ -36,7 +36,23 @@ function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }
   return result;
 }
 
-export function tick(layout: LayoutState, dt: number, timeScale: number): SimTickResult {
+/** Per-tick options. `wear` exists because durability is a teaching/gameplay mechanic, not a
+ *  property of the mechanism itself: `wear.ts` only ever subtracts, and a gear worn to zero is
+ *  `broken`, which `rotation.ts` treats as a dead end that stops relaying drive downstream. Left
+ *  on, any layout eventually grinds itself to a halt -- measured on the bundled showroom, the
+ *  first gear fails at ~90s and 27 of 72 are broken by 150s. The app therefore runs with wear
+ *  OFF so the machines simply keep running; the default here stays `true` so the mechanic (and
+ *  every test that exercises it) is unchanged for callers that want it. */
+export interface TickOptions {
+  wear?: boolean;
+}
+
+export function tick(
+  layout: LayoutState,
+  dt: number,
+  timeScale: number,
+  options: TickOptions = {},
+): SimTickResult {
   const { gears, remoteLinks } = layout;
   const edges = buildEdges(gears, remoteLinks);
   const byId = new Map(gears.map((g) => [g.id, g] as const));
@@ -93,13 +109,16 @@ export function tick(layout: LayoutState, dt: number, timeScale: number): SimTic
 
   const updatedGears = gears.map((g) => {
     const angularVelocity = angularVelocities.get(g.id) ?? 0;
-    const { durabilityCurrent, broken } = applyWear({
-      gear: g,
-      angularVelocity,
-      hasDownstreamLoad: loadPresence.get(g.id) ?? false,
-      dt,
-      timeScale,
-    });
+    const { durabilityCurrent, broken } =
+      options.wear === false
+        ? { durabilityCurrent: g.durabilityCurrent, broken: g.broken }
+        : applyWear({
+            gear: g,
+            angularVelocity,
+            hasDownstreamLoad: loadPresence.get(g.id) ?? false,
+            dt,
+            timeScale,
+          });
     const phaseAdjustment = phaseAdjustments.get(g.id) ?? 0;
     const rotation = broken ? g.rotation : g.rotation + phaseAdjustment + angularVelocity * dt;
     // A rack accumulates linear travel, clamped into its `travelLimit` if it has one -- so a

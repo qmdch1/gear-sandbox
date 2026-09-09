@@ -124,3 +124,38 @@ describe("repair against the real simulation", () => {
     expect(countNeedingRepair(layout.gears)).toBeGreaterThan(0);
   });
 });
+
+describe("tick with wear disabled", () => {
+  it("runs the showroom for five simulated minutes without wearing anything at all", () => {
+    // Durability is a mechanic, not a property of the mechanism. With wear on, the bundled
+    // showroom loses its first gear at ~90s and has 27 of 72 broken by 150s -- the machines
+    // stop and stay stopped. The app therefore runs with wear off; this is that guarantee.
+    let layout = createShowroomLayout();
+    const movingAtStart = tick(layout, 1 / 60, 1, { wear: false }).gears.filter(
+      (g) => Math.abs(g.angularVelocity) > 1e-9,
+    ).length;
+
+    for (let i = 0; i < 60 * 300; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+    }
+
+    expect(layout.gears.filter((g) => g.broken)).toHaveLength(0);
+    expect(countNeedingRepair(layout.gears)).toBe(0);
+    for (const g of layout.gears) expect(g.durabilityCurrent).toBe(g.durabilityMax);
+    // And still turning exactly as many gears as on the very first tick.
+    const movingAtEnd = tick(layout, 1 / 60, 1, { wear: false }).gears.filter(
+      (g) => Math.abs(g.angularVelocity) > 1e-9,
+    ).length;
+    expect(movingAtEnd).toBe(movingAtStart);
+  });
+
+  it("still wears by default, so every existing caller is unchanged", () => {
+    let layout = createShowroomLayout();
+    for (let i = 0; i < 60 * 120; i++) {
+      const r = tick(layout, 1 / 60, 1); // no options -- the default
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+    }
+    expect(countNeedingRepair(layout.gears)).toBeGreaterThan(0);
+  });
+});
