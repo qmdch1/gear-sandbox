@@ -129,6 +129,14 @@ function applyCommon(
       material.map = map;
       material.bumpMap = map;
       material.bumpScale = 0.35;
+      // The same pattern also drives ROUGHNESS, which is what stops a textured surface reading
+      // as a flat decal. A single roughness number makes every part of a brick wall reflect
+      // identically -- mortar exactly as glossy as brick face, knots as glossy as clear grain.
+      // Feeding the greyscale in here makes the pattern's light areas (brick face, clear timber,
+      // polished metal) shinier than its dark ones (mortar, knots, pitting), so the material
+      // varies across itself the way a real one does. `roughness` still sets the overall level;
+      // the map modulates around it.
+      material.roughnessMap = map;
       material.needsUpdate = true;
     }
   }

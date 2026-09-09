@@ -23,7 +23,11 @@ function makeRandom(seed: number): () => number {
   };
 }
 
-const SIZE = 256;
+/** Canvas resolution for every generated pattern. 512 rather than 256 because these are used as
+ *  both a colour map AND a bump/roughness map on surfaces the camera can get right up against --
+ *  a brick wall 28 units across fills the screen at close orbit, where 256 showed visibly soft,
+ *  mushy mortar joints. */
+const SIZE = 512;
 
 /** Returns a 2d context for a fresh SIZE x SIZE canvas, or null where none is available --
  *  jsdom (the render tests' environment) has no canvas backend, and a headless run must
@@ -193,7 +197,7 @@ export function getProceduralTexture(kind: TextureKind): THREE.CanvasTexture | n
   const texture = new THREE.CanvasTexture(ctx.canvas);
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.anisotropy = 4;
+  texture.anisotropy = 8;
   cache.set(kind, texture);
   return texture;
 }

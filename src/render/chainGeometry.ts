@@ -36,6 +36,41 @@ const CHAIN_MIN_LINKS = 3;
  *  overlaps the geometry. */
 export const CHAIN_MAX_LINKS = 250;
 
+/** How many links a run of `distance` gets, and how far apart they sit. Split out so both the
+ *  geometry builder and `chainLinkPositions` derive them from one place -- if they disagreed,
+ *  the links would travel at a different pitch than they are drawn at and visibly stutter. */
+export function chainLinkLayout(distance: number, width: number): { linkCount: number; pitch: number } {
+  const desiredPitch = width * CHAIN_LINK_PITCH_FACTOR;
+  const rawLinkCount = Math.round(distance / Math.max(desiredPitch, 1e-6));
+  const linkCount = Math.min(CHAIN_MAX_LINKS, Math.max(CHAIN_MIN_LINKS, rawLinkCount));
+  return { linkCount, pitch: distance / linkCount };
+}
+
+/** The normalized positions (t in [0, 1) along a->b) of every chain link, given how far the
+ *  chain has TRAVELLED in world units.
+ *
+ *  This is what makes a chain look driven rather than painted on. The ribbon's geometry depends
+ *  only on its two endpoints, and gears never move, so without a travel term every frame
+ *  produced byte-identical links: the sprockets spun while the chain between them sat perfectly
+ *  still. Feeding in the driving sprocket's own travel (its accumulated rotation times its pitch
+ *  radius -- the same angle x radius relation `rotation.ts` uses to drive a rack from a pinion)
+ *  makes the links crawl at exactly the rim speed of the wheel pulling them.
+ *
+ *  Links wrap: one leaving the far end reappears at the near end, which is what a real chain --
+ *  a closed loop of which this straight run is one side -- actually does. So the count is
+ *  constant and the spacing never gaps. */
+export function chainLinkPositions(distance: number, width: number, travel: number): number[] {
+  const { linkCount, pitch } = chainLinkLayout(distance, width);
+  const phase = pitch > 0 ? travel / pitch : 0;
+  const out: number[] = [];
+  for (let i = 0; i < linkCount; i++) {
+    // Modulo twice so a negative travel (a chain running backwards) still lands in [0, count).
+    const slot = (((i + 0.5 + phase) % linkCount) + linkCount) % linkCount;
+    out.push(slot / linkCount);
+  }
+  return out;
+}
+
 /** A thin tube-shaped ribbon spanning two world points -- stands in for a chain or belt
  *  segment between two remote-linked sprockets/pulleys. Rebuilt on every SceneSync.sync()
  *  call (Task 14) since both endpoints can move independently of any single GearInstance's
@@ -52,11 +87,12 @@ export function buildLinkRibbon(
   pointB: [number, number, number],
   width: number,
   kind: "chain" | "belt" = "belt",
+  travel = 0,
 ): THREE.BufferGeometry {
   const a = new THREE.Vector3(...pointA);
   const b = new THREE.Vector3(...pointB);
   if (kind === "chain") {
-    return buildChainLinks(a, b, width);
+    return buildChainLinks(a, b, width, travel);
   }
   const curve = new THREE.LineCurve3(a, b);
   return new THREE.TubeGeometry(curve, 1, width, 6, false);
@@ -70,27 +106,32 @@ export function buildLinkRibbon(
  *  Link count scales with the distance between the endpoints (at a fixed pitch relative
  *  to `width`) so a longer span gets proportionally more links instead of a fixed count
  *  that would look sparse when stretched or crowded when compressed. */
-function buildChainLinks(a: THREE.Vector3, b: THREE.Vector3, width: number): THREE.BufferGeometry {
+function buildChainLinks(
+  a: THREE.Vector3,
+  b: THREE.Vector3,
+  width: number,
+  travel: number,
+): THREE.BufferGeometry {
   const distance = a.distanceTo(b);
   const direction = b.clone().sub(a).normalize();
   const alignToChain = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
 
-  const desiredPitch = width * CHAIN_LINK_PITCH_FACTOR;
-  const rawLinkCount = Math.round(distance / Math.max(desiredPitch, 1e-6));
-  const linkCount = Math.min(CHAIN_MAX_LINKS, Math.max(CHAIN_MIN_LINKS, rawLinkCount));
-  const actualPitch = distance / linkCount;
+  const { linkCount, pitch: actualPitch } = chainLinkLayout(distance, width);
+  const positions = chainLinkPositions(distance, width, travel);
   const linkLength = actualPitch * (1 - CHAIN_LINK_GAP_FACTOR);
   const plateThickness = width * 0.35;
   const plateHeight = width * 0.9;
 
   const links: THREE.BufferGeometry[] = [];
   for (let i = 0; i < linkCount; i++) {
-    const t = (i + 0.5) / linkCount;
+    const t = positions[i];
     const center = a.clone().lerp(b, t);
     const plate = new THREE.BoxGeometry(plateThickness, linkLength, plateHeight);
+    // Alternate the plate twist by SLOT rather than by loop index, so the inner/outer pattern
+    // stays fixed to the moving chain instead of flickering as links wrap past the end.
     const twist = new THREE.Quaternion().setFromAxisAngle(
       new THREE.Vector3(0, 1, 0),
-      i % 2 === 0 ? 0 : Math.PI / 2,
+      Math.round(t * linkCount) % 2 === 0 ? 0 : Math.PI / 2,
     );
     plate.applyQuaternion(twist);
     plate.applyQuaternion(alignToChain);

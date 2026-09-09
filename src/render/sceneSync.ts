@@ -3,6 +3,7 @@ import type { GearInstance, RemoteLink, SimDiagnostics } from "../sim/types";
 import type { SceneContext } from "./scene";
 import { GearMeshObject } from "./gearMesh";
 import { buildLinkRibbon } from "./chainGeometry";
+import { getProceduralTexture } from "./textures";
 import { findMeshPartner, pitchRadius } from "../sim/meshing";
 import { buildPropMesh, type Prop } from "./props";
 
@@ -91,6 +92,15 @@ export function crankSliderPose(
   } else {
     out.rodQuat.identity();
   }
+}
+
+/** How many rib repeats a belt's surface texture gets along its whole run. Fixed rather than
+ *  proportional to length so every belt in a scene shows ribs at a consistent visual density. */
+const BELT_RIB_REPEAT = 24;
+
+/** Straight-line distance between two world positions. */
+function distanceBetween(a: [number, number, number], b: [number, number, number]): number {
+  return Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 }
 
 /** Order-independent identity for a remote link, so a pair stored as {a:"x", b:"y"} and
@@ -360,16 +370,52 @@ export class SceneSync {
       if (!a || !b) continue;
       const key = remoteLinkKey(link);
       const width = link.kind === "chain" ? 0.15 : 0.25;
-      const geometry = buildLinkRibbon(a.position, b.position, width, link.kind);
+      // How far the belt/chain has RUN, in world units: the driving wheel's accumulated
+      // rotation times its pitch radius -- the rim speed it drags the run at, and the same
+      // angle x radius relation `rotation.ts` uses to drive a rack from a pinion. Without this
+      // the ribbon's geometry depends only on its two endpoints, and gears never move, so every
+      // frame drew byte-identical links: the sprockets spun while the chain sat perfectly still.
+      const travel = a.rotation * pitchRadius(a);
+      const geometry = buildLinkRibbon(a.position, b.position, width, link.kind, travel);
       const existing = this.linkMeshes.get(key);
       if (existing) {
         existing.geometry.dispose();
         existing.geometry = geometry;
       } else {
-        const material = new THREE.MeshStandardMaterial({ color: link.kind === "chain" ? 0x888888 : 0x333333 });
+        const material = new THREE.MeshStandardMaterial({
+          color: link.kind === "chain" ? 0x888888 : 0x333333,
+          metalness: link.kind === "chain" ? 0.75 : 0.15,
+          roughness: link.kind === "chain" ? 0.35 : 0.85,
+        });
+        if (link.kind === "belt") {
+          // A belt is a smooth tube, so travelling links are not an option -- there is nothing
+          // discrete to move. Instead it gets a ribbed surface that SCROLLS: the tube's UV runs
+          // along its length, so advancing the map offset carries the ribs along the run and the
+          // belt reads as driven rather than painted between two pulleys.
+          const ribs = getProceduralTexture("fabric");
+          if (ribs) {
+            const map = ribs.clone();
+            map.needsUpdate = true;
+            map.repeat.set(1, BELT_RIB_REPEAT);
+            material.map = map;
+            material.bumpMap = map;
+            material.bumpScale = 0.25;
+          }
+        }
         const mesh = new THREE.Mesh(geometry, material);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         this.linkMeshes.set(key, mesh);
         this.ctx.scene.add(mesh);
+      }
+      if (link.kind === "belt") {
+        const material = this.linkMeshes.get(key)!.material as THREE.MeshStandardMaterial;
+        if (material.map) {
+          const span = Math.max(1e-6, distanceBetween(a.position, b.position));
+          // One full texture repeat spans `span / BELT_RIB_REPEAT` world units, so dividing the
+          // travel by that converts world units of belt movement into texture repeats.
+          material.map.offset.y = -(travel * BELT_RIB_REPEAT) / span;
+        }
       }
     }
   }
