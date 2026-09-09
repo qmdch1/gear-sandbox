@@ -295,3 +295,39 @@ describe("GearMeshObject", () => {
     });
   });
 });
+
+describe("GearMeshObject -- machined finish", () => {
+  it("keeps the type colour and the durability tint intact after adding a surface map", () => {
+    // The finish is a greyscale map that MULTIPLIES the material colour, so it must not disturb
+    // the steel/bronze/copper palette or the damage tint. If a future change ever tinted the
+    // map itself, this is what would catch it.
+    const healthy = new GearMeshObject(makeGear({ type: "spur" }));
+    expect((healthy.mesh.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
+      colorForGear("spur", 1, false).getHex(),
+    );
+
+    const damaged = makeGear({ type: "spur", durabilityCurrent: 25, durabilityMax: 100 });
+    const obj = new GearMeshObject(damaged);
+    obj.update(damaged);
+    expect((obj.mesh.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
+      colorForGear("spur", 0.25, false).getHex(),
+    );
+
+    const broken = makeGear({ type: "spur", durabilityCurrent: 0, broken: true });
+    const brokenObj = new GearMeshObject(broken);
+    brokenObj.update(broken);
+    expect((brokenObj.mesh.material as THREE.MeshStandardMaterial).color.getHex()).toBe(
+      colorForGear("spur", 0, true).getHex(),
+    );
+  });
+
+  it("stays metallic rather than matte, with or without a texture backend", () => {
+    // jsdom has no canvas, so getProceduralTexture returns null here and the map is skipped --
+    // the gear must still be set up as metal, not fall back to MeshStandardMaterial's matte
+    // defaults (roughness 1, metalness 0), which read as unglazed clay.
+    const material = new GearMeshObject(makeGear({ type: "spur" })).mesh
+      .material as THREE.MeshStandardMaterial;
+    expect(material.metalness).toBeGreaterThan(0.3);
+    expect(material.roughness).toBeLessThan(0.7);
+  });
+});

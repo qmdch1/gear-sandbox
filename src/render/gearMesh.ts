@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getProceduralTexture } from "./textures";
 import type { GearInstance, GearType } from "../sim/types";
 import { buildGeometryForType } from "./gearGeometry";
 
@@ -120,6 +121,24 @@ export class GearMeshObject {
       metalness: 0.55,
       roughness: 0.45,
     });
+    // Machined-metal surface. Every decorative prop already carries a procedural finish, but
+    // the gears -- the objects this whole app is actually about, and the ones the camera spends
+    // its time on -- had no map at all: uniform colour, uniform roughness, so each face
+    // reflected identically and a gear read as moulded plastic however well lit. The pattern is
+    // greyscale and multiplies against the type colour, so the steel/bronze/copper palette AND
+    // the durability tint (`update` below rewrites `.color`, never the map) survive untouched;
+    // it only adds fine turning marks and the roughness variation that makes them catch light.
+    const finish = getProceduralTexture("metal");
+    if (finish) {
+      const map = finish.clone();
+      map.needsUpdate = true;
+      // Tight repeat: a gear is small, and the marks should read as machining, not as cladding.
+      map.repeat.set(3, 3);
+      material.map = map;
+      material.roughnessMap = map;
+      material.bumpMap = map;
+      material.bumpScale = 0.12;
+    }
     this.mesh = new THREE.Mesh(geometry, material);
     this.mesh.name = gear.id;
     // Gears occlude and are occluded like everything else in the scene, so a gear train lands
