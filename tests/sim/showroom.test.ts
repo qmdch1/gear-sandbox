@@ -1,10 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { createShowroomLayout, createShowroomProps } from "../../src/sim/showroom";
+import { GROUND_SIZE } from "../../src/render/scene";
 import { buildEdges, classify } from "../../src/sim/graph";
 import { tick } from "../../src/sim/simulation";
 
 describe("createShowroomLayout", () => {
-  it("combines all nine finished machines with unique ids across every preset", () => {
+  it("combines all sixteen finished machines with unique ids across every preset", () => {
     const layout = createShowroomLayout();
     const ids = layout.gears.map((g) => g.id);
     expect(new Set(ids).size).toBe(ids.length); // no id collisions across presets
@@ -18,6 +19,11 @@ describe("createShowroomLayout", () => {
       "증기기관차_좌동륜1",
       "공장_증기기관_크랭크",
       "물레방아_수차",
+      "타워크레인_선회모터",
+      "회전목마_모터",
+      "컨베이어_모터",
+      "시계탑_구동륜",
+      "두레우물_손잡이",
     ]) {
       expect(ids).toContain(id);
     }
@@ -47,16 +53,22 @@ describe("createShowroomLayout", () => {
       "증기기관차_우동륜3",
       "공장_3작업_주축기어",
       "물레방아_맷돌",
+      "타워크레인_선회기어",
+      "회전목마_큰기어",
+      "컨베이어_테일풀리",
+      "시계탑_시침휠",
     ]) {
       const g = layout.gears.find((x) => x.id === id)!;
       expect(Math.abs(g.rotation)).toBeGreaterThan(0);
     }
   });
 
-  it("supplies combined decorative props for all four machines", () => {
+  it("supplies combined decorative props for every machine in the yard", () => {
     const props = createShowroomProps();
-    // Each machine contributes its own body; nine of them make a substantial yard.
-    expect(props.length).toBeGreaterThan(400);
+    // Each machine contributes its own body; sixteen of them make a substantial yard. A floor
+    // rather than an exact count, so adding detail to any one machine cannot fail this
+    // spuriously -- what it guards is that no machine silently contributes nothing.
+    expect(props.length).toBeGreaterThan(600);
   });
   it("keeps every machine's own body with it -- each preset's props land on its own offset", () => {
     // A props offset that did not match its layout's offset would leave a machine's body
@@ -76,15 +88,18 @@ describe("createShowroomLayout", () => {
     for (const p of locoBody) expect(p.position[0]).toBeLessThan(-100);
   });
 
-  it("keeps every machine inside the 500x500 ground plane", () => {
-    // Anything beyond +/-250 hangs off the edge of the world and floats over the void.
+  it("keeps every machine inside the ground plane", () => {
+    // Anything beyond the plane's half-width hangs off the edge of the world and floats over
+    // the void. Derived from scene.ts's GROUND_SIZE rather than hardcoded, so growing the yard
+    // and growing the ground can never silently disagree.
+    const half = GROUND_SIZE / 2;
     for (const g of createShowroomLayout().gears) {
-      expect(Math.abs(g.position[0])).toBeLessThan(250);
-      expect(Math.abs(g.position[2])).toBeLessThan(250);
+      expect(Math.abs(g.position[0])).toBeLessThan(half);
+      expect(Math.abs(g.position[2])).toBeLessThan(half);
     }
     for (const p of createShowroomProps()) {
-      expect(Math.abs(p.position[0])).toBeLessThan(250);
-      expect(Math.abs(p.position[2])).toBeLessThan(250);
+      expect(Math.abs(p.position[0])).toBeLessThan(half);
+      expect(Math.abs(p.position[2])).toBeLessThan(half);
     }
   });
 });

@@ -2,6 +2,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
+/** Side length of the square ground plane, in world units. Exported as the single source of
+ *  truth because two other places reason about it: `showroom.ts` lays machines out inside it,
+ *  and `chainGeometry.ts` derives its worst-case chain length from the plane's diagonal. Those
+ *  used to hardcode 500 in prose, which is exactly how such a number drifts out of date. */
+export const GROUND_SIZE = 800;
+
 export interface SceneContext {
   scene: THREE.Scene;
   camera: THREE.PerspectiveCamera;
@@ -121,7 +127,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   // all). Lightened well clear of the background, plus a visible grid overlay, so there
   // is an actual sense of ground/scale instead of an empty void.
   const groundPlane = new THREE.Mesh(
-    new THREE.PlaneGeometry(500, 500),
+    new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
     new THREE.MeshStandardMaterial({ color: 0x3d434e, roughness: 0.95 }),
   );
   groundPlane.rotation.x = -Math.PI / 2;
@@ -145,7 +151,7 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
     scene.environment = null;
   }
 
-  const grid = new THREE.GridHelper(500, 50, 0x5a6270, 0x454b56);
+  const grid = new THREE.GridHelper(GROUND_SIZE, GROUND_SIZE / 10, 0x5a6270, 0x454b56); // 10-unit cells
   grid.position.y = 0.01; // avoid z-fighting with the ground plane
   scene.add(grid);
 

@@ -9,6 +9,13 @@ import { createPistonEnginePreset, createPistonEngineProps } from "./presets/pis
 import { createFactoryPreset, createFactoryProps } from "./presets/factory";
 import { createWatermillPreset, createWatermillProps } from "./presets/watermill";
 import { createFerrisWheelPreset, createFerrisWheelProps } from "./presets/ferriswheel";
+import { createCastlePreset, createCastleProps } from "./presets/castle";
+import { createHoistPreset, createHoistProps } from "./presets/hoist";
+import { createCarouselPreset, createCarouselProps } from "./presets/carousel";
+import { createWellPumpPreset, createWellPumpProps } from "./presets/wellpump";
+import { createConveyorPreset, createConveyorProps } from "./presets/conveyor";
+import { createTowerCranePreset, createTowerCraneProps } from "./presets/towercrane";
+import { createClockTowerPreset, createClockTowerProps } from "./presets/clocktower";
 
 type Vec3 = [number, number, number];
 
@@ -35,39 +42,47 @@ function translateProps(props: Prop[], d: Vec3): Prop[] {
   }));
 }
 
-/** The nine finished machines, on a 3x3 yard.
+/** The sixteen finished machines, on a 4x4 yard.
  *
- *  The grid pitch (170 across X, 150 along Z) was chosen against each preset's REAL measured
- *  extent, not by eye. The two widest cases set it: the factory line shaft spans 114 units of
- *  X, and the locomotive 103 units of Z. Every machine is also kept inside the 500x500 ground
- *  plane (+/-250), which is why the grid is centred on the origin instead of growing out from
- *  a corner -- the far column would otherwise hang off the edge of the world.
+ *  Cell pitch (170 across X, 150 along Z) was chosen against each preset's REAL measured extent
+ *  rather than by eye. The widest cases set it: the factory line shaft spans 114 units of X, the
+ *  watermill 80 and the piston engine 74; along Z the locomotive is 103 long and the conveyor
+ *  56. Machines are also assigned to cells so that no two wide ones land side by side in the
+ *  same row.
  *
- *  Placement matters for more than looks: `classify()` flags any two gears that sit inside
- *  each other's overlap radius, and it does not care that they belong to different machines.
- *  The spacing below leaves at least ~50 units of clear air between neighbouring machines'
- *  gear clusters, and tests/sim/showroom.test.ts asserts the combined layout really does
- *  report zero overlap pairs rather than trusting that.
+ *  Placement matters for more than looks: `classify()` flags any two gears sitting inside each
+ *  other's overlap radius and does not care that they belong to different machines.
+ *  tests/sim/showroom.test.ts asserts the combined layout really does report zero overlap pairs,
+ *  and that everything stays inside the ground plane -- neither is assumed here.
  *
- *  The bench-style demos (clock, castle gate, hoist) stay out of the yard and remain
- *  available from the preset panel: they read as mechanisms on a workbench rather than
- *  vehicles and buildings standing in a field. */
+ *  The yard holds machines that read as standalone objects standing in a field. The clock
+ *  movement and the music box stay out and remain available from the preset panel: both are
+ *  tabletop/bench pieces, and standing them in a field would read as scale nonsense next to a
+ *  locomotive and a tower crane. */
 const SHOWROOM: Array<{ layout: LayoutState; props: Prop[]; offset: Vec3 }> = [
-  // Centre column.
-  { layout: createCarPreset(), props: createCarProps(), offset: [0, 0, 0] },
-  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [0, 0, 150] },
-  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [0, 0, -150] },
-  // Left column.
-  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [-170, 0, 0] },
-  { layout: createFerrisWheelPreset(), props: createFerrisWheelProps(), offset: [-170, 0, 150] },
-  { layout: createLocomotivePreset(), props: createLocomotiveProps(), offset: [-170, 0, -150] },
-  // Right column.
-  { layout: createWatermillPreset(), props: createWatermillProps(), offset: [170, 0, 0] },
-  { layout: createPistonEnginePreset(), props: createPistonEngineProps(), offset: [170, 0, 150] },
-  { layout: createFactoryPreset(), props: createFactoryProps(), offset: [170, 0, -150] },
+  // Back row (z = -225).
+  { layout: createLocomotivePreset(), props: createLocomotiveProps(), offset: [-255, 0, -225] },
+  { layout: createFactoryPreset(), props: createFactoryProps(), offset: [-85, 0, -225] },
+  { layout: createWatermillPreset(), props: createWatermillProps(), offset: [85, 0, -225] },
+  { layout: createTowerCranePreset(), props: createTowerCraneProps(), offset: [255, 0, -225] },
+  // Second row (z = -75).
+  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [-255, 0, -75] },
+  { layout: createCarPreset(), props: createCarProps(), offset: [-85, 0, -75] },
+  { layout: createPistonEnginePreset(), props: createPistonEngineProps(), offset: [85, 0, -75] },
+  { layout: createClockTowerPreset(), props: createClockTowerProps(), offset: [255, 0, -75] },
+  // Third row (z = 75).
+  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [-255, 0, 75] },
+  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [-85, 0, 75] },
+  { layout: createCarouselPreset(), props: createCarouselProps(), offset: [85, 0, 75] },
+  { layout: createFerrisWheelPreset(), props: createFerrisWheelProps(), offset: [255, 0, 75] },
+  // Front row (z = 225).
+  { layout: createCastlePreset(), props: createCastleProps(), offset: [-255, 0, 225] },
+  { layout: createWellPumpPreset(), props: createWellPumpProps(), offset: [-85, 0, 225] },
+  { layout: createConveyorPreset(), props: createConveyorProps(), offset: [85, 0, 225] },
+  { layout: createHoistPreset(), props: createHoistProps(), offset: [255, 0, 225] },
 ];
 
-/** The default first-visit scene: nine finished machines arranged in a yard, replacing the
+/** The default first-visit scene: sixteen finished machines arranged in a yard, replacing the
  *  old abstract 12-gear-type showcase. Gear ids are unique across presets (each is prefixed with its machine's
  *  Korean name), so the combined gear list and remote-link list are just concatenations. */
 export function createShowroomLayout(): LayoutState {
