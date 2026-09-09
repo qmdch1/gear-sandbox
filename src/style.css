@@ -13,6 +13,13 @@ html, body { margin: 0; height: 100%; background: #1a1d22; color: #eee; font-fam
 .axis-buttons { display: flex; gap: 6px; margin-top: 8px; }
 .axis-btn { flex: 1; padding: 4px 0; }
 .axis-btn.active { background: #4a7; color: #fff; font-weight: bold; }
+/* Repair reads as restorative, so it is deliberately green -- clearly NOT the red delete
+   button it sits directly above. Disabled at full durability, dimmed rather than hidden so the
+   panel's shape stays stable as a gear wears. */
+.repair-btn { display: block; width: 100%; margin-top: 8px; padding: 4px 0; background: #1e3320; color: #8f8; border: 1px solid #4a8; border-radius: 3px; }
+.repair-btn:hover:not(:disabled) { background: #2f7a45; color: #fff; }
+.repair-btn:disabled { background: #2a2d33; color: #777; border-color: #444; cursor: default; }
+#repair-all { display: block; width: 100%; margin-top: 4px; }
 .delete-btn { display: block; width: 100%; margin-top: 8px; padding: 4px 0; background: #3a2020; color: #f88; border: 1px solid #a44; border-radius: 3px; }
 .delete-btn:hover { background: #a33; color: #fff; }
 #frame-error-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 4px 10px; background: #5a2020; color: #fdd; font-size: 0.85em; text-align: center; pointer-events: none; }

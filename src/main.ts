@@ -19,6 +19,7 @@ import { PresetPanel } from "./ui/presetPanel";
 import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile } from "./persistence/storage";
 import { createFrameRunner } from "./runtime/frameSafety";
 import { createDirtyTracker } from "./runtime/dirtyTracker";
+import { repairGear, countNeedingRepair } from "./sim/repair";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -30,6 +31,7 @@ app.innerHTML = `
     </div>
     <div id="view-controls">
       <button id="fit-all-view">전체 보기 (카메라 리셋)</button>
+      <button id="repair-all" title="닳거나 부서진 기어를 모두 처음 상태로 되돌립니다.">전체 수리 (내구도 회복)</button>
     </div>
     <div id="save-load"></div>
     <div id="server-sync"></div>
@@ -56,6 +58,7 @@ const durabilityPanel = new DurabilityPanel(
     durabilityPanel.show(gear);
   },
   (id) => deleteGear(id),
+  (id) => repairOne(id),
 );
 
 let gears: GearInstance[] = [];
@@ -223,6 +226,37 @@ function resetTransientUiState(): void {
 document
   .querySelector<HTMLButtonElement>("#fit-all-view")!
   .addEventListener("click", () => sceneSync.fitAll(gears));
+
+/** Restores one gear to factory condition. Mutates in place rather than swapping the array,
+ *  because `gears` is the single live layout every other handler here closes over. */
+function repairOne(id: string): void {
+  const gear = gears.find((g) => g.id === id);
+  if (!gear) return;
+  const fixed = repairGear(gear);
+  if (fixed === gear) return; // nothing was damaged
+  gear.durabilityCurrent = fixed.durabilityCurrent;
+  gear.broken = fixed.broken;
+  dirtyTracker.markDirty();
+  durabilityPanel.show(gear);
+}
+
+// "전체 수리": wear is one-way -- `wear.ts` only subtracts, and a gear worn to zero is `broken`,
+// which `rotation.ts` treats as a dead end that stops relaying drive to everything downstream.
+// Left running, any layout eventually grinds itself to a halt (the bundled showroom loses its
+// first gear at ~90s and has 27 of 72 broken by 150s), and before this there was no way back
+// short of reloading and losing your work. This is the counterpart to that: maintenance.
+document.querySelector<HTMLButtonElement>("#repair-all")!.addEventListener("click", () => {
+  const damaged = countNeedingRepair(gears);
+  if (damaged === 0) return;
+  for (const gear of gears) {
+    const fixed = repairGear(gear);
+    gear.durabilityCurrent = fixed.durabilityCurrent;
+    gear.broken = fixed.broken;
+  }
+  dirtyTracker.markDirty();
+  const selected = selectedGearId ? gears.find((g) => g.id === selectedGearId) : undefined;
+  if (selected) durabilityPanel.show(selected);
+});
 
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
 

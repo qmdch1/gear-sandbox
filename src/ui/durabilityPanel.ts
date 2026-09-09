@@ -1,5 +1,6 @@
 import type { GearInstance } from "../sim/types";
 import { GEAR_LABELS, GEAR_NOTES } from "./gearLabels";
+import { needsRepair } from "../sim/repair";
 
 type Axis = [number, number, number];
 
@@ -20,6 +21,7 @@ export class DurabilityPanel {
     private container: HTMLElement,
     private onAxisChange: (gearId: string, axis: Axis) => void = () => {},
     private onDelete: (gearId: string) => void = () => {},
+    private onRepair: (gearId: string) => void = () => {},
   ) {}
 
   show(gear: GearInstance): void {
@@ -59,6 +61,24 @@ export class DurabilityPanel {
       axisRow.appendChild(btn);
     }
     this.container.appendChild(axisRow);
+
+    // Repair. `wear.ts` only ever subtracts durability, and a gear that reaches zero is
+    // `broken` -- which `rotation.ts` treats as a dead end that stops relaying drive. Without
+    // this button the panel could tell you a gear was worn or dead but offered nothing to do
+    // about it, and the only way back was reloading the layout. Disabled at full durability so
+    // it reads as "nothing to fix here" rather than doing nothing silently.
+    const repairBtn = document.createElement("button");
+    repairBtn.type = "button";
+    repairBtn.textContent = "수리";
+    repairBtn.className = "repair-btn";
+    repairBtn.disabled = !needsRepair(gear);
+    repairBtn.title = repairBtn.disabled
+      ? "이 기어는 손상되지 않았습니다."
+      : "이 기어의 내구도를 처음 상태로 되돌립니다.";
+    repairBtn.addEventListener("click", () => {
+      if (this.currentGearId) this.onRepair(this.currentGearId);
+    });
+    this.container.appendChild(repairBtn);
 
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";

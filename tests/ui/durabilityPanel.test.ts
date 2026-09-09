@@ -163,3 +163,63 @@ describe("DurabilityPanel", () => {
     expect(container.hidden).toBe(true);
   });
 });
+
+describe("DurabilityPanel -- repair", () => {
+  const repairBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>("button.repair-btn")!;
+
+  it("offers repair on a worn gear and reports which gear to repair", () => {
+    const container = document.createElement("div");
+    const repaired: string[] = [];
+    const panel = new DurabilityPanel(container, () => {}, () => {}, (id) => repaired.push(id));
+    panel.show(makeGear({ id: "worn-1", durabilityCurrent: 40 }));
+
+    const btn = repairBtn(container);
+    expect(btn).toBeTruthy();
+    expect(btn.disabled).toBe(false);
+    btn.click();
+    expect(repaired).toEqual(["worn-1"]);
+  });
+
+  it("offers repair on a BROKEN gear -- the case where it matters most", () => {
+    // A broken gear stops relaying drive to everything downstream, so this is exactly the
+    // state a user needs a way out of.
+    const container = document.createElement("div");
+    const repaired: string[] = [];
+    const panel = new DurabilityPanel(container, () => {}, () => {}, (id) => repaired.push(id));
+    panel.show(makeGear({ id: "dead", durabilityCurrent: 0, broken: true }));
+    expect(container.textContent).toContain("파손됨");
+    const btn = repairBtn(container);
+    expect(btn.disabled).toBe(false);
+    btn.click();
+    expect(repaired).toEqual(["dead"]);
+  });
+
+  it("disables repair on an undamaged gear, so it reads as 'nothing to fix' rather than doing nothing silently", () => {
+    const container = document.createElement("div");
+    const repaired: string[] = [];
+    const panel = new DurabilityPanel(container, () => {}, () => {}, (id) => repaired.push(id));
+    panel.show(makeGear({ id: "fresh" }));
+    const btn = repairBtn(container);
+    expect(btn.disabled).toBe(true);
+    btn.click();
+    expect(repaired).toEqual([]);
+  });
+
+  it("keeps repair separate from delete -- they must not be confusable", () => {
+    const container = document.createElement("div");
+    const deleted: string[] = [];
+    const repaired: string[] = [];
+    const panel = new DurabilityPanel(
+      container,
+      () => {},
+      (id) => deleted.push(id),
+      (id) => repaired.push(id),
+    );
+    panel.show(makeGear({ id: "x", durabilityCurrent: 10 }));
+    repairBtn(container).click();
+    expect(repaired).toEqual(["x"]);
+    expect(deleted).toEqual([]);
+    container.querySelector<HTMLButtonElement>("button.delete-btn")!.click();
+    expect(deleted).toEqual(["x"]);
+  });
+});
