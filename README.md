@@ -82,3 +82,7 @@ npx vitest run                 # 전체 스위트
 npx vitest run tests/sim       # 시뮬레이션 코어만
 npx vitest run tests/server    # 서버 API만
 ```
+
+## 라이선스
+
+MIT 라이선스입니다. 전문은 [LICENSE](LICENSE) 파일을 보세요.
