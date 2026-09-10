@@ -4,6 +4,7 @@ import { createShowroomLayout, createShowroomProps } from "../../src/sim/showroo
 import { seatOnGround, depthBelowGround, propLowestY, gearLowestY } from "../../src/sim/ground";
 import { buildEdges, classify } from "../../src/sim/graph";
 import type { GearInstance } from "../../src/sim/types";
+import type { Prop } from "../../src/render/props";
 
 function gear(overrides: Partial<GearInstance>): GearInstance {
   return {
@@ -46,7 +47,7 @@ describe("propLowestY", () => {
 describe("seatOnGround", () => {
   it("lifts a buried machine until nothing is underground, and no further", () => {
     const layout = { gears: [gear({ position: [0, 0, 0], axis: [1, 0, 0] })], remoteLinks: [] };
-    const props = [{ kind: "box" as const, position: [0, 6, 0], size: [4, 34, 4], color: 0 }];
+    const props: Prop[] = [{ kind: "box", position: [0, 6, 0], size: [4, 34, 4], color: 0 }];
     expect(depthBelowGround(layout.gears, props)).toBeCloseTo(11, 6);
 
     const seated = seatOnGround(layout, props);
@@ -57,7 +58,7 @@ describe("seatOnGround", () => {
 
   it("is idempotent and leaves a machine already on the ground untouched", () => {
     const layout = { gears: [gear({ position: [0, 20, 0] })], remoteLinks: [] };
-    const props = [{ kind: "box" as const, position: [0, 5, 0], size: [2, 10, 2], color: 0 }];
+    const props: Prop[] = [{ kind: "box", position: [0, 5, 0], size: [2, 10, 2], color: 0 }];
     const once = seatOnGround(layout, props);
     expect(once.props).toBe(props); // untouched, returned by reference
     expect(seatOnGround(once.layout, once.props).props).toBe(once.props);

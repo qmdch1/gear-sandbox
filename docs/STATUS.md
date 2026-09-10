@@ -8,10 +8,18 @@ Keep it short. When something here stops being true, edit it rather than appendi
 
 ## Done
 
-**20 presets**, each a complete machine with its own tests: clock, car, castle gate, hoist,
+**22 presets**, each a complete machine with its own tests: clock, car, castle gate, hoist,
 airplane, windmill, bicycle, locomotive, piston engine, factory line shaft, watermill, ferris
 wheel, carousel, well pump, conveyor, tower crane, music box, clock tower, gearbox, planetary
-hoist. Sixteen of them stand in the default showroom yard.
+hoist, differential axle, worm rotary table. Sixteen stand in the default showroom yard.
+
+**All twelve gear types are now exercised by a real machine.** `differential` and `worm` were the
+last holdouts; a test asserts this stays true, because a type no preset uses is a type whose
+branch in `meshing.ts` nothing drives end to end.
+
+**Every machine stands on the ground.** The ground plane is opaque, and sixteen presets were
+authored with something below y = 0 (the piston engine by 16 units). `src/sim/ground.ts` seats a
+machine before it is shown, and a test checks each preset and the whole yard.
 
 **Movement.** Props follow their gears through five mechanisms (`attachTo`, `slideWith`,
 `windWith`, `linkTo`, plus `reverseAt` on a crank) — see AGENTS.md. Belts and chains now travel
@@ -28,13 +36,8 @@ turned back on.
 
 ## Deliberately not done
 
-- **Two of the four planned interlocking presets were never built**: a **differential axle** and a
-  **worm-drive rotary table**. Their build agents died before writing anything. Note that
-  `differential` and `worm` are the two gear types **no preset currently uses** — building these
-  would be the last piece of type coverage, and both have their own branches in `meshing.ts` with
-  rules the rest of the presets never exercise (worm in particular sets a one-way drive direction,
-  which nothing tests end to end today).
-- **Gearbox and planetary hoist are registered but not in the showroom yard.** They work and are
+- **Gearbox, planetary hoist, differential axle and worm table are registered but not in the
+  showroom yard.** They work and are
   reachable from the preset panel; they simply have not been placed on the grid. Placing them
   means measuring their extents and checking the cross-machine overlap floor, as `showroom.ts`
   documents.
@@ -44,21 +47,6 @@ turned back on.
   driving the whole yard would need one connected component, and `rotation.ts` silently discards
   every crank but the first in such a component — so it would mean rebuilding each preset's input,
   not just adding belts.
-
-## Known defects
-
-**`clock.ts` meshes two different modules.** Its idler is 12 teeth at module 1 (r = 6) and its
-hour wheel is 120 teeth at module 0.2 (r = 12). The radii sum to the centre distance, so
-`evaluatePair` returns a perfectly happy mesh edge — but module *is* tooth size, so the two wheels
-are drawn with teeth five times different and could not engage on any real shaft. This is exactly
-the trap AGENTS.md warns about, live in a bundled preset, and it is why the one-module rule cannot
-yet be asserted across all presets.
-
-It is not a one-line fix. The preset claims a 1/12 minute:hour reduction in a single stage, and a
-12x tooth ratio at one module makes the hour wheel enormous (120 teeth at module 1 is a wheel 120
-across). `clocktower.ts` hit the same wall and resolved it honestly — it takes one stage of 1/4 and
-says plainly in its doc comment that it is not the 12:1 of a real clock. The clock movement should
-either do the same, or reach 1/12 through two stages at one module, as a real going train does.
 
 ## Known rough edges
 
@@ -71,7 +59,10 @@ either do the same, or reach 1/12 through two stages at one module, as a real go
 
 ## If you are looking for something to do
 
-1. Build the differential axle and worm-drive table (above) — closes gear-type coverage.
-2. Place gearbox and planetary hoist in the yard.
-3. Interlock a *new* preset rather than the yard: one power source, many stations, is what
+1. Place the four unplaced presets in the yard (measure their extents, check the cross-machine
+   overlap floor, and mind that the grid is already 4x4).
+2. Interlock a *new* preset rather than the yard: one power source, many stations, is what
    `factory.ts` already demonstrates and could be pushed much further.
+3. The `ratchet` type is used but its one-way behaviour is only incidental; a machine built
+   *around* a ratchet (a capstan that cannot run back) would exercise it the way the worm table
+   now exercises the worm.

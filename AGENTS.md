@@ -11,7 +11,7 @@ here in the same change — a doc other agents trust is worse than no doc when i
 ## What this is
 
 A browser gear-simulation sandbox: place gears, mesh them, link them with belts and chains,
-watch the train turn. Ships 20 fully-modelled example machines ("presets") — a locomotive, a
+watch the train turn. Ships 22 fully-modelled example machines ("presets") — a locomotive, a
 factory line shaft, a clock tower, a music box, a tower crane, and so on.
 
 Stack: TypeScript + Vite + THREE.js on the client, a small Express + better-sqlite3 server for
@@ -20,7 +20,7 @@ saved layouts. Tests are Vitest. There is no framework — plain modules.
 ```
 src/main.ts       entry point: builds the DOM, seeds the showroom, owns the frame loop
 src/sim/          simulation core: types, meshing, graph, rotation, wear, repair, simulation
-src/sim/presets/  one module per example machine (22 files: 20 presets + index + wheels helper)
+src/sim/presets/  one module per example machine (24 files: 22 presets + index + wheels helper)
 src/render/       THREE.js: scene, gear geometry, props, procedural textures, chain/belt ribbons
 src/ui/           DOM panels (palette, diagnostics, durability, save/load, presets)
 src/interaction/  placement + drag controls
@@ -48,7 +48,7 @@ caught and written, but the habit is what causes it.
 ## Verifying a change
 
 ```bash
-npx vitest run          # full suite (732 tests in 64 files); `npm test` is the same thing
+npx vitest run          # full suite (796 tests in 68 files); `npm test` is the same thing
 npx tsc --noEmit        # types — vitest does NOT type-check, so this catches real bugs it misses
 npx vite build          # production build
 ```
@@ -95,9 +95,8 @@ they now use a 3-gear preset and run in 6s. Pick the smallest layout that exerci
 - **`evaluatePair` does NOT check `module`.** Two gears with different tooth SIZES will happily
   form a simulation edge and render as a visibly impossible pair. Every meshing wheel in a train
   must share one module — assert it in your NEW preset's test for every mesh edge `buildEdges`
-  produces. The rule is **not yet true repo-wide**: `clock.ts` meshes a module-1 idler against a
-  module-0.2 hour wheel, so do not assert it across all presets until that is fixed (see
-  `docs/STATUS.md`).
+  produces. It now holds repo-wide — `clock.ts` was the last violator and was rebuilt at one
+  module — so an audit across all presets is safe.
 - `classify` flags an overlap when centres sit closer than
   `0.95 * (overlapRadius(a) + overlapRadius(b))`. `overlapRadius` is the pitch radius for a toothed
   gear but `module * 2` for a zero-teeth object like `load`, which has no pitch circle yet still

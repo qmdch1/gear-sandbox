@@ -20,6 +20,8 @@ import { createMusicBoxPreset, createMusicBoxProps } from "./musicbox";
 import { createClockTowerPreset, createClockTowerProps } from "./clocktower";
 import { createGearboxPreset, createGearboxProps } from "./gearbox";
 import { createPlanetaryHoistPreset, createPlanetaryHoistProps } from "./planetaryhoist";
+import { createDifferentialAxlePreset, createDifferentialAxleProps } from "./differentialaxle";
+import { createWormTablePreset, createWormTableProps } from "./wormtable";
 
 export { createClockPreset, createClockProps } from "./clock";
 export { createCarPreset, createCarProps } from "./car";
@@ -41,6 +43,8 @@ export { createMusicBoxPreset, createMusicBoxProps } from "./musicbox";
 export { createClockTowerPreset, createClockTowerProps } from "./clocktower";
 export { createGearboxPreset, createGearboxProps } from "./gearbox";
 export { createPlanetaryHoistPreset, createPlanetaryHoistProps } from "./planetaryhoist";
+export { createDifferentialAxlePreset, createDifferentialAxleProps } from "./differentialaxle";
+export { createWormTablePreset, createWormTableProps } from "./wormtable";
 
 export interface PresetEntry {
   id: string;
@@ -178,5 +182,17 @@ export const PRESETS: PresetEntry[] = [
     label: "유성감속기 (헬리컬→유성기어 감속으로 권상드럼을 돌리는 12기어 권상기)",
     build: createPlanetaryHoistPreset,
     buildProps: createPlanetaryHoistProps,
+  },
+  {
+    id: "differentialaxle",
+    label: "차동축 (추진축이 베벨기어로 직각 전환해 링기어·차동장치를 돌리는 뒷차축 컷어웨이)",
+    build: createDifferentialAxlePreset,
+    buildProps: createDifferentialAxleProps,
+  },
+  {
+    id: "wormtable",
+    label: "웜기어 회전탁자 (웜이 웜휠을 20:1로 감속 — 웜은 휠을 돌리지만 휠은 웜을 못 돌린다)",
+    build: createWormTablePreset,
+    buildProps: createWormTableProps,
   },
 ];
