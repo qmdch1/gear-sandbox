@@ -41,9 +41,24 @@ describe("createClockPreset", () => {
 
     expect(hour.type).toBe("spur");
     expect(hour.teeth).toBe(120);
-    expect(hour.module).toBe(0.2);
-    expect(hour.position).toEqual([29, 0, 0]);
-    expect((hour.module * hour.teeth) / 2).toBe(12); // pitchRadius = 12
+    expect(hour.module).toBe(1);
+    expect(hour.position).toEqual([77, 0, 0]);
+    expect((hour.module * hour.teeth) / 2).toBe(60); // pitchRadius = 60
+  });
+
+  it("cuts every wheel at ONE module, so the teeth are the same SIZE and could really engage", () => {
+    // This preset used to mesh a module-1 idler against a module-0.2 hour wheel. The radii summed
+    // to the centre distance so evaluatePair returned a perfectly happy edge -- but module IS
+    // tooth size, so the pair was drawn with teeth five times different and could not engage on
+    // any real shaft. evaluatePair never compares module, so nothing but this assertion catches it.
+    const layout = createClockPreset();
+    const byId = new Map(layout.gears.map((g) => [g.id, g]));
+    const meshes = buildEdges(layout.gears, layout.remoteLinks).filter((e) => e.kind === "mesh");
+    expect(meshes.length).toBe(2);
+    for (const e of meshes) {
+      expect(byId.get(e.a)!.module, `${e.a} <-> ${e.b}`).toBe(1);
+      expect(byId.get(e.b)!.module, `${e.a} <-> ${e.b}`).toBe(1);
+    }
   });
 
   it("forms real mesh edges (crank<->idler, idler<->hour) via the real evaluatePair", () => {

@@ -20,6 +20,7 @@ import { saveToLocalStorage, loadFromLocalStorage, exportToFile, importFromFile 
 import { createFrameRunner } from "./runtime/frameSafety";
 import { createDirtyTracker } from "./runtime/dirtyTracker";
 import { repairGear, countNeedingRepair } from "./sim/repair";
+import { seatOnGround } from "./sim/ground";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -310,7 +311,12 @@ new ServerSyncPanel(document.querySelector("#server-sync")!, {
   onSaved: () => dirtyTracker.markClean(),
 });
 
-new PresetPanel(document.querySelector("#presets")!, (layout, props) => {
+new PresetPanel(document.querySelector("#presets")!, (rawLayout, rawProps) => {
+  // Seat the machine on the ground before showing it. The ground plane is opaque, so anything a
+  // preset authored below y = 0 just vanishes into it. A uniform lift is safe: every mesh,
+  // coupling, belt and chain depends only on the distance between gears, which translation
+  // preserves.
+  const { layout, props } = seatOnGround(rawLayout, rawProps);
   gears = layout.gears;
   remoteLinks = layout.remoteLinks;
   // Unlike `load`/`importFile`/`applyLoadedLayout` above (all of which restore a layout

@@ -1,5 +1,6 @@
 import type { LayoutState, GearInstance } from "./types";
 import type { Prop } from "../render/props";
+import { seatOnGround } from "./ground";
 import { createCarPreset, createCarProps } from "./presets/car";
 import { createAirplanePreset, createAirplaneProps } from "./presets/airplane";
 import { createWindmillPreset, createWindmillProps } from "./presets/windmill";
@@ -88,8 +89,14 @@ const SHOWROOM: Array<{ layout: LayoutState; props: Prop[]; offset: Vec3 }> = [
 export function createShowroomLayout(): LayoutState {
   const gears: GearInstance[] = [];
   const remoteLinks: LayoutState["remoteLinks"] = [];
-  for (const { layout, offset } of SHOWROOM) {
-    const shifted = translateLayout(layout, offset);
+  for (const { layout, props, offset } of SHOWROOM) {
+    // Seat each machine on the ground BEFORE shifting it to its cell. The ground plane is
+    // opaque, so anything authored below y = 0 simply disappears into it -- sixteen of the
+    // bundled presets did that somewhere, the piston engine by 16 units. `seatOnGround` needs
+    // the machine's props as well as its gears, since the body usually hangs lower than the
+    // mechanism does.
+    const seated = seatOnGround(layout, props);
+    const shifted = translateLayout(seated.layout, offset);
     gears.push(...shifted.gears);
     remoteLinks.push(...shifted.remoteLinks);
   }
@@ -100,8 +107,11 @@ export function createShowroomLayout(): LayoutState {
  *  its own relocated mechanism. */
 export function createShowroomProps(): Prop[] {
   const props: Prop[] = [];
-  for (const { props: p, offset } of SHOWROOM) {
-    props.push(...translateProps(p, offset));
+  for (const { layout, props: p, offset } of SHOWROOM) {
+    // Same lift as `createShowroomLayout` applies to the gears -- computed from the same pair,
+    // so the body and the mechanism move together and stay aligned.
+    const seated = seatOnGround(layout, p);
+    props.push(...translateProps(seated.props, offset));
   }
   return props;
 }
