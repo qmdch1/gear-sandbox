@@ -51,7 +51,11 @@ export function classify(gears: GearInstance[], edges: MeshEdge[]): SimDiagnosti
   // through, so this diagnostic can never drift from what actually spins.
   const directedAdjacency = buildDirectedAdjacency(gears, edges);
   const poweredIds = new Set<string>();
-  for (const crank of gears.filter((g) => g.type === "crank")) {
+  // `&& !g.broken` matches `propagateRotation`'s own root filter exactly. Without it the two
+  // walks disagreed and the comment above was a false promise: a layout whose only crank had
+  // worn through to `broken` reported `noPowerIds: []` -- everything powered -- while
+  // `rotation.ts` refused to root at that crank and nothing actually turned.
+  for (const crank of gears.filter((g) => g.type === "crank" && !g.broken)) {
     if (poweredIds.has(crank.id)) continue;
     const queue = [crank.id];
     poweredIds.add(crank.id);

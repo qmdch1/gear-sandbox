@@ -40,7 +40,7 @@ function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }
  *  property of the mechanism itself: `wear.ts` only ever subtracts, and a gear worn to zero is
  *  `broken`, which `rotation.ts` treats as a dead end that stops relaying drive downstream. Left
  *  on, any layout eventually grinds itself to a halt -- measured on the bundled showroom, the
- *  first gear fails at ~90s and 27 of 72 are broken by 150s. The app therefore runs with wear
+ *  first gear fails at ~67s and 27 of 72 are broken by 150s. The app therefore runs with wear
  *  OFF so the machines simply keep running; the default here stays `true` so the mechanic (and
  *  every test that exercises it) is unchanged for callers that want it. */
 export interface TickOptions {

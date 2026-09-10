@@ -85,7 +85,17 @@ const pitchRadius = (teeth: number, module: number) => (module * teeth) / 2;
  *  `angularVelocity: -0.6` on the minute drive is an arbitrary but deliberately
  *  non-trivial (non-1, negative) speed -- chosen so the direction-matching test can't
  *  pass by some sign-convention accident that would only show up at a "nice" speed like
- *  1 or -1. */
+ *  1 or -1.
+ *
+ *  KNOWN DEFECT: the idler and the hour wheel do NOT share a module (1 vs 0.2). Their pitch radii
+ *  do sum to the centre distance, so `evaluatePair` returns a perfectly happy mesh edge -- but
+ *  module IS tooth size, so the two wheels are RENDERED with teeth five times different and could
+ *  not engage on any real shaft. `evaluatePair` never compares module, which is why nothing
+ *  catches it. Module 0.2 was picked to keep a 120-tooth wheel compact enough to sit beside a
+ *  12-tooth idler; the honest ways out are to claim a smaller single-stage ratio (as
+ *  `clocktower.ts` does, saying plainly that its 1/4 is not a real clock's 12:1) or to reach 1/12
+ *  through two stages at one module, the way a real going train does. Tracked in docs/STATUS.md
+ *  rather than left for the next reader to trip over. */
 export function createClockPreset(): LayoutState {
   const minuteX = 0;
   const idlerX = minuteX + pitchRadius(10, 1) + pitchRadius(12, 1); // 5 + 6 = 11

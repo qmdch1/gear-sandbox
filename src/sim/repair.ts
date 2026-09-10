@@ -18,8 +18,9 @@ export function needsRepair(gear: GearInstance): boolean {
  *  relaying it. Nothing in the codebase ever added durability back, so wear was strictly
  *  one-way: any layout left running eventually destroyed itself, permanently, and the only way
  *  back was to reload the layout and lose whatever you had built. Measured on the bundled
- *  showroom: the first gear fails around 90 seconds, and by 150 seconds 27 of its 72 gears are
- *  broken and 32 have stopped turning.
+ *  showroom: the first gear fails at about 67 seconds -- a bevel driving a load, so
+ *  120 / (1.2 * 1.5) -- and by 150 seconds 27 of its 72 gears are broken and 32 have stopped
+ *  turning.
  *
  *  Repair is the missing half of that mechanic, not a defeat of it -- wear still teaches which
  *  gears run hot (a `spur` at 1.0/s wears twice as fast as a `helical` at 0.8 with the same

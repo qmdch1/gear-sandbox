@@ -45,10 +45,26 @@ turned back on.
   every crank but the first in such a component — so it would mean rebuilding each preset's input,
   not just adding belts.
 
+## Known defects
+
+**`clock.ts` meshes two different modules.** Its idler is 12 teeth at module 1 (r = 6) and its
+hour wheel is 120 teeth at module 0.2 (r = 12). The radii sum to the centre distance, so
+`evaluatePair` returns a perfectly happy mesh edge — but module *is* tooth size, so the two wheels
+are drawn with teeth five times different and could not engage on any real shaft. This is exactly
+the trap AGENTS.md warns about, live in a bundled preset, and it is why the one-module rule cannot
+yet be asserted across all presets.
+
+It is not a one-line fix. The preset claims a 1/12 minute:hour reduction in a single stage, and a
+12x tooth ratio at one module makes the hour wheel enormous (120 teeth at module 1 is a wheel 120
+across). `clocktower.ts` hit the same wall and resolved it honestly — it takes one stage of 1/4 and
+says plainly in its doc comment that it is not the 12:1 of a real clock. The clock movement should
+either do the same, or reach 1/12 through two stages at one module, as a real going train does.
+
 ## Known rough edges
 
-- The full suite takes ~160s. Most of it is preset tests running hundreds of real `tick` calls
-  over large layouts. Nothing is wrong; it is just slow, and worth keeping in mind before adding
+- The full suite's runtime swings a lot with machine load — seconds when the box is idle, a
+  couple of minutes when something else is running. Most of it is preset tests making hundreds of
+  real `tick` calls over large layouts. Nothing is wrong; it is just worth knowing before adding
   another whole-showroom test (see the test-performance note in AGENTS.md).
 - Repair is still wired to the UI while wear is off, so the button is permanently disabled. Either
   is defensible — leaving it means the feature is there the moment wear is switched back on.

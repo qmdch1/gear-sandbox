@@ -129,3 +129,26 @@ describe("buildEdges with remote links", () => {
     expect(edges[0].ratio).toBeCloseTo(3); // 15/5
   });
 });
+
+describe("classify -- a broken crank is not a power source", () => {
+  it("reports gears as unpowered once the only crank driving them has broken", () => {
+    // The two walks must agree. `propagateRotation` roots only at `type === "crank" && !broken`,
+    // so a worn-through crank drives nothing; `classify` used to root at every crank regardless,
+    // and therefore reported a fully-powered layout while the scene sat perfectly still. The
+    // comment above classify's power walk promises it "can never drift from what actually
+    // spins" -- this is the assertion that keeps that promise true.
+    const crank = makeGear({ id: "c", type: "crank", teeth: 20, module: 1, position: [0, 0, 0] });
+    const driven = makeGear({ id: "d", type: "spur", teeth: 10, module: 1, position: [15, 0, 0] });
+
+    const healthy = classify([crank, driven], buildEdges([crank, driven], []));
+    expect(healthy.noPowerIds).toEqual([]);
+
+    const dead = { ...crank, durabilityCurrent: 0, broken: true };
+    const after = classify([dead, driven], buildEdges([dead, driven], []));
+    // Both the crank itself and everything downstream of it are now unpowered.
+    expect(after.noPowerIds).toContain("d");
+    expect(after.noPowerIds).toContain("c");
+    // Still physically connected -- the mesh edge exists; it just carries nothing.
+    expect(after.unconnectedIds).toEqual([]);
+  });
+});

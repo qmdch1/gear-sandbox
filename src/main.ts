@@ -243,7 +243,7 @@ function repairOne(id: string): void {
 // "전체 수리": wear is one-way -- `wear.ts` only subtracts, and a gear worn to zero is `broken`,
 // which `rotation.ts` treats as a dead end that stops relaying drive to everything downstream.
 // Left running, any layout eventually grinds itself to a halt (the bundled showroom loses its
-// first gear at ~90s and has 27 of 72 broken by 150s), and before this there was no way back
+// first gear at ~67s and has 27 of 72 broken by 150s), and before this there was no way back
 // short of reloading and losing your work. This is the counterpart to that: maintenance.
 document.querySelector<HTMLButtonElement>("#repair-all")!.addEventListener("click", () => {
   const damaged = countNeedingRepair(gears);
