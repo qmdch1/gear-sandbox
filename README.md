@@ -83,6 +83,12 @@ npx vitest run tests/sim       # 시뮬레이션 코어만
 npx vitest run tests/server    # 서버 API만
 ```
 
+## 기여 / 에이전트 작업
+
+이 저장소에서 코드를 고칠 때 알아야 할 불변식·함정·검증 방법은 [AGENTS.md](AGENTS.md)에
+정리되어 있습니다. AI 에이전트로 작업하든 사람이 직접 하든, 먼저 읽으면 재발견에 드는
+시간을 아낄 수 있습니다.
+
 ## 라이선스
 
 MIT 라이선스입니다. 전문은 [LICENSE](LICENSE) 파일을 보세요.
