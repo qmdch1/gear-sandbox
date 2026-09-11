@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { tick } from "../../src/sim/simulation";
-import type { GearInstance, RemoteLink } from "../../src/sim/types";
+import type { GearInstance, LayoutState, RemoteLink } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
   return {
@@ -922,5 +922,32 @@ describe("tick -- reciprocating cranks (reverseAt)", () => {
     }
     expect(layout.gears[0].angularVelocity).toBe(1);
     expect(layout.gears[0].rotation).toBeCloseTo(10, 6);
+  });
+});
+
+describe("the 시간배율 (time scale) multiplier", () => {
+  it("multiplies how much simulated time a frame is worth, not just the wear rate", () => {
+    // It reached `applyWear` and nothing else, so with wear off -- which is how the app runs --
+    // dragging the slider changed absolutely nothing on screen.
+    const spin = (timeScale: number) => {
+      let layout: LayoutState = {
+        gears: [
+          {
+            id: "c", type: "crank", position: [0, 0, 0], axis: [0, 1, 0], teeth: 10, module: 1,
+            durabilityMax: 200, durabilityCurrent: 200, broken: false, rotation: 0,
+            angularVelocity: 2,
+          },
+        ],
+        remoteLinks: [],
+      };
+      for (let i = 0; i < 60; i++) {
+        const r = tick(layout, 1 / 60, timeScale, { wear: false });
+        layout = { ...layout, gears: r.gears };
+      }
+      return layout.gears[0].rotation;
+    };
+    expect(spin(1)).toBeCloseTo(2, 6); // 2 rad/s for one second
+    expect(spin(3)).toBeCloseTo(6, 6); // three times the simulated time, three times the angle
+    expect(spin(0.5)).toBeCloseTo(1, 6);
   });
 });

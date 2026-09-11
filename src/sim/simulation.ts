@@ -1,8 +1,9 @@
-import type { GearInstance, LayoutState, SimTickResult } from "./types";
+import type { GearInstance, LayoutState, SimTickResult, Vehicle } from "./types";
 import { buildEdges, classify } from "./graph";
 import { propagateRotation } from "./rotation";
 import { applyWear } from "./wear";
 import { computeMeshPhaseOffset } from "./meshing";
+import { stepMotors } from "./dynamics";
 
 function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }[]): Map<string, boolean> {
   const adjacency = new Map<string, string[]>();
@@ -45,6 +46,10 @@ function componentHasLoad(gears: GearInstance[], edges: { a: string; b: string }
  *  every test that exercises it) is unchanged for callers that want it. */
 export interface TickOptions {
   wear?: boolean;
+  /** Downward acceleration, m/s^2; defaults to Earth's. Reaches the gear train through the
+   *  rolling resistance of any vehicle, which is a fraction of that vehicle's WEIGHT -- so the
+   *  same car really does coast further on the Moon. */
+  gravity?: number;
 }
 
 export function tick(
@@ -53,8 +58,27 @@ export function tick(
   timeScale: number,
   options: TickOptions = {},
 ): SimTickResult {
-  const { gears, remoteLinks } = layout;
-  const edges = buildEdges(gears, remoteLinks);
+  const { remoteLinks } = layout;
+  const vehicles = layout.vehicles ?? [];
+  // `timeScale` is the "시간배율" slider: it multiplies how much SIMULATED time a frame is worth.
+  // Every integration below therefore advances by `step`, not by the wall-clock `dt` -- gear
+  // rotation, a rack's travel, a vehicle's distance and the motors' own spin-up alike. Until
+  // this existed the slider only reached `applyWear` (which scales internally, and so keeps
+  // taking `dt` and `timeScale` separately), which meant that with wear off -- how the app
+  // runs -- dragging it did nothing whatsoever.
+  const step = dt * timeScale;
+  const edges = buildEdges(layout.gears, remoteLinks);
+
+  // DYNAMICS FIRST, then kinematics. A motorised crank's speed is not an input at all: it is the
+  // result of the torque balance across everything it drives (`dynamics.ts`), so it has to be
+  // solved before the ratios can carry it outward. A crank with no `motor` is untouched here and
+  // stays the ideal velocity source it has always been.
+  const motorSpeeds = stepMotors(layout.gears, edges, vehicles, step, { gravity: options.gravity });
+  const gears = motorSpeeds.size === 0
+    ? layout.gears
+    : layout.gears.map((g) =>
+        motorSpeeds.has(g.id) ? { ...g, angularVelocity: motorSpeeds.get(g.id)! } : g,
+      );
   const byId = new Map(gears.map((g) => [g.id, g] as const));
 
   const diagnostics = classify(gears, edges);
@@ -120,13 +144,13 @@ export function tick(
             timeScale,
           });
     const phaseAdjustment = phaseAdjustments.get(g.id) ?? 0;
-    const rotation = broken ? g.rotation : g.rotation + phaseAdjustment + angularVelocity * dt;
+    const rotation = broken ? g.rotation : g.rotation + phaseAdjustment + angularVelocity * step;
     // A rack accumulates linear travel, clamped into its `travelLimit` if it has one -- so a
     // gate/lift that is cranked indefinitely parks at its physical stop rather than sailing
     // out of the scene. Racks with no limit keep their original unbounded behaviour.
     let linearPosition = g.linearPosition;
     if (g.type === "rack") {
-      linearPosition = (g.linearPosition ?? 0) + (linearVelocities.get(g.id) ?? 0) * dt;
+      linearPosition = (g.linearPosition ?? 0) + (linearVelocities.get(g.id) ?? 0) * step;
       if (g.travelLimit) {
         const [lo, hi] = g.travelLimit;
         linearPosition = Math.min(Math.max(linearPosition, lo), hi);
@@ -139,14 +163,40 @@ export function tick(
     // integrated `linearPosition` in lockstep, instead of drifting apart by whatever the
     // snap discarded.
     let commandedVelocity = angularVelocity;
+    let motor = g.motor;
     if (g.type === "crank" && g.reverseAt && !broken) {
       const [lo, hi] = g.reverseAt;
-      if ((rotation >= hi && commandedVelocity > 0) || (rotation <= lo && commandedVelocity < 0)) {
+      if (motor) {
+        // A MOTORISED crank reverses the way a real machine on a limit switch does: the switch
+        // throws the motor into reverse and the motor then has to fight the train's momentum to
+        // a stop before it can pull the other way. So the sign that flips is the motor's own
+        // free speed -- its commanded direction -- never the shaft's present speed, which would
+        // teleport a spinning mass straight through zero and hand back its kinetic energy for
+        // free. The overshoot while it brakes is real, and is why a vehicle's `limit` is set
+        // wider than the stroke that commands it.
+        if ((rotation >= hi && motor.freeSpeed > 0) || (rotation <= lo && motor.freeSpeed < 0)) {
+          motor = { ...motor, freeSpeed: -motor.freeSpeed };
+        }
+      } else if ((rotation >= hi && commandedVelocity > 0) || (rotation <= lo && commandedVelocity < 0)) {
         commandedVelocity = -commandedVelocity;
       }
     }
-    return { ...g, durabilityCurrent, broken, rotation, angularVelocity: commandedVelocity, linearPosition };
+    return { ...g, durabilityCurrent, broken, rotation, angularVelocity: commandedVelocity, linearPosition, motor };
   });
 
-  return { gears: updatedGears, diagnostics };
+  // A driven wheel carries its vehicle by the no-slip relation v = w * r -- the same
+  // angle-times-radius that drives a rack from its pinion or a hook from its winding drum. The
+  // wheel's speed is the one the kinematics just produced, so the vehicle can never travel at a
+  // speed its own wheels are not turning at.
+  const updatedVehicles: Vehicle[] | undefined = layout.vehicles?.map((v) => {
+    const wheelSpeed = angularVelocities.get(v.wheel) ?? 0;
+    let distance = v.distance + wheelSpeed * v.radius * step;
+    if (v.limit) {
+      const [lo, hi] = v.limit;
+      distance = Math.min(Math.max(distance, lo), hi);
+    }
+    return { ...v, distance };
+  });
+
+  return { gears: updatedGears, diagnostics, vehicles: updatedVehicles };
 }

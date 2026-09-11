@@ -1,4 +1,4 @@
-import type { LayoutState, GearInstance } from "./types";
+import type { LayoutState, GearInstance, Vehicle } from "./types";
 import type { Prop } from "../render/props";
 import { seatOnGround } from "./ground";
 import { createCarPreset, createCarProps } from "./presets/car";
@@ -35,6 +35,10 @@ function translateLayout(layout: LayoutState, d: Vec3): LayoutState {
       position: [g.position[0] + d[0], g.position[1] + d[1], g.position[2] + d[2]] as Vec3,
     })),
     remoteLinks: layout.remoteLinks,
+    // A vehicle's `distance` is travel ALONG its own direction, so shifting the machine to its
+    // cell leaves it exactly as valid as it was -- the same reason the remote links are passed
+    // through untouched.
+    vehicles: layout.vehicles,
   };
 }
 
@@ -97,6 +101,7 @@ const SHOWROOM: Array<{ layout: LayoutState; props: Prop[]; offset: Vec3 }> = [
 export function createShowroomLayout(): LayoutState {
   const gears: GearInstance[] = [];
   const remoteLinks: LayoutState["remoteLinks"] = [];
+  const vehicles: Vehicle[] = [];
   for (const { layout, props, offset } of SHOWROOM) {
     // Seat each machine on the ground BEFORE shifting it to its cell. The ground plane is
     // opaque, so anything authored below y = 0 simply disappears into it -- sixteen of the
@@ -107,8 +112,9 @@ export function createShowroomLayout(): LayoutState {
     const shifted = translateLayout(seated.layout, offset);
     gears.push(...shifted.gears);
     remoteLinks.push(...shifted.remoteLinks);
+    vehicles.push(...(shifted.vehicles ?? []));
   }
-  return { gears, remoteLinks };
+  return { gears, remoteLinks, vehicles };
 }
 
 /** The combined decorative props for every machine in the showroom, each offset to sit on

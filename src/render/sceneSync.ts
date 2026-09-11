@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { GearInstance, RemoteLink, SimDiagnostics } from "../sim/types";
+import type { GearInstance, RemoteLink, SimDiagnostics, Vehicle } from "../sim/types";
 import type { SceneContext } from "./scene";
 import { GearMeshObject } from "./gearMesh";
 import { buildLinkRibbon } from "./chainGeometry";
@@ -94,6 +94,7 @@ export function crankSliderPose(
   }
 }
 
+
 /** How many rib repeats a belt's surface texture gets along its whole run. Fixed rather than
  *  proportional to length so every belt in a scene shows ribs at a consistent visual density. */
 const BELT_RIB_REPEAT = 24;
@@ -163,6 +164,15 @@ export class SceneSync {
     slideAxis: THREE.Vector3;
     role: "rod" | "slider" | "pin";
   }> = [];
+  // Props bolted to a vehicle (see Prop.ridesOn). `posed` marks the ones whose position is
+  // already recomputed every frame by one of the passes above, so their ride offset has to be
+  // ADDED to that pose rather than applied to a rest position they no longer sit at.
+  private ridingProps: Array<{
+    mesh: THREE.Mesh;
+    vehicleId: string;
+    basePos: THREE.Vector3;
+    posed: boolean;
+  }> = [];
   private previewId: string | null = null;
 
   constructor(private ctx: SceneContext) {}
@@ -185,6 +195,7 @@ export class SceneSync {
     this.slidingProps = [];
     this.windingProps = [];
     this.linkedProps = [];
+    this.ridingProps = [];
     for (const prop of props) {
       const mesh = buildPropMesh(prop);
       this.propMeshes.push(mesh);
@@ -211,6 +222,14 @@ export class SceneSync {
           rodLength: prop.linkTo.rodLength,
           slideAxis: new THREE.Vector3(...prop.linkTo.slideAxis),
           role: prop.linkTo.role,
+        });
+      }
+      if (prop.ridesOn) {
+        this.ridingProps.push({
+          mesh,
+          vehicleId: prop.ridesOn,
+          basePos: mesh.position.clone(),
+          posed: Boolean(prop.attachTo || prop.slideWith || prop.windWith || prop.linkTo),
         });
       }
       if (prop.windWith) {
@@ -313,8 +332,37 @@ export class SceneSync {
     }
   }
 
-  sync(gears: GearInstance[], remoteLinks: RemoteLink[], diagnostics: SimDiagnostics): void {
+  /** Draws each of a vehicle's body props at the distance that vehicle has driven. Runs LAST,
+   *  after every other prop pass, because a prop can both follow a gear and ride a vehicle at
+   *  once -- a road wheel's spokes spin about their hub AND travel down the road with it -- and
+   *  the travel has to be added to the spun pose, not instead of it. Called every frame from
+   *  `sync()`. */
+  private updateRidingProps(offsets: Map<string, THREE.Vector3>): void {
+    for (const prop of this.ridingProps) {
+      const offset = offsets.get(prop.vehicleId);
+      if (!offset) continue;
+      if (prop.posed) prop.mesh.position.add(offset);
+      else prop.mesh.position.copy(prop.basePos).add(offset);
+    }
+  }
+
+  sync(
+    gears: GearInstance[],
+    remoteLinks: RemoteLink[],
+    diagnostics: SimDiagnostics,
+    vehicles: Vehicle[] = [],
+  ): void {
+    // How far each vehicle has driven, as a displacement every part of it is drawn at.
+    const rideOffsets = new Map<string, THREE.Vector3>(
+      vehicles.map((v) => [
+        v.id,
+        new THREE.Vector3(...v.direction).normalize().multiplyScalar(v.distance),
+      ]),
+    );
     const { toAdd, toRemoveIds } = computeSyncActions(new Set(this.objects.keys()), gears);
+    // Declared up here rather than beside the prop passes because the gear loop below needs it
+    // too: a rolling gear resolves its road wheel by id.
+    const byId = new Map(gears.map((g) => [g.id, g] as const));
 
     for (const id of toRemoveIds) {
       const obj = this.objects.get(id);
@@ -353,6 +401,12 @@ export class SceneSync {
       }
       const facePinionPosition = gear.type === "rack" ? findMeshPartner(gear, gears)?.position : undefined;
       obj.update(gear, facePinionPosition);
+      // A part bolted to a vehicle is DRAWN where that vehicle has driven to. The offset is a
+      // pure display transform of a number the simulation computed (`Vehicle.distance`), not a
+      // substitute for computing it: the gear's own position stays exactly where the preset put
+      // it, so every mesh distance and overlap check still means what it meant standing still.
+      const ride = gear.ridesOn ? rideOffsets.get(gear.ridesOn) : undefined;
+      if (ride) obj.mesh.position.add(ride);
       const material = obj.mesh.material as THREE.MeshStandardMaterial;
       if (this.previewId === gear.id) {
         material.emissive = PREVIEW_HIGHLIGHT.clone();
@@ -361,11 +415,11 @@ export class SceneSync {
       }
     }
 
-    const byId = new Map(gears.map((g) => [g.id, g] as const));
     this.updateAttachedProps(byId); // spin windmill sails, propeller blades, wheel spokes, etc.
     this.updateSlidingProps(byId); // slide a castle gate panel with its rack's linear travel
     this.updateWindingProps(byId); // hoist the crane's hook on its drum's rope
     this.updateLinkedProps(byId); // swing pistons/connecting rods on their cranks
+    this.updateRidingProps(rideOffsets); // carry a vehicle's body along to where it has driven
     const currentLinkKeys = new Set(remoteLinks.map(remoteLinkKey));
     for (const [key, mesh] of this.linkMeshes) {
       if (!currentLinkKeys.has(key)) {

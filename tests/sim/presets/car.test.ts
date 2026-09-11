@@ -1,8 +1,19 @@
 import { describe, it, expect } from "vitest";
-import { createCarPreset, createCarProps } from "../../../src/sim/presets/car";
+import { createCarPreset, createCarProps , ENGINE_FREE_SPEED, ENGINE_STALL_TORQUE, CAR_VEHICLE_ID, DRIVE_RANGE, TRAVEL_LIMIT } from "../../../src/sim/presets/car";
 import { evaluatePair, isOverlapping } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
+import type { LayoutState } from "../../../src/sim/types";
+
+/** Runs the real simulation for `seconds` at 60 Hz and hands back the whole layout. */
+function drive(seconds: number, options = {}): LayoutState {
+  let layout: LayoutState = createCarPreset();
+  for (let i = 0; i < Math.round(seconds * 60); i++) {
+    const r = tick(layout, 1 / 60, 1, { wear: false, ...options });
+    layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+  }
+  return layout;
+}
 
 const WHEEL_IDS = ["자동차_좌앞바퀴", "자동차_우앞바퀴", "자동차_좌뒷바퀴", "자동차_우뒷바퀴"];
 
@@ -40,7 +51,10 @@ describe("createCarPreset", () => {
     expect(engine.type).toBe("crank");
     expect(engine.axis).toEqual([0, 1, 0]);
     expect(engine.position).toEqual([10, 8, -10]);
-    expect(engine.angularVelocity).toBe(-1.0);
+    // At REST, and driven by a motor rather than a commanded speed: a motorised crank's speed
+    // is an OUTPUT of the torque balance, so the car has to pull away under its own torque.
+    expect(engine.angularVelocity).toBe(0);
+    expect(engine.motor).toEqual({ freeSpeed: ENGINE_FREE_SPEED, stallTorque: ENGINE_STALL_TORQUE });
 
     // Driveshaft is coincident with the engine (same position AND axis) so their coupling
     // forms; it's small (r4) so the hidden centre hub stays clear of the wheels' overlap
@@ -89,28 +103,23 @@ describe("createCarPreset", () => {
     expect(diagnostics.overlapPairs).toEqual([]);
   });
 
-  it("keeps all four wheels locked to the SAME speed as each other (half the engine speed via the r4->r8 driveshaft step-down), sampled across hundreds of ticks", () => {
+  it("keeps all four wheels locked to the SAME speed as each other (half the engine speed via the r4->r8 driveshaft step-down) at every instant, even while the train is still accelerating", () => {
     let layout = createCarPreset();
-    const engineSpeed = layout.gears[0].angularVelocity; // -1.0, the commanded crank input
-    const expectedWheelSpeed = engineSpeed * (4 / 8); // driveshaft r4 -> wheel r8 belt ratio = 0.5
 
     for (let i = 0; i < 300; i++) {
       const result = tick(layout, 1 / 60, 1);
-      layout = { gears: result.gears, remoteLinks: layout.remoteLinks };
+      layout = { ...layout, gears: result.gears, vehicles: result.vehicles };
 
       const engine = layout.gears.find((g) => g.id === "자동차_엔진")!;
       const wheels = WHEEL_IDS.map((id) => layout.gears.find((g) => g.id === id)!);
 
-      // The crank's own commanded speed never changes tick to tick.
-      expect(engine.angularVelocity).toBe(engineSpeed);
-
-      // Every wheel runs at the same half-engine speed, same sign, at EVERY sampled tick --
-      // belt/coupling edges use sign +1 in propagateRotation (never the -1 an ordinary tooth
-      // mesh gets), so there's no reversal, and all four are locked to each other.
+      // The kinematic constraint is exact at EVERY instant, whatever the engine's own speed is
+      // currently doing: a belt does not care that the train behind it is still speeding up.
+      // Belt and coupling edges use sign +1 in propagateRotation (never the -1 a tooth mesh
+      // gets), so there is no reversal and all four wheels stay locked to each other.
       for (const wheel of wheels) {
-        expect(wheel.angularVelocity).toBeCloseTo(expectedWheelSpeed, 9);
-        expect(wheel.angularVelocity).toBeCloseTo(wheels[0].angularVelocity, 9); // all four equal
-        expect(Math.sign(wheel.angularVelocity)).toBe(Math.sign(engineSpeed));
+        expect(wheel.angularVelocity).toBeCloseTo(engine.angularVelocity * 0.5, 9);
+        expect(wheel.angularVelocity).toBeCloseTo(wheels[0].angularVelocity, 9);
       }
 
       expect(engine.broken).toBe(false);
@@ -121,5 +130,61 @@ describe("createCarPreset", () => {
     for (const gear of layout.gears) {
       expect(Math.abs(gear.rotation)).toBeGreaterThan(0);
     }
+  });
+
+  it("actually DRIVES: the car travels exactly as far as its wheels have rolled", () => {
+    // No-slip is the whole claim. A wheel of radius r turned through theta has rolled r*theta
+    // along the ground, so the vehicle's travel is not an independent animation -- it is the
+    // wheel's own rotation, and the two can never disagree.
+    const layout = drive(1.5);
+    const wheel = layout.gears.find((g) => g.id === "자동차_좌앞바퀴")!;
+    const car = layout.vehicles![0];
+    expect(car.distance).toBeCloseTo(wheel.rotation * 8, 6);
+    expect(car.distance).toBeGreaterThan(5); // it has genuinely moved, not twitched
+  });
+
+  it("pulls away rather than starting at speed: it is still accelerating after a tenth of a second", () => {
+    const early = drive(0.1).vehicles![0].distance;
+    const later = drive(0.2).vehicles![0].distance;
+    // Travel in the second tenth of a second exceeds travel in the first -- the signature of a
+    // mass being accelerated, which a constant-speed animation could never produce.
+    expect(later - early).toBeGreaterThan(early);
+  });
+
+  it("never moves a single gear: the mechanism keeps the geometry that makes it mesh", () => {
+    // A driving car that displaced its own gears would drift out of mesh, and could collide
+    // with a neighbouring machine's diagnostics. Travel belongs to the vehicle, not the parts.
+    const fresh = createCarPreset();
+    const driven = drive(3);
+    expect(driven.vehicles![0].distance).not.toBe(0);
+    for (let i = 0; i < fresh.gears.length; i++) {
+      expect(driven.gears[i].position).toEqual(fresh.gears[i].position);
+    }
+  });
+
+  it("drives out, brakes against its own momentum, and comes back -- staying inside its patch of ground", () => {
+    let layout: LayoutState = createCarPreset();
+    let furthest = 0;
+    let nearest = 0;
+    let reversed = false;
+    for (let i = 0; i < 60 * 30; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+      const d = layout.vehicles![0].distance;
+      furthest = Math.max(furthest, d);
+      nearest = Math.min(nearest, d);
+      if (d < furthest - 1) reversed = true;
+      // The hard limit is never breached, whichever way it happens to be going.
+      expect(Math.abs(d)).toBeLessThanOrEqual(TRAVEL_LIMIT + 1e-9);
+    }
+    expect(furthest).toBeGreaterThan(DRIVE_RANGE * 0.9); // it really did make the trip out
+    expect(reversed).toBe(true); // and really did come back
+    expect(nearest).toBeLessThan(0); // overshooting past the start while braking is real momentum
+  });
+
+  it("carries its body with it: every chassis prop rides the car", () => {
+    const props = createCarProps();
+    expect(props.length).toBeGreaterThan(0);
+    for (const prop of props) expect(prop.ridesOn).toBe(CAR_VEHICLE_ID);
   });
 });

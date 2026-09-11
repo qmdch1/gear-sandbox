@@ -116,6 +116,8 @@ export function seatOnGround(
         position: [g.position[0], g.position[1] + lift, g.position[2]] as Vec3,
       })),
       remoteLinks: layout.remoteLinks,
+      // Lifting is a translation, so a vehicle's travel along the ground is untouched by it.
+      vehicles: layout.vehicles,
     },
     props: props.map((p) => ({
       ...p,

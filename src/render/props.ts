@@ -39,6 +39,10 @@ interface PropCommon {
    *  like everything else in this sandbox: it says where the hook goes, never how much it
    *  could lift. `travel` bounds it, so the hook stops at the headblock instead of climbing
    *  through the gantry forever. */
+  /** Id of the `Vehicle` this prop is part of: a car's chassis, shell and cabin. Drawn
+   *  displaced by how far that vehicle has driven, on top of whatever `attachTo`/`windWith`
+   *  pose the prop already has -- a wheel's spokes both spin AND travel. */
+  ridesOn?: string;
   windWith?: {
     gear: string; // the winch drum
     radius: number; // effective radius the rope spools at, in world units

@@ -42,6 +42,59 @@ const WHEEL_Y = 8; // wheel-hub height above the ground plane -- roughly the whe
 const TRACK_X = 20; // left-right wheel separation (the axle width).
 const WHEELBASE_Z = 20; // front-rear wheel separation.
 
+/** Rolling radius of a road wheel: pitchRadius(16 teeth, module 1) = 8, which is also WHEEL_Y --
+ *  the wheels stand exactly one radius up, so the tread meets the ground. At this sandbox's
+ *  scale (`units.ts`: one world unit is a centimetre) that is an 8 cm wheel. */
+export const ROAD_WHEEL_R = 8;
+
+/** The road wheel whose rotation carries the car. Any of the four would do -- the belt tree locks
+ *  all four to one speed -- so the front-left is named once here rather than picked twice. */
+export const ROAD_WHEEL_ID = "자동차_좌앞바퀴";
+
+/** The car's id as a `Vehicle`, so the props that make up its body can say they ride on it. */
+export const CAR_VEHICLE_ID = "자동차";
+
+/** Mass of the whole car, kg: a hefty desk-sized die-cast model, which at 20 x 26 x 15 cm is
+ *  about right. This is not decoration -- `dynamics.ts` reflects it into the engine as
+ *  `mass * wheelRadius^2`, where it is roughly SIX TIMES the four wheels' own inertia put
+ *  together. Which is the point: the engine spends nearly all its effort accelerating the car,
+ *  exactly as a real one does, so the car pulls away rather than snapping to speed. */
+export const CAR_MASS = 2;
+
+/** Engine, as a torque-speed curve rather than a commanded speed.
+ *
+ *  A small geared motor: 0.08 N*m held at stall, running free at 6 rad/s (~57 rpm). POSITIVE,
+ *  and that sign is not a preference -- it is the right-hand rule. The wheels turn about +X, and
+ *  a wheel of radius R spinning at +w about +X has contact-point velocity w x r = -wR along Z,
+ *  so a positively-turning wheel rolls the car toward -Z, which is the way the body faces (the
+ *  cabin sits back at -Z). Driving it the other way would make the car reverse down the yard
+ *  nose-last. What comes out of the torque balance with the
+ *  numbers above, and is asserted in tests rather than tuned by eye: the train's time constant
+ *  J/D is about 0.37 s, so the car takes roughly a second to get going, and rolling resistance
+ *  holds its steady speed to about 4.6 rad/s at the engine -- a quarter below the free speed.
+ *  A machine that runs slower under load than it does unloaded is the whole reason for modelling
+ *  a motor curve instead of a fixed speed. */
+export const ENGINE_FREE_SPEED = 6;
+export const ENGINE_STALL_TORQUE = 0.08;
+
+/** How far the car is COMMANDED to drive before the limit switch throws the motor into reverse.
+ *  Comfortably inside its 150-unit showroom cell, so a driving car never visits a neighbour. */
+export const DRIVE_RANGE = 40;
+
+/** The hard end of the car's patch of ground. Wider than DRIVE_RANGE because reversing a real
+ *  machine is not instant: the motor has to brake two kilograms of car against its own momentum,
+ *  and it coasts several more centimetres while doing so. Reaching this is a kerb -- travel
+ *  stops, the wheels keep turning. */
+export const TRAVEL_LIMIT = 52;
+
+/** The engine rotation that corresponds to DRIVE_RANGE of travel.
+ *
+ *  The driveshaft (r4) belts down to the wheels (r8), so wheelRotation = engineRotation / 2, and
+ *  a wheel of radius 8 rolls 8 units per radian: distance = engineRotation * 4. Derived from the
+ *  ratio rather than measured off a run, so changing the belt or the wheel size cannot silently
+ *  leave the car turning round in the wrong place. */
+export const ENGINE_STROKE: [number, number] = [0, DRIVE_RANGE / (ROAD_WHEEL_R / 2)];
+
 /** A recognizable 4-wheel CAR: four wheels standing vertically at the corners of a
  *  rectangular wheelbase, wrapped in a decorative chassis frame + body (see
  *  `createCarProps`), all four wheels belt-synchronized off one engine crank.
@@ -121,13 +174,22 @@ export function createCarPreset(): LayoutState {
     // not out past a wheel like the old front-left-coincident engine did). The small engine
     // crank turns a wheel-sized driveshaft pulley (coincident 1:1 coupling), which belts out
     // to the wheels -- so the crank handle no longer sticks out beside the front-left wheel.
-    seedGear("자동차_엔진", "crank", [midX, WHEEL_Y, midZ], [0, 1, 0], 8, 1, -1.0),
+    // Seeded at REST. A motorised crank's speed is an output of the torque balance, not an
+    // input, so the car starts stopped and pulls away under its own torque.
+    seedGear("자동차_엔진", "crank", [midX, WHEEL_Y, midZ], [0, 1, 0], 8, 1, 0),
     seedGear("자동차_구동축", "pulley", [midX, WHEEL_Y, midZ], [0, 1, 0], 8, 1), // driveshaft, small (r4) so it stays clear of the wheels' overlap radius at the car centre
     seedGear("자동차_좌앞바퀴", "pulley", [0, WHEEL_Y, 0], [1, 0, 0], 16, 1),
     seedGear("자동차_우앞바퀴", "pulley", [TRACK_X, WHEEL_Y, 0], [1, 0, 0], 16, 1),
     seedGear("자동차_좌뒷바퀴", "pulley", [0, WHEEL_Y, -WHEELBASE_Z], [1, 0, 0], 16, 1),
     seedGear("자동차_우뒷바퀴", "pulley", [TRACK_X, WHEEL_Y, -WHEELBASE_Z], [1, 0, 0], 16, 1),
   ];
+
+  // The car DRIVES, for real: the engine is a motor with a torque curve, the car is a Vehicle
+  // with mass, and `tick` integrates how far its wheels have rolled it. Nothing here displaces a
+  // gear -- the parts keep the fixed geometry that makes them mesh, and the assembly as a whole
+  // is carried by `Vehicle.distance`.
+  gears[0].motor = { freeSpeed: ENGINE_FREE_SPEED, stallTorque: ENGINE_STALL_TORQUE };
+  gears[0].reverseAt = ENGINE_STROKE; // a limit switch: drive out, brake, drive back
 
   return {
     gears,
@@ -141,6 +203,17 @@ export function createCarPreset(): LayoutState {
       { a: "자동차_좌앞바퀴", b: "자동차_우앞바퀴", kind: "belt" }, // front axle
       { a: "자동차_좌앞바퀴", b: "자동차_좌뒷바퀴", kind: "belt" }, // left side
       { a: "자동차_좌뒷바퀴", b: "자동차_우뒷바퀴", kind: "belt" }, // rear axle
+    ],
+    vehicles: [
+      {
+        id: CAR_VEHICLE_ID,
+        wheel: ROAD_WHEEL_ID,
+        radius: ROAD_WHEEL_R,
+        mass: CAR_MASS,
+        direction: [0, 0, -1],
+        distance: 0,
+        limit: [-TRAVEL_LIMIT, TRAVEL_LIMIT],
+      },
     ],
   };
 }
@@ -174,17 +247,17 @@ export function createCarProps(): Prop[] {
   );
 
   return [
-    ...spokes,
+    ...spokes.map((p) => ({ ...p, ridesOn: CAR_VEHICLE_ID })),
     // Axle rods running left<->right through each wheel pair (cylinders default to the Y
     // axis, so rotate 90° about Z to lay them along X).
-    { kind: "cylinder", position: [midX, WHEEL_Y, 0], radius: 0.7, height: TRACK_X + 2, color: rod, texture: "metal", rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
-    { kind: "cylinder", position: [midX, WHEEL_Y, -WHEELBASE_Z], radius: 0.7, height: TRACK_X + 2, color: rod, texture: "metal", rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35 },
+    { kind: "cylinder", position: [midX, WHEEL_Y, 0], radius: 0.7, height: TRACK_X + 2, color: rod, texture: "metal", rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35, ridesOn: CAR_VEHICLE_ID },
+    { kind: "cylinder", position: [midX, WHEEL_Y, -WHEELBASE_Z], radius: 0.7, height: TRACK_X + 2, color: rod, texture: "metal", rotation: [0, 0, Math.PI / 2], metalness: 0.7, roughness: 0.35, ridesOn: CAR_VEHICLE_ID },
     // Side rails running front<->rear, linking the axle ends into a chassis rectangle.
-    { kind: "box", position: [0, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame, texture: "metal" },
-    { kind: "box", position: [TRACK_X, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame, texture: "metal" },
+    { kind: "box", position: [0, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame, texture: "metal", ridesOn: CAR_VEHICLE_ID },
+    { kind: "box", position: [TRACK_X, WHEEL_Y, midZ], size: [1.3, 1.3, WHEELBASE_Z + 3], color: frame, texture: "metal", ridesOn: CAR_VEHICLE_ID },
     // Lower body shell sitting above the axles.
-    { kind: "box", position: [midX, WHEEL_Y + 5, midZ], size: [TRACK_X - 3, 5, WHEELBASE_Z + 6], color: body, texture: "metal", metalness: 0.55, roughness: 0.35 },
+    { kind: "box", position: [midX, WHEEL_Y + 5, midZ], size: [TRACK_X - 3, 5, WHEELBASE_Z + 6], color: body, texture: "metal", metalness: 0.55, roughness: 0.35, ridesOn: CAR_VEHICLE_ID },
     // Cabin / greenhouse, set back toward the rear and narrower.
-    { kind: "box", position: [midX, WHEEL_Y + 9.5, midZ - 3], size: [TRACK_X - 7, 4.5, WHEELBASE_Z - 4], color: cabin, texture: "metal", metalness: 0.55, roughness: 0.35 },
+    { kind: "box", position: [midX, WHEEL_Y + 9.5, midZ - 3], size: [TRACK_X - 7, 4.5, WHEELBASE_Z - 4], color: cabin, texture: "metal", metalness: 0.55, roughness: 0.35, ridesOn: CAR_VEHICLE_ID },
   ];
 }

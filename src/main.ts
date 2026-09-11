@@ -1,8 +1,9 @@
-import type { GearInstance, GearType, RemoteLink } from "./sim/types";
+import type { GearInstance, GearType, RemoteLink, Vehicle } from "./sim/types";
 import { wouldDuplicateLink } from "./sim/remoteLinks";
 import { createGear } from "./sim/gearFactory";
 import { createShowroomLayout, createShowroomProps } from "./sim/showroom";
 import { removeGear } from "./sim/removeGear";
+import { EARTH_GRAVITY } from "./sim/units";
 import { tick } from "./sim/simulation";
 import { createScene, resizeToContainer } from "./render/scene";
 import { SceneSync } from "./render/sceneSync";
@@ -66,6 +67,13 @@ const durabilityPanel = new DurabilityPanel(
 
 let gears: GearInstance[] = [];
 let remoteLinks: RemoteLink[] = [];
+// Vehicles carried by the layout's wheels (see sim/types.ts). Simulation state, advanced by
+// `tick` from how far their wheels have actually rolled.
+let vehicles: Vehicle[] = [];
+/** Downward acceleration, m/s^2. Earth by default; the gravity control can move the whole yard
+ *  to the Moon, where a car's rolling resistance is a sixth of what it was and every dropped
+ *  part takes six times as long to land. */
+let gravity: number = EARTH_GRAVITY;
 // Decorative props for the initial scene -- the showroom seeds a set (car chassis, plane
 // fuselage, ...); a loaded/saved layout has none until the user picks a preset again.
 let defaultProps: import("./render/props").Prop[] = [];
@@ -108,6 +116,7 @@ try {
     const seeded = createShowroomLayout();
     gears = seeded.gears;
     remoteLinks = seeded.remoteLinks;
+    vehicles = seeded.vehicles ?? [];
     defaultProps = createShowroomProps();
   }
 } catch (err) {
@@ -340,6 +349,7 @@ new PresetPanel(document.querySelector("#presets")!, (rawLayout, rawProps) => {
   const { layout, props } = seatOnGround(rawLayout, rawProps);
   gears = layout.gears;
   remoteLinks = layout.remoteLinks;
+  vehicles = layout.vehicles ?? [];
   // Unlike `load`/`importFile`/`applyLoadedLayout` above (all of which restore a layout
   // that was already persisted somewhere -- localStorage, a file, the server -- and so
   // correctly become the new "saved" baseline), a preset is freshly BUILT in memory by
@@ -491,9 +501,10 @@ function animate(): void {
   const keepGoing = frameRunner.runFrame(() => {
     // Wear off: see TickOptions. Durability is a mechanic, not part of the mechanism, and with
     // it on the machines destroy themselves and stop for good.
-    const result = tick({ gears, remoteLinks }, dt, timeScale, { wear: false });
+    const result = tick({ gears, remoteLinks, vehicles }, dt, timeScale, { wear: false, gravity });
     gears = result.gears;
-    sceneSync.sync(gears, remoteLinks, result.diagnostics);
+    vehicles = result.vehicles ?? [];
+    sceneSync.sync(gears, remoteLinks, result.diagnostics, vehicles);
     diagnosticsPanel.render(result.diagnostics, gears);
     // Only nudges two AudioParams, and is a no-op until the user turns sound on.
     audioEngine.update(gears);
