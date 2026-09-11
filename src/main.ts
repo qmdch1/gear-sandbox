@@ -21,6 +21,7 @@ import { createFrameRunner } from "./runtime/frameSafety";
 import { createDirtyTracker } from "./runtime/dirtyTracker";
 import { repairGear, countNeedingRepair } from "./sim/repair";
 import { seatOnGround } from "./sim/ground";
+import { AudioEngine } from "./audio/audioEngine";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -33,6 +34,7 @@ app.innerHTML = `
     <div id="view-controls">
       <button id="fit-all-view">전체 보기 (카메라 리셋)</button>
       <button id="repair-all" title="닳거나 부서진 기어를 모두 처음 상태로 되돌립니다.">전체 수리 (내구도 회복)</button>
+      <button id="sound-toggle" title="기계 소리를 켜고 끕니다." aria-pressed="false">소리 켜기</button>
     </div>
     <div id="save-load"></div>
     <div id="server-sync"></div>
@@ -227,6 +229,25 @@ function resetTransientUiState(): void {
 document
   .querySelector<HTMLButtonElement>("#fit-all-view")!
   .addEventListener("click", () => sceneSync.fitAll(gears));
+
+// Machine sound. Everything is synthesised at runtime (see audio/audioEngine.ts) -- no audio
+// files, the same way this repo has no image files. Browsers refuse to start audio outside a user
+// gesture, so the context is only created when this button is clicked; before that the engine is
+// a no-op and the app runs silently.
+const audioEngine = new AudioEngine();
+const soundButton = document.querySelector<HTMLButtonElement>("#sound-toggle")!;
+if (!AudioEngine.supported) {
+  soundButton.disabled = true;
+  soundButton.textContent = "소리 (사용 불가)";
+  soundButton.title = "이 브라우저에서는 오디오를 쓸 수 없습니다.";
+} else {
+  soundButton.addEventListener("click", async () => {
+    await audioEngine.resume();
+    audioEngine.setMuted(!audioEngine.isMuted);
+    soundButton.textContent = audioEngine.isMuted ? "소리 켜기" : "소리 끄기";
+    soundButton.setAttribute("aria-pressed", String(!audioEngine.isMuted));
+  });
+}
 
 /** Restores one gear to factory condition. Mutates in place rather than swapping the array,
  *  because `gears` is the single live layout every other handler here closes over. */
@@ -474,6 +495,8 @@ function animate(): void {
     gears = result.gears;
     sceneSync.sync(gears, remoteLinks, result.diagnostics);
     diagnosticsPanel.render(result.diagnostics, gears);
+    // Only nudges two AudioParams, and is a no-op until the user turns sound on.
+    audioEngine.update(gears);
 
     ctx.controls.update();
     ctx.renderer.render(ctx.scene, ctx.camera);
