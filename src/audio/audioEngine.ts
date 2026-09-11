@@ -107,6 +107,39 @@ export class AudioEngine {
     osc.stop(t + 0.16);
   }
 
+  /** The thud of a dropped part landing. `speed` is its approach speed in world units per
+   *  second, straight out of the physics: loudness and brightness both follow it, so a part
+   *  dropped from three metres lands hard and its third bounce is a tick. Above the reference
+   *  speed the level stops climbing, because a part dropped from the ceiling should not be
+   *  louder than the rest of the app put together. */
+  impact(speed: number): void {
+    if (!this.ctx || !this.started || this.muted) return;
+    const t = this.ctx.currentTime;
+    const strength = Math.min(1, speed / 400); // 400 units/s ~ an 80 cm drop on Earth
+    if (strength < 0.05) return;
+    // A short burst of noise through a lowpass: the same synthesis as the tooth clatter, but
+    // enveloped as a single hit rather than looped.
+    const frames = Math.floor(this.ctx.sampleRate * 0.18);
+    const buffer = this.ctx.createBuffer(1, frames, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    let seed = 7919;
+    for (let i = 0; i < frames; i++) {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      // Decaying envelope baked into the buffer, so the hit needs no extra automation.
+      data[i] = ((seed / 0xffffffff) * 2 - 1) * (1 - i / frames) ** 3;
+    }
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = "lowpass";
+    // A harder landing rings brighter; a soft one is a dull knock.
+    filter.frequency.value = 300 + strength * 2200;
+    const gain = this.ctx.createGain();
+    gain.gain.value = 0.35 * strength;
+    source.connect(filter).connect(gain).connect(this.master!);
+    source.start(t);
+  }
+
   /** Builds the permanent voices once. The whirr and the clatter run forever and are shaped
    *  purely by gain, which is far cheaper than starting and stopping nodes as machines come and
    *  go -- and avoids the click that stopping a live oscillator produces. */

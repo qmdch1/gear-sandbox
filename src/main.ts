@@ -23,6 +23,10 @@ import { createDirtyTracker } from "./runtime/dirtyTracker";
 import { repairGear, countNeedingRepair } from "./sim/repair";
 import { seatOnGround } from "./sim/ground";
 import { AudioEngine } from "./audio/audioEngine";
+import { FallingBodiesView } from "./render/fallingBodies";
+import { stepBody, type FallingBody } from "./sim/gravity";
+import { makeDroppedPart, DROP_HEIGHT } from "./sim/parts";
+import { GravityControl } from "./ui/gravityControl";
 
 const app = document.querySelector<HTMLDivElement>("#app")!;
 app.innerHTML = `
@@ -36,11 +40,14 @@ app.innerHTML = `
       <button id="fit-all-view">전체 보기 (카메라 리셋)</button>
       <button id="repair-all" title="닳거나 부서진 기어를 모두 처음 상태로 되돌립니다.">전체 수리 (내구도 회복)</button>
       <button id="sound-toggle" title="기계 소리를 켜고 끕니다." aria-pressed="false">소리 켜기</button>
+      <button id="drop-part" title="부품을 3 m 상공에서 떨어뜨립니다. 중력에 따라 낙하하고, 재질에 따라 튀어오릅니다.">부품 떨어뜨리기</button>
+      <button id="clear-parts" title="떨어뜨린 부품을 모두 치웁니다.">떨어진 부품 치우기</button>
     </div>
     <div id="save-load"></div>
     <div id="server-sync"></div>
     <label>예제 모형 (완성된 기계 예시) <div id="presets"></div></label>
     <label>시간배율 <div id="time-scale"></div></label>
+    <label>중력 <div id="gravity"></div></label>
     <div id="diagnostics"></div>
     <div id="durability-panel" hidden></div>
   </div>
@@ -51,6 +58,7 @@ app.innerHTML = `
 const canvas = document.querySelector<HTMLCanvasElement>("#scene-canvas")!;
 const ctx = createScene(canvas);
 const sceneSync = new SceneSync(ctx);
+const fallingBodiesView = new FallingBodiesView(ctx.scene);
 const diagnosticsPanel = new DiagnosticsPanel(document.querySelector("#diagnostics")!, (id) => sceneSync.focusOn(id));
 const durabilityPanel = new DurabilityPanel(
   document.querySelector("#durability-panel")!,
@@ -74,6 +82,11 @@ let vehicles: Vehicle[] = [];
  *  to the Moon, where a car's rolling resistance is a sixth of what it was and every dropped
  *  part takes six times as long to land. */
 let gravity: number = EARTH_GRAVITY;
+/** Loose parts falling and bouncing around the yard. Simulation state, stepped every frame by
+ *  `sim/gravity.ts`; entirely separate from the gear layout, which is exactly what they are --
+ *  nothing here meshes, drives or is saved with a machine. */
+let parts: FallingBody[] = [];
+let partsDropped = 0;
 // Decorative props for the initial scene -- the showroom seeds a set (car chassis, plane
 // fuselage, ...); a loaded/saved layout has none until the user picks a preset again.
 let defaultProps: import("./render/props").Prop[] = [];
@@ -290,6 +303,25 @@ document.querySelector<HTMLButtonElement>("#repair-all")!.addEventListener("clic
 });
 
 new TimeScaleSlider(document.querySelector("#time-scale")!, (value) => (timeScale = value), timeScale);
+new GravityControl(document.querySelector("#gravity")!, (value) => (gravity = value));
+
+// Parts are dropped over whatever the camera is looking at, so one lands where the user is
+// actually watching rather than at a fixed spot they may have panned away from. The small
+// spread stops a run of drops stacking into one tower.
+document.querySelector("#drop-part")!.addEventListener("click", () => {
+  const target = ctx.controls.target;
+  parts = [
+    ...parts,
+    makeDroppedPart(partsDropped++, [
+      target.x + (Math.random() - 0.5) * 40,
+      DROP_HEIGHT,
+      target.z + (Math.random() - 0.5) * 40,
+    ]),
+  ];
+});
+document.querySelector("#clear-parts")!.addEventListener("click", () => {
+  parts = [];
+});
 
 new SaveLoadPanel(document.querySelector("#save-load")!, {
   save: () => {
@@ -505,6 +537,16 @@ function animate(): void {
     gears = result.gears;
     vehicles = result.vehicles ?? [];
     sceneSync.sync(gears, remoteLinks, result.diagnostics, vehicles);
+
+    // Loose parts fall under the same gravity the machines feel. A part that was in the air and
+    // is now resting has just landed, and the speed it was carrying at that moment is what the
+    // thud is made from -- so the sound is the physics, not a fixed sample.
+    parts = parts.map((part) => {
+      const stepped = stepBody(part, dt * timeScale, { gravity });
+      if (!part.resting && stepped.resting) audioEngine.impact(Math.abs(part.velocity[1]));
+      return stepped;
+    });
+    fallingBodiesView.sync(parts);
     diagnosticsPanel.render(result.diagnostics, gears);
     // Only nudges two AudioParams, and is a no-op until the user turns sound on.
     audioEngine.update(gears);
