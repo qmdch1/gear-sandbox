@@ -6,7 +6,7 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
  *  truth because two other places reason about it: `showroom.ts` lays machines out inside it,
  *  and `chainGeometry.ts` derives its worst-case chain length from the plane's diagonal. Those
  *  used to hardcode 500 in prose, which is exactly how such a number drifts out of date. */
-export const GROUND_SIZE = 600;
+export const GROUND_SIZE = 800;
 
 export interface SceneContext {
   scene: THREE.Scene;
@@ -74,10 +74,10 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   // Far enough out to frame the WHOLE showroom yard. `SceneSync.fitAll` clamps the distance
   // it computes to this ceiling, so a ceiling below what the scene needs silently crops the
   // view instead of failing loudly: with nine machines the yard's bounding half-diagonal is
-  // roughly 285 units, and at the camera's 50-degree fov that needs 285 / sin(25 deg) ~= 674
-  // units of standoff -- more than twice the old 300 ceiling, which is exactly why the
-  // expanded yard would not fit on screen. 1200 clears that with room for the scene to grow.
-  controls.maxDistance = 1200;
+  // roughly 450 units, and at the camera's 50-degree fov that needs 450 / sin(25 deg) ~= 1065
+  // units of standoff -- three and a half times the original 300 ceiling, which is exactly why
+  // the expanding yard kept not fitting on screen. 1500 clears that with room to grow again.
+  controls.maxDistance = 1500;
 
   // Ambient is kept low -- it's just a floor so nothing goes pure black -- with most of
   // the shading coming from the directional lights below, so tooth flanks and gear-face

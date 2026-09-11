@@ -20,9 +20,9 @@ const CHAIN_MIN_LINKS = 3;
  *  precisely click-to-place (`placementControls.ts`) on any point of the actual bound:
  *  the `groundPlane` (`scene.ts`, GROUND_SIZE on a side) itself, whose raycast hits can't
  *  fall outside its own finite mesh. Worst case is therefore the plane's diagonal,
- *  GROUND_SIZE * sqrt(2) -- at today's 600, about 849 units. At the chain width
+ *  GROUND_SIZE * sqrt(2) -- at today's 800, about 1131 units. At the chain width
  *  `sceneSync.ts` hardcodes (0.15), that is an uncapped
- *  round(849 / (0.15 * CHAIN_LINK_PITCH_FACTOR)) = 1885 links -- 1885 * 36 = 67,860
+ *  round(1131 / (0.15 * CHAIN_LINK_PITCH_FACTOR)) = 2514 links -- 2514 * 36 = 90,504
  *  vertices for a single ribbon mesh, and reachable through ordinary UI interaction rather
  *  than only in theory. (The plane was 500 a side when this cap was first derived, giving
  *  1571 links; the yard has since grown and may grow again, which is precisely why the cap,

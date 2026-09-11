@@ -11,7 +11,7 @@ here in the same change — a doc other agents trust is worse than no doc when i
 ## What this is
 
 A browser gear-simulation sandbox: place gears, mesh them, link them with belts and chains,
-watch the train turn. Ships 22 fully-modelled example machines ("presets") — a locomotive, a
+watch the train turn. Ships 23 fully-modelled example machines ("presets") — a locomotive, a
 factory line shaft, a clock tower, a music box, a tower crane, and so on.
 
 Stack: TypeScript + Vite + THREE.js on the client, a small Express + better-sqlite3 server for
@@ -20,7 +20,7 @@ saved layouts. Tests are Vitest. There is no framework — plain modules.
 ```
 src/main.ts       entry point: builds the DOM, seeds the showroom, owns the frame loop
 src/sim/          simulation core: types, meshing, graph, rotation, wear, repair, simulation
-src/sim/presets/  one module per example machine (24 files: 22 presets + index + wheels helper)
+src/sim/presets/  one module per example machine (25 files: 23 presets + index + wheels helper)
 src/render/       THREE.js: scene, gear geometry, props, procedural textures, chain/belt ribbons
 src/ui/           DOM panels (palette, diagnostics, durability, save/load, presets)
 src/interaction/  placement + drag controls
@@ -48,7 +48,7 @@ caught and written, but the habit is what causes it.
 ## Verifying a change
 
 ```bash
-npx vitest run          # full suite (796 tests in 68 files); `npm test` is the same thing
+npx vitest run          # full suite (810 tests in 69 files); `npm test` is the same thing
 npx tsc --noEmit        # types — vitest does NOT type-check, so this catches real bugs it misses
 npx vite build          # production build
 ```
@@ -239,14 +239,13 @@ The test should verify gear list and positions, real edges via the real `evaluat
 
 ## Showroom
 
-`src/sim/showroom.ts` places 16 machines on a 4×4 grid (130 × 120 pitch) as the default first
+`src/sim/showroom.ts` places 20 machines on a 5×4 grid (150 × 135 pitch) as the default first
 view. Placement is derived from each preset's **measured** extent, not eyeballed — the factory
-spans 114 units of X and the locomotive 103 of Z, and those set the pitch. Two machines' gears
+spans 126 units of X and the factory 114, and the locomotive 103 of Z; those set the pitch. Two machines' gears
 must also clear the overlap floor even though they are unrelated.
 
-Four presets stay out of the yard: the clock movement and music box (tabletop pieces that read as
-scale nonsense beside a locomotive), plus the gearbox and planetary hoist (added later and never
-wired in). All four remain available from the preset panel.
+Two presets stay out of the yard: the clock movement and the music box, both tabletop pieces that
+read as scale nonsense beside a locomotive. Both remain available from the preset panel.
 
 `SceneSync.fitAll` clamps its computed camera distance to `controls.maxDistance`, so a ceiling
 below what the scene needs crops the view **silently**. There is a test that recomputes the

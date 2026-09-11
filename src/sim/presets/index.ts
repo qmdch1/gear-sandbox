@@ -22,6 +22,7 @@ import { createGearboxPreset, createGearboxProps } from "./gearbox";
 import { createPlanetaryHoistPreset, createPlanetaryHoistProps } from "./planetaryhoist";
 import { createDifferentialAxlePreset, createDifferentialAxleProps } from "./differentialaxle";
 import { createWormTablePreset, createWormTableProps } from "./wormtable";
+import { createCapstanPreset, createCapstanProps } from "./capstan";
 
 export { createClockPreset, createClockProps } from "./clock";
 export { createCarPreset, createCarProps } from "./car";
@@ -45,6 +46,7 @@ export { createGearboxPreset, createGearboxProps } from "./gearbox";
 export { createPlanetaryHoistPreset, createPlanetaryHoistProps } from "./planetaryhoist";
 export { createDifferentialAxlePreset, createDifferentialAxleProps } from "./differentialaxle";
 export { createWormTablePreset, createWormTableProps } from "./wormtable";
+export { createCapstanPreset, createCapstanProps } from "./capstan";
 
 export interface PresetEntry {
   id: string;
@@ -194,5 +196,11 @@ export const PRESETS: PresetEntry[] = [
     label: "웜기어 회전탁자 (웜이 웜휠을 20:1로 감속 — 웜은 휠을 돌리지만 휠은 웜을 못 돌린다)",
     build: createWormTablePreset,
     buildProps: createWormTableProps,
+  },
+  {
+    id: "capstan",
+    label: "캡스턴 (래칫이 역회전을 막는 양묘기 — 손잡이는 돌리지만 닻은 되감기지 않는다)",
+    build: createCapstanPreset,
+    buildProps: createCapstanProps,
   },
 ];

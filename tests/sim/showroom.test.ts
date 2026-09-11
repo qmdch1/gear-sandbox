@@ -5,7 +5,7 @@ import { buildEdges, classify } from "../../src/sim/graph";
 import { tick } from "../../src/sim/simulation";
 
 describe("createShowroomLayout", () => {
-  it("combines all sixteen finished machines with unique ids across every preset", () => {
+  it("combines all twenty finished machines with unique ids across every preset", () => {
     const layout = createShowroomLayout();
     const ids = layout.gears.map((g) => g.id);
     expect(new Set(ids).size).toBe(ids.length); // no id collisions across presets
@@ -24,6 +24,10 @@ describe("createShowroomLayout", () => {
       "컨베이어_모터",
       "시계탑_구동륜",
       "두레우물_손잡이",
+      "변속기_입력스플라인1",
+      "유성감속기_모터",
+      "차동축_구동피니언",
+      "웜기어_회전탁자_모터",
     ]) {
       expect(ids).toContain(id);
     }
@@ -57,6 +61,9 @@ describe("createShowroomLayout", () => {
       "회전목마_큰기어",
       "컨베이어_테일풀리",
       "시계탑_시침휠",
+      "차동축_차동장치",
+      "웜기어_회전탁자_웜휠",
+      "유성감속기_권상드럼",
     ]) {
       const g = layout.gears.find((x) => x.id === id)!;
       expect(Math.abs(g.rotation)).toBeGreaterThan(0);
@@ -65,7 +72,7 @@ describe("createShowroomLayout", () => {
 
   it("supplies combined decorative props for every machine in the yard", () => {
     const props = createShowroomProps();
-    // Each machine contributes its own body; sixteen of them make a substantial yard. A floor
+    // Each machine contributes its own body; twenty of them make a substantial yard. A floor
     // rather than an exact count, so adding detail to any one machine cannot fail this
     // spuriously -- what it guards is that no machine silently contributes nothing.
     expect(props.length).toBeGreaterThan(600);
@@ -111,7 +118,7 @@ describe("showroom framing", () => {
     // is exactly what happened when the yard grew from four machines to nine. Recomputing the
     // requirement here means a future machine that pushes the yard past the ceiling breaks a
     // test instead of quietly hiding half the scene.
-    const MAX_DISTANCE = 1200; // scene.ts
+    const MAX_DISTANCE = 1500; // scene.ts
     const FOV_DEG = 50; // scene.ts
 
     const pts: Array<[number, number, number]> = [

@@ -8,10 +8,11 @@ Keep it short. When something here stops being true, edit it rather than appendi
 
 ## Done
 
-**22 presets**, each a complete machine with its own tests: clock, car, castle gate, hoist,
+**23 presets**, each a complete machine with its own tests: clock, car, castle gate, hoist,
 airplane, windmill, bicycle, locomotive, piston engine, factory line shaft, watermill, ferris
 wheel, carousel, well pump, conveyor, tower crane, music box, clock tower, gearbox, planetary
-hoist, differential axle, worm rotary table. Sixteen stand in the default showroom yard.
+hoist, differential axle, worm rotary table, capstan. Twenty stand in the default showroom yard
+(5x4); the clock movement and music box stay out as tabletop pieces.
 
 **All twelve gear types are now exercised by a real machine.** `differential` and `worm` were the
 last holdouts; a test asserts this stays true, because a type no preset uses is a type whose
@@ -36,8 +37,7 @@ turned back on.
 
 ## Deliberately not done
 
-- **Gearbox, planetary hoist, differential axle and worm table are registered but not in the
-  showroom yard.** They work and are
+- **The clock movement and music box stay out of the yard on purpose.** They work and are
   reachable from the preset panel; they simply have not been placed on the grid. Placing them
   means measuring their extents and checking the cross-machine overlap floor, as `showroom.ts`
   documents.
@@ -59,10 +59,10 @@ turned back on.
 
 ## If you are looking for something to do
 
-1. Place the four unplaced presets in the yard (measure their extents, check the cross-machine
-   overlap floor, and mind that the grid is already 4x4).
-2. Interlock a *new* preset rather than the yard: one power source, many stations, is what
+1. Interlock a *new* preset rather than the yard: one power source, many stations, is what
    `factory.ts` already demonstrates and could be pushed much further.
-3. The `ratchet` type is used but its one-way behaviour is only incidental; a machine built
-   *around* a ratchet (a capstan that cannot run back) would exercise it the way the worm table
-   now exercises the worm.
+2. The yard is a 5x4 grid and is full. A 24th machine means either a wider grid (and a bigger
+   `GROUND_SIZE`, which `chainGeometry.ts`'s cap derivation cites) or deciding a machine belongs
+   on the bench instead.
+3. `planetary` is used but only as an ordinary reduction wheel; a machine built *around* a real
+   sun/planet/ring arrangement would exercise it the way the capstan now exercises the ratchet.

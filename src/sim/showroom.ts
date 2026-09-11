@@ -17,6 +17,10 @@ import { createWellPumpPreset, createWellPumpProps } from "./presets/wellpump";
 import { createConveyorPreset, createConveyorProps } from "./presets/conveyor";
 import { createTowerCranePreset, createTowerCraneProps } from "./presets/towercrane";
 import { createClockTowerPreset, createClockTowerProps } from "./presets/clocktower";
+import { createGearboxPreset, createGearboxProps } from "./presets/gearbox";
+import { createPlanetaryHoistPreset, createPlanetaryHoistProps } from "./presets/planetaryhoist";
+import { createDifferentialAxlePreset, createDifferentialAxleProps } from "./presets/differentialaxle";
+import { createWormTablePreset, createWormTableProps } from "./presets/wormtable";
 
 type Vec3 = [number, number, number];
 
@@ -43,47 +47,51 @@ function translateProps(props: Prop[], d: Vec3): Prop[] {
   }));
 }
 
-/** The sixteen finished machines, on a 4x4 yard.
+/** The twenty finished machines, on a 5x4 yard.
  *
- *  Cell pitch (130 across X, 120 along Z) was chosen against each preset's REAL measured extent
- *  rather than by eye. The widest cases set it: the factory line shaft spans 114 units of X, the
- *  watermill 80 and the piston engine 74; along Z the locomotive is 103 long and the conveyor
- *  56. Machines are also assigned to cells so that no two wide ones land side by side in the
- *  same row.
+ *  Cell pitch (150 across X, 135 along Z) is derived from each preset's REAL measured extent, not
+ *  eyeballed. The widest cases set it -- the planetary hoist spans 126 units of X and the factory
+ *  114 -- and the deepest set the rows: the locomotive is 103 long and the differential axle 72.
+ *  Machines are assigned to cells so no two of the wide ones land side by side in a row, and no
+ *  two of the deep ones stack in a column.
  *
  *  Placement matters for more than looks: `classify()` flags any two gears sitting inside each
  *  other's overlap radius and does not care that they belong to different machines.
- *  tests/sim/showroom.test.ts asserts the combined layout really does report zero overlap pairs,
- *  and that everything stays inside the ground plane -- neither is assumed here.
+ *  tests/sim/showroom.test.ts asserts the combined layout really reports zero overlap pairs and
+ *  that everything stays inside the ground plane -- neither is assumed here.
  *
- *  The yard holds machines that read as standalone objects standing in a field. The clock
- *  movement and the music box stay out and remain available from the preset panel: both are
- *  tabletop/bench pieces, and standing them in a field would read as scale nonsense next to a
- *  locomotive and a tower crane. */
+ *  Two presets stay out of the yard, both deliberately: the clock movement (now 144 units wide,
+ *  since a one-module 12:1 needs a 120-diameter hour wheel) and the music box. Both are bench
+ *  pieces that would read as scale nonsense standing in a field beside a locomotive; both remain
+ *  available from the preset panel. */
 const SHOWROOM: Array<{ layout: LayoutState; props: Prop[]; offset: Vec3 }> = [
-  // Back row (z = -180).
-  { layout: createLocomotivePreset(), props: createLocomotiveProps(), offset: [-195, 0, -180] },
-  { layout: createFactoryPreset(), props: createFactoryProps(), offset: [-65, 0, -180] },
-  { layout: createWatermillPreset(), props: createWatermillProps(), offset: [65, 0, -180] },
-  { layout: createTowerCranePreset(), props: createTowerCraneProps(), offset: [195, 0, -180] },
-  // Second row (z = -60).
-  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [-195, 0, -60] },
-  { layout: createCarPreset(), props: createCarProps(), offset: [-65, 0, -60] },
-  { layout: createPistonEnginePreset(), props: createPistonEngineProps(), offset: [65, 0, -60] },
-  { layout: createClockTowerPreset(), props: createClockTowerProps(), offset: [195, 0, -60] },
-  // Third row (z = 60).
-  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [-195, 0, 60] },
-  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [-65, 0, 60] },
-  { layout: createCarouselPreset(), props: createCarouselProps(), offset: [65, 0, 60] },
-  { layout: createFerrisWheelPreset(), props: createFerrisWheelProps(), offset: [195, 0, 60] },
-  // Front row (z = 180).
-  { layout: createCastlePreset(), props: createCastleProps(), offset: [-195, 0, 180] },
-  { layout: createWellPumpPreset(), props: createWellPumpProps(), offset: [-65, 0, 180] },
-  { layout: createConveyorPreset(), props: createConveyorProps(), offset: [65, 0, 180] },
-  { layout: createHoistPreset(), props: createHoistProps(), offset: [195, 0, 180] },
+  // Back row (z = -202.5).
+  { layout: createLocomotivePreset(), props: createLocomotiveProps(), offset: [-300, 0, -202.5] },
+  { layout: createFactoryPreset(), props: createFactoryProps(), offset: [-150, 0, -202.5] },
+  { layout: createWatermillPreset(), props: createWatermillProps(), offset: [0, 0, -202.5] },
+  { layout: createTowerCranePreset(), props: createTowerCraneProps(), offset: [150, 0, -202.5] },
+  { layout: createClockTowerPreset(), props: createClockTowerProps(), offset: [300, 0, -202.5] },
+  // Second row (z = -67.5).
+  { layout: createWindmillPreset(), props: createWindmillProps(), offset: [-300, 0, -67.5] },
+  { layout: createCarPreset(), props: createCarProps(), offset: [-150, 0, -67.5] },
+  { layout: createPistonEnginePreset(), props: createPistonEngineProps(), offset: [0, 0, -67.5] },
+  { layout: createFerrisWheelPreset(), props: createFerrisWheelProps(), offset: [150, 0, -67.5] },
+  { layout: createGearboxPreset(), props: createGearboxProps(), offset: [300, 0, -67.5] },
+  // Third row (z = 67.5).
+  { layout: createBicyclePreset(), props: createBicycleProps(), offset: [-300, 0, 67.5] },
+  { layout: createAirplanePreset(), props: createAirplaneProps(), offset: [-150, 0, 67.5] },
+  { layout: createCarouselPreset(), props: createCarouselProps(), offset: [0, 0, 67.5] },
+  { layout: createWormTablePreset(), props: createWormTableProps(), offset: [150, 0, 67.5] },
+  { layout: createPlanetaryHoistPreset(), props: createPlanetaryHoistProps(), offset: [300, 0, 67.5] },
+  // Front row (z = 202.5).
+  { layout: createCastlePreset(), props: createCastleProps(), offset: [-300, 0, 202.5] },
+  { layout: createWellPumpPreset(), props: createWellPumpProps(), offset: [-150, 0, 202.5] },
+  { layout: createConveyorPreset(), props: createConveyorProps(), offset: [0, 0, 202.5] },
+  { layout: createDifferentialAxlePreset(), props: createDifferentialAxleProps(), offset: [150, 0, 202.5] },
+  { layout: createHoistPreset(), props: createHoistProps(), offset: [300, 0, 202.5] },
 ];
 
-/** The default first-visit scene: sixteen finished machines arranged in a yard, replacing the
+/** The default first-visit scene: twenty finished machines arranged in a yard, replacing the
  *  old abstract 12-gear-type showcase. Gear ids are unique across presets (each is prefixed with its machine's
  *  Korean name), so the combined gear list and remote-link list are just concatenations. */
 export function createShowroomLayout(): LayoutState {
