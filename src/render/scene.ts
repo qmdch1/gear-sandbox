@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { getTiledTexture, makeSkyTexture } from "./textures";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 
 /** Side length of the square ground plane, in world units. Exported as the single source of
@@ -40,10 +41,21 @@ export function resizeToContainer(ctx: SceneContext): void {
 
 export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x1a1d22);
+  // A sky rather than a flat backdrop: deep blue overhead easing to a pale horizon. It gives
+  // the yard a skyline to sit against, and because it is an equirectangular texture the same
+  // gradient is what polished metal now reflects. Falls back to the old flat colour wherever
+  // there is no canvas (jsdom), so a headless run still builds a valid scene.
+  const sky = makeSkyTexture("#20293a", "#8fa3bd");
+  scene.background = sky ?? new THREE.Color(0x1a1d22);
 
   const initial = containerSize(canvas);
-  const camera = new THREE.PerspectiveCamera(50, initial.width / initial.height, 0.1, 1000);
+  // FAR PLANE vs. ORBIT CEILING: the two have to agree. `controls.maxDistance` below lets the
+  // camera stand 1500 units back to frame the whole yard, and `fitAll` really does use that --
+  // but the far plane was 1000, so at any standoff past that the entire scene fell behind the
+  // clip plane and the view emptied out. 5000 clears the orbit ceiling plus the yard's own
+  // radius with room to spare; the near plane stays at 0.1, and 0.1..5000 is still a
+  // comfortable depth-buffer ratio.
+  const camera = new THREE.PerspectiveCamera(50, initial.width / initial.height, 0.1, 5000);
   camera.position.set(30, 30, 30);
   camera.lookAt(0, 0, 0);
 
@@ -98,17 +110,24 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const key = new THREE.DirectionalLight(0xfff4e0, 1.35);
   key.position.set(60, 18, 40);
   // Only the key casts -- one shadow-casting light keeps the cost to a single map while still
-  // giving every object a definite contact shadow. The ortho frustum is sized to the whole
-  // showroom yard (machines are laid out across roughly 140 world units), since anything
-  // outside it would silently stop casting.
+  // giving every object a definite contact shadow. The ortho frustum has to cover the whole
+  // GROUND, because anything outside it silently stops casting with no error of any kind: the
+  // frustum was still the +/-160 that suited the original nine-machine cluster, while the yard
+  // has since grown to 5x4 machines spanning +/-375, so most of the outer two columns were
+  // quietly shadowless. Tied to GROUND_SIZE now, so the yard cannot outgrow it again.
   key.castShadow = true;
-  key.shadow.mapSize.set(2048, 2048);
-  key.shadow.camera.left = -160;
-  key.shadow.camera.right = 160;
-  key.shadow.camera.top = 160;
-  key.shadow.camera.bottom = -160;
+  // 4096 over an 800-unit frustum is about 0.2 units per texel -- roughly a fifth of a gear
+  // tooth, which is what it takes for tooth shadows to read as teeth rather than as a smudge.
+  key.shadow.mapSize.set(4096, 4096);
+  key.shadow.camera.left = -GROUND_SIZE / 2;
+  key.shadow.camera.right = GROUND_SIZE / 2;
+  key.shadow.camera.top = GROUND_SIZE / 2;
+  key.shadow.camera.bottom = -GROUND_SIZE / 2;
   key.shadow.camera.near = 1;
-  key.shadow.camera.far = 400;
+  // The light sits ~74 units out and the far corner of the yard is ~565 beyond that; 1500
+  // covers it with margin, and an orthographic shadow camera pays no precision penalty for
+  // the extra range the way a perspective one would.
+  key.shadow.camera.far = 1500;
   key.shadow.bias = -0.0006; // clears the shadow acne that flat gear faces show without it
   // Fill: dim, opposite side, keeps the away-from-key side from crushing to pure black
   // without washing out the key light's own contrast.
@@ -126,9 +145,21 @@ export function createScene(canvas: HTMLCanvasElement): SceneContext {
   // whole scene read as gears floating in a black void with no spatial reference at
   // all). Lightened well clear of the background, plus a visible grid overlay, so there
   // is an actual sense of ground/scale instead of an empty void.
+  // Tiled concrete rather than flat paint. Beyond looking like a floor, it is what makes
+  // MOTION legible: a car driving across a featureless plane looks static, because nothing
+  // passes it. One tile per 50 units is a 50 cm slab at this scale (units.ts), which is about
+  // what a workshop floor is cast in.
+  const groundTexture = getTiledTexture("stone", GROUND_SIZE / 50);
   const groundPlane = new THREE.Mesh(
     new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE),
-    new THREE.MeshStandardMaterial({ color: 0x3d434e, roughness: 0.95 }),
+    new THREE.MeshStandardMaterial({
+      color: 0x3d434e,
+      roughness: 0.95,
+      map: groundTexture,
+      bumpMap: groundTexture,
+      bumpScale: 0.6,
+      roughnessMap: groundTexture,
+    }),
   );
   groundPlane.rotation.x = -Math.PI / 2;
   groundPlane.receiveShadow = true;

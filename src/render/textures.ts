@@ -203,6 +203,53 @@ export function getProceduralTexture(kind: TextureKind): THREE.CanvasTexture | n
 }
 
 /** Test seam: drops every cached texture so a following call re-draws. */
+/** The same pattern, set up to TILE across a large surface.
+ *
+ *  A cached texture is shared by every prop that asked for that finish, so its `repeat` cannot
+ *  be changed in place -- doing so would silently retile every brick wall and wooden beam in the
+ *  scene. This hands back a clone instead, which shares the underlying image (no second canvas,
+ *  no second upload) while carrying its own wrapping and repeat. Used for the ground, where one
+ *  512-pixel slab stretched over eight metres would be an unreadable smear. */
+export function getTiledTexture(kind: TextureKind, repeat: number): THREE.CanvasTexture | null {
+  const base = getProceduralTexture(kind);
+  if (!base) return null;
+  const tiled = base.clone();
+  tiled.wrapS = THREE.RepeatWrapping;
+  tiled.wrapT = THREE.RepeatWrapping;
+  tiled.repeat.set(repeat, repeat);
+  tiled.needsUpdate = true;
+  return tiled;
+}
+
+/** A vertical sky gradient, as an equirectangular background.
+ *
+ *  Two colours up a narrow strip is all a sky needs when the camera never looks far above the
+ *  horizon: THREE stretches it around the whole sphere, so the scene gains a horizon and a
+ *  sense of "outdoors" that a single flat background colour cannot give. Returns null where
+ *  there is no canvas (jsdom), and the caller keeps its plain colour. */
+export function makeSkyTexture(top: string, horizon: string): THREE.CanvasTexture | null {
+  if (typeof document === "undefined") return null;
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 2;
+    canvas.height = 256;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    const gradient = ctx.createLinearGradient(0, 0, 0, 256);
+    gradient.addColorStop(0, top);
+    gradient.addColorStop(0.55, horizon);
+    gradient.addColorStop(1, horizon);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 2, 256);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
+  } catch {
+    return null;
+  }
+}
+
 export function clearTextureCache(): void {
   for (const t of cache.values()) t?.dispose();
   cache.clear();

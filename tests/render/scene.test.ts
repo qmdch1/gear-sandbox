@@ -18,7 +18,9 @@ vi.mock("three", async (importOriginal) => {
   };
 });
 
-import { createScene } from "../../src/render/scene";
+import { createScene, GROUND_SIZE } from "../../src/render/scene";
+
+const makeCanvas = () => document.createElement("canvas");
 
 describe("createScene", () => {
   it("adds lighting and a ground plane to the scene", () => {
@@ -52,5 +54,30 @@ describe("createScene", () => {
     const canvas = document.createElement("canvas");
     const { groundPlane } = createScene(canvas);
     expect(groundPlane.material).toBeInstanceOf(THREE.MeshStandardMaterial);
+  });
+
+  it("can actually SEE the whole yard from as far back as the controls allow", () => {
+    const { camera, controls } = createScene(makeCanvas());
+    // These two constants have to agree, and nothing warns when they do not: `fitAll` really
+    // does stand the camera off at `maxDistance` to frame the yard, and with a nearer far
+    // plane everything at that range falls behind the clip plane and the view simply empties.
+    // The far plane must clear the orbit ceiling PLUS the yard's own radius behind the target.
+    expect(camera.far).toBeGreaterThan(controls.maxDistance + GROUND_SIZE);
+    expect(camera.near).toBeLessThan(1);
+  });
+
+  it("casts shadows over the whole ground, not just the middle of it", () => {
+    const { scene } = createScene(makeCanvas());
+    const key = scene.children.find(
+      (c): c is THREE.DirectionalLight => c instanceof THREE.DirectionalLight && c.castShadow,
+    )!;
+    // A machine outside the shadow camera's frustum stops casting with no error at all, which
+    // is exactly how most of the yard's outer columns ended up quietly shadowless when the
+    // yard grew past the frustum that had been sized for the original small cluster.
+    const cam = key.shadow.camera;
+    expect(cam.right - cam.left).toBeGreaterThanOrEqual(GROUND_SIZE);
+    expect(cam.top - cam.bottom).toBeGreaterThanOrEqual(GROUND_SIZE);
+    // ...and deep enough to reach the far corner of that ground from where the light stands.
+    expect(cam.far).toBeGreaterThan(key.position.length() + GROUND_SIZE * 0.71);
   });
 });
