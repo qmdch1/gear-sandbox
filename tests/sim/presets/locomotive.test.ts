@@ -4,7 +4,6 @@ import {
   createLocomotiveProps,
   TRACK_X,
   DRIVER_TEETH,
-  DRIVER_R,
   WHEEL_Y,
   DRIVER_Z,
   PINION_TEETH,
@@ -15,12 +14,17 @@ import {
   PISTON_MAX_Z,
   PISTON_STROKE,
   DRIVE_SPEED,
+  DRIVE_RANGE,
+  TRACK_LIMIT,
+  RAIL_ROLLING_RESISTANCE,
+  DRIVER_R,
   PINION_RATIO,
   QUARTER,
 } from "../../../src/sim/presets/locomotive";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
+import type { LayoutState } from "../../../src/sim/types";
 
 const LEFT = ["증기기관차_좌동륜1", "증기기관차_좌동륜2", "증기기관차_좌동륜3"];
 const RIGHT = ["증기기관차_우동륜1", "증기기관차_우동륜2", "증기기관차_우동륜3"];
@@ -96,23 +100,85 @@ describe("createLocomotivePreset", () => {
   });
 
   it("holds all six drivers to one speed and one direction, and steps the pinion up 4x reversed", () => {
-    let layout = createLocomotivePreset();
+    let layout: LayoutState = createLocomotivePreset();
     for (let i = 0; i < 600; i++) {
       const r = tick(layout, 1 / 60, 1);
-      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+      layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
 
-      // Coupling rods make every driving wheel turn as one -- same speed, same sign.
+      // Coupling rods make every driving wheel turn as one -- same speed, same sign -- at every
+      // instant, including while the engine is still working up to speed.
+      const main = layout.gears.find((x) => x.id === LEFT[0])!;
       for (const id of [...LEFT, ...RIGHT]) {
         const g = layout.gears.find((x) => x.id === id)!;
-        expect(g.angularVelocity).toBeCloseTo(DRIVE_SPEED, 12);
+        expect(g.angularVelocity).toBeCloseTo(main.angularVelocity, 12);
         expect(g.broken).toBe(false);
       }
       const pinion = layout.gears.find((g) => g.id === PINION)!;
-      expect(pinion.angularVelocity).toBeCloseTo(-PINION_RATIO * DRIVE_SPEED, 12); // -3.2
+      expect(pinion.angularVelocity).toBeCloseTo(-PINION_RATIO * main.angularVelocity, 12);
     }
     for (const id of [...LEFT, ...RIGHT, PINION]) {
       expect(Math.abs(layout.gears.find((g) => g.id === id)!.rotation)).toBeGreaterThan(0);
     }
+    // Five seconds in -- before the reverser throws it, which happens at about 6.7 s -- the
+    // drive is up near its free speed but held below it by the train it is pulling. A machine
+    // running at exactly its rated speed would not be pulling anything.
+    let pulling: LayoutState = createLocomotivePreset();
+    for (let i = 0; i < 300; i++) {
+      const r = tick(pulling, 1 / 60, 1, { wear: false });
+      pulling = { ...pulling, gears: r.gears, vehicles: r.vehicles };
+    }
+    const drive = pulling.gears[0].angularVelocity;
+    expect(drive).toBeGreaterThan(DRIVE_SPEED * 0.7);
+    expect(drive).toBeLessThan(DRIVE_SPEED);
+  });
+
+  it("runs down the line, chimney first, and the reverser brings it back", () => {
+    let layout: LayoutState = createLocomotivePreset();
+    // The cylinders sit ahead of the wheelbase at +Z, so +Z is the front; `rollingDirection`
+    // derives that from the wheel axis rather than it being written down by hand.
+    expect(layout.vehicles![0].direction).toEqual([0, 0, 1]);
+
+    let furthest = 0;
+    let reversed = false;
+    for (let i = 0; i < 60 * 90; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+      const d = layout.vehicles![0].distance;
+      furthest = Math.max(furthest, d);
+      if (d < furthest - 1) reversed = true;
+      expect(Math.abs(d)).toBeLessThanOrEqual(TRACK_LIMIT + 1e-9);
+    }
+    expect(furthest).toBeGreaterThan(DRIVE_RANGE * 0.9);
+    expect(reversed).toBe(true);
+    // Travel is the drivers' own rolling, not an animation running alongside them.
+    const wheel = layout.gears.find((g) => g.id === LEFT[0])!;
+    expect(layout.vehicles![0].distance).toBeCloseTo(wheel.rotation * DRIVER_R, 6);
+  });
+
+  it("runs faster on rail than the same engine would on tyres", () => {
+    // Rolling resistance is about 0.002 for steel on steel against 0.015 for a tyre on tarmac,
+    // and that single number is why railways move heavy things cheaply. Compared on the SAME
+    // locomotive with only the resistance changed -- comparing it against the car instead would
+    // be comparing two different motors, where the fraction of free speed each one holds says
+    // more about its torque curve than about what it is rolling on.
+    const settle = (rollingResistance: number) => {
+      const fresh = createLocomotivePreset();
+      // Let it run flat out rather than shuttling, so this is a steady state and not whatever
+      // moment of braking the reverser happened to catch.
+      let layout: LayoutState = {
+        ...fresh,
+        gears: fresh.gears.map((g) => ({ ...g, reverseAt: undefined })),
+        vehicles: fresh.vehicles!.map((v) => ({ ...v, limit: undefined, rollingResistance })),
+      };
+      for (let i = 0; i < 60 * 20; i++) {
+        const r = tick(layout, 1 / 60, 1, { wear: false });
+        layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+      }
+      return Math.abs(layout.gears[0].angularVelocity);
+    };
+    expect(settle(RAIL_ROLLING_RESISTANCE)).toBeGreaterThan(settle(0.015));
+    // And on rail it keeps most of what the motor can give.
+    expect(settle(RAIL_ROLLING_RESISTANCE)).toBeGreaterThan(DRIVE_SPEED * 0.7);
   });
 
   it("keeps the wheels quartered for the whole run, not just at rest", () => {

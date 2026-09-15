@@ -1,6 +1,7 @@
 import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
 import type { Prop } from "../../render/props";
+import { rollingDirection } from "../dynamics";
 import { wheelSpokesX } from "./wheels";
 
 /** Builds one gear instance for a preset layout. Mirrors `windmill.ts`/`hoist.ts`/`car.ts`'s
@@ -116,6 +117,33 @@ export const PISTON_LEN = 3;
  *  omega x offset = (0, 0, omega * r). */
 export const DRIVE_SPEED = 0.8;
 
+/** The locomotive's id as a `Vehicle`, so its boiler, cab and rods can say they ride on it. */
+export const LOCO_VEHICLE_ID = "증기기관차";
+
+/** Mass of the whole locomotive, kg. At 24 x 66 x ~30 cm of mostly cast metal this is a heavy
+ *  desk model, and the weight is the point: reflected into the drivers as `mass * r^2` it is
+ *  several times their own inertia put together, so the engine leans into its start the way a
+ *  locomotive does instead of leaping away. */
+export const LOCO_MASS = 4;
+
+/** Steel wheel on steel rail: rolling resistance of about 0.002, against roughly 0.015 for a
+ *  tyre on tarmac. That single number is why railways move heavy things cheaply. Measured on
+ *  this engine (tests/sim/presets/locomotive.test.ts): running it on tyre resistance instead
+ *  costs it real speed. It is NOT true that the locomotive holds a larger fraction of its free
+ *  speed than the car does -- that fraction is set mostly by the motor's own torque curve, so
+ *  comparing two different machines would say more about their motors than about what they
+ *  roll on, which is why the test changes only the resistance and keeps the machine fixed. */
+export const RAIL_ROLLING_RESISTANCE = 0.002;
+
+/** Stall torque of the steam drive, N*m. With the drivers' and the locomotive's own inertia
+ *  this gives a time constant of roughly a second -- a visible, unhurried pull away. */
+export const DRIVE_STALL_TORQUE = 0.056;
+
+/** How far the locomotive runs before the reverser throws it back, world units, and the hard
+ *  end of its length of track. Both comfortably inside its showroom cell. */
+export const DRIVE_RANGE = 44;
+export const TRACK_LIMIT = 60;
+
 /** The generator pinion's speed as a multiple of the driving wheel's:
  *  `evaluatePair` returns ratio = driver.teeth / pinion.teeth = 20 / 5 = 4 for the tooth mesh,
  *  and `propagateRotation` drives a "mesh" edge with sign = -1, so the pinion turns 4x as fast
@@ -214,7 +242,9 @@ export function createLocomotivePreset(): LayoutState {
     // The main driver: the single `crank`, i.e. the one commanded speed in the layout. It is
     // the FRONT-most axle so that the piston's stroke (17..27 ahead of this wheel's centre)
     // lands ahead of the whole wheelbase rather than on top of another wheel.
-    seedGear("증기기관차_좌동륜1", "crank", [0, WHEEL_Y, z1], [1, 0, 0], DRIVER_TEETH, DRIVER_MODULE, DRIVE_SPEED),
+    // Seeded at REST: the drive is a motor (see below), so its speed is worked out from the
+    // torque balance rather than commanded, and the locomotive has to start itself.
+    seedGear("증기기관차_좌동륜1", "crank", [0, WHEEL_Y, z1], [1, 0, 0], DRIVER_TEETH, DRIVER_MODULE),
     // The two other left-hand drivers, chain-coupled (coupling rods) to the main driver.
     // `sprocket` is one of `evaluatePair`'s COINCIDENT_ONLY types: it forms no tooth mesh of
     // its own and only ever receives power through a coupling or a chain/belt RemoteLink,
@@ -251,8 +281,31 @@ export function createLocomotivePreset(): LayoutState {
     if (gear.id.startsWith("증기기관차_우동륜")) gear.rotation = QUARTER;
   }
 
+  // The locomotive RUNS. Its drive is a motor with a torque curve, it is a Vehicle with real
+  // mass, and `tick` integrates how far its drivers have rolled it -- the same no-slip relation
+  // that drives the pistons off those same wheels. The direction is derived from the wheel's
+  // axis rather than written down: about +X a positively-turning wheel travels +Z, which is
+  // where this engine's cylinders and chimney are.
+  gears[0].motor = { freeSpeed: DRIVE_SPEED, stallTorque: DRIVE_STALL_TORQUE };
+  // The reverser: out to the end of the track, then back, forever. `DRIVE_RANGE / DRIVER_R` is
+  // the wheel rotation that covers it, since a wheel of radius r rolls r per radian.
+  gears[0].reverseAt = [0, DRIVE_RANGE / DRIVER_R];
+  for (const gear of gears) gear.ridesOn = LOCO_VEHICLE_ID;
+
   return {
     gears,
+    vehicles: [
+      {
+        id: LOCO_VEHICLE_ID,
+        wheel: "증기기관차_좌동륜1",
+        radius: DRIVER_R,
+        mass: LOCO_MASS,
+        direction: rollingDirection([1, 0, 0]),
+        rollingResistance: RAIL_ROLLING_RESISTANCE,
+        distance: 0,
+        limit: [-TRACK_LIMIT, TRACK_LIMIT],
+      },
+    ],
     remoteLinks: [
       // Left-hand coupling rods: front -> middle -> rear.
       { a: "증기기관차_좌동륜1", b: "증기기관차_좌동륜2", kind: "chain" },
@@ -293,6 +346,16 @@ const CAB_Z = -50;
  *  interesting motion in the whole scene. It reads as a cutaway/sectioned display cylinder,
  *  which is exactly what it is. */
 export function createLocomotiveProps(): Prop[] {
+  // Every part of the body travels with the engine. Stamped over the whole list rather than
+  // written onto each of the fifty-odd pieces, so a new lamp or handrail cannot be forgotten
+  // and left hovering in mid-air while the rest of the locomotive pulls away from it.
+  // `ridesOn` composes with the poses the pieces already have: a coupling rod still swings on
+  // its crank pin (`linkTo`) and a spoke still turns with its wheel (`attachTo`) while both go
+  // down the line.
+  return buildLocomotiveBody().map((prop) => ({ ...prop, ridesOn: LOCO_VEHICLE_ID }));
+}
+
+function buildLocomotiveBody(): Prop[] {
   const IRON = 0x2b2f36; // locomotive black
   const BOILER_C = 0x25302c; // dark green-black boiler lagging
   const STEEL = 0xb4bcc6; // bright motion-work steel

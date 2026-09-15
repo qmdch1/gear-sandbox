@@ -5,6 +5,7 @@ import {
   stepMotors,
   motorTorque,
   momentOfInertia,
+  rollingDirection,
   gearMass,
   BEARING_DAMPING,
   LOAD_DAMPING,
@@ -221,6 +222,35 @@ describe("a motorised machine behaves like a machine", () => {
       current = { ...current, gears: r.gears };
       expect(current.gears[0].angularVelocity).toBe(-2.5);
     }
+  });
+});
+
+describe("rollingDirection", () => {
+  it("is the right-hand rule, not a convention someone picked", () => {
+    // No-slip holds the contact point still, so the centre travels at omega x r measured up
+    // from the contact. A wheel about +X therefore carries its vehicle toward +Z. Getting this
+    // backwards gives a vehicle that drives away tail-first and looks otherwise perfect, which
+    // is exactly why no preset writes the direction down by hand.
+    expect(rollingDirection([1, 0, 0])).toEqual([0, 0, 1]);
+    expect(rollingDirection([-1, 0, 0])).toEqual([0, 0, -1]);
+    expect(rollingDirection([0, 0, 1])).toEqual([-1, 0, 0]);
+    expect(rollingDirection([2, 0, 0])).toEqual([0, 0, 1]); // unnormalised axis is fine
+  });
+
+  it("returns nothing for a wheel lying flat, which rolls nowhere", () => {
+    expect(rollingDirection([0, 1, 0])).toEqual([0, 0, 0]);
+  });
+
+  it("sends the car the way its body faces", () => {
+    // The cabin sits at the -Z end of the car, so +Z is the nose.
+    const car = PRESETS.find((p) => p.id === "car")!.build();
+    expect(car.vehicles![0].direction).toEqual([0, 0, 1]);
+    let layout = car;
+    for (let i = 0; i < 90; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+    }
+    expect(layout.vehicles![0].distance).toBeGreaterThan(0); // nose-first, not tail-first
   });
 });
 

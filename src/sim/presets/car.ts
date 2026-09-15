@@ -2,6 +2,7 @@ import type { GearInstance, GearType, LayoutState } from "../types";
 import { GEAR_DEFS } from "../gearDefs";
 import type { Prop } from "../../render/props";
 import { wheelSpokesX } from "./wheels";
+import { rollingDirection } from "../dynamics";
 
 /** Builds one gear instance for a preset layout. Mirrors `defaultLayout.ts`'s own
  *  `seedGear` helper exactly (same "freshly placed, caller-supplied stable id" shape) --
@@ -50,6 +51,8 @@ export const ROAD_WHEEL_R = 8;
 /** The road wheel whose rotation carries the car. Any of the four would do -- the belt tree locks
  *  all four to one speed -- so the front-left is named once here rather than picked twice. */
 export const ROAD_WHEEL_ID = "자동차_좌앞바퀴";
+/** Every wheel here stands upright and turns about world X. */
+export const ROAD_WHEEL_AXIS: [number, number, number] = [1, 0, 0];
 
 /** The car's id as a `Vehicle`, so the props that make up its body can say they ride on it. */
 export const CAR_VEHICLE_ID = "자동차";
@@ -64,11 +67,13 @@ export const CAR_MASS = 2;
 /** Engine, as a torque-speed curve rather than a commanded speed.
  *
  *  A small geared motor: 0.08 N*m held at stall, running free at 6 rad/s (~57 rpm). POSITIVE,
- *  and that sign is not a preference -- it is the right-hand rule. The wheels turn about +X, and
- *  a wheel of radius R spinning at +w about +X has contact-point velocity w x r = -wR along Z,
- *  so a positively-turning wheel rolls the car toward -Z, which is the way the body faces (the
- *  cabin sits back at -Z). Driving it the other way would make the car reverse down the yard
- *  nose-last. What comes out of the torque balance with the
+ *  and that sign is not a preference -- it is the right-hand rule. Rolling without slip holds
+ *  the contact point still, so the wheel centre travels at `omega x r` measured up from that
+ *  contact: about +X that is +Z. The car's cabin sits back at the -Z end, so +Z is the way it
+ *  faces, and a positively-turning wheel therefore drives it nose-first. The direction itself
+ *  is not written down anywhere below -- `rollingDirection` derives it from the wheel's axis,
+ *  because a hand-written sign that came out backwards would give a car that drove away
+ *  tail-first with everything else about it perfectly correct. What comes out of the torque balance with the
  *  numbers above, and is asserted in tests rather than tuned by eye: the train's time constant
  *  J/D is about 0.37 s, so the car takes roughly a second to get going, and rolling resistance
  *  holds its steady speed to about 4.6 rad/s at the engine -- a quarter below the free speed.
@@ -210,7 +215,7 @@ export function createCarPreset(): LayoutState {
         wheel: ROAD_WHEEL_ID,
         radius: ROAD_WHEEL_R,
         mass: CAR_MASS,
-        direction: [0, 0, -1],
+        direction: rollingDirection(ROAD_WHEEL_AXIS),
         distance: 0,
         limit: [-TRAVEL_LIMIT, TRAVEL_LIMIT],
       },

@@ -169,6 +169,29 @@ export function driveRatios(gears: GearInstance[], edges: MeshEdge[]): Map<strin
   return ratios;
 }
 
+/** The world direction a wheel carries its vehicle for one radian of POSITIVE rotation.
+ *
+ *  Rolling without slip pins the contact point still, so the centre's velocity is
+ *  `omega x r`, taken from the contact point up to the centre -- i.e. the wheel's axis crossed
+ *  with the up direction. For the usual axis of +X that gives +Z, and the sign matters: writing
+ *  the direction by hand and getting it backwards produces a vehicle that drives away
+ *  tail-first, with everything else about it perfectly correct and nothing to flag it. Derived
+ *  here so no preset has to guess, and so `tests/sim/dynamics.test.ts` can pin it once against
+ *  the right-hand rule instead of once per machine.
+ *
+ *  A wheel lying flat (axis parallel to up) rolls nowhere: the cross product is zero, and the
+ *  zero vector is returned honestly rather than normalised into an arbitrary direction. */
+export function rollingDirection(axis: [number, number, number]): [number, number, number] {
+  const [ax, ay, az] = axis;
+  const length = Math.hypot(ax, ay, az) || 1;
+  const [x, y, z] = [ax / length, ay / length, az / length];
+  // (x, y, z) x (0, 1, 0)
+  const cross: [number, number, number] = [y * 0 - z * 1, z * 0 - x * 0, x * 1 - y * 0];
+  const norm = Math.hypot(...cross);
+  if (norm < 1e-9) return [0, 0, 0];
+  return [cross[0] / norm, cross[1] / norm, cross[2] / norm];
+}
+
 export interface DynamicsOptions {
   /** Downward acceleration, m/s^2 -- the same setting the falling parts use. It reaches the gear
    *  train through rolling resistance, which is a fraction of a vehicle's WEIGHT: a car on the
