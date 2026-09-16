@@ -4,3 +4,12 @@ server/data/
 *.log
 .worktrees/
 .scratch/
+
+# Scratch files from exploratory runs -- probes, repros, one-off scripts. They belong in a
+# temp dir, but an agent or a hurried session drops one in the root now and then, and `git add
+# -A` then sweeps it into a commit. Ignored so that cannot happen silently.
+__probe*
+probe*.ts
+_*probe*
+repro.ts
+**/__tmp_*
