@@ -10,6 +10,8 @@ import {
   PINION_MESH_DISTANCE,
   CRANK_PIN_R,
   MAIN_ROD_L,
+  CYLINDER_Z,
+  CYLINDER_LEN,
   PISTON_MIN_Z,
   PISTON_MAX_Z,
   PISTON_STROKE,
@@ -21,6 +23,8 @@ import {
   PINION_RATIO,
   QUARTER,
 } from "../../../src/sim/presets/locomotive";
+import * as THREE from "three";
+import { crankSliderPose } from "../../../src/render/sceneSync";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
@@ -217,13 +221,51 @@ describe("createLocomotiveProps", () => {
     expect(roles.has("slider")).toBe(true);
   });
 
-  it("derives the piston stroke as exactly twice the crank pin radius", () => {
-    // Textbook crank-slider: the slider's travel between dead centres is (L + r) - (L - r),
-    // i.e. 2r, independent of rod length. These constants position the cylinder, so if they
-    // ever drift apart the piston would run outside its bore.
-    expect(PISTON_MAX_Z).toBeCloseTo(MAIN_ROD_L + CRANK_PIN_R, 12);
-    expect(PISTON_MIN_Z).toBeCloseTo(MAIN_ROD_L - CRANK_PIN_R, 12);
-    expect(PISTON_STROKE).toBeCloseTo(2 * CRANK_PIN_R, 12);
+  it("keeps the piston rod inside its bore through a whole revolution", () => {
+    // This test used to assert PISTON_MAX_Z === MAIN_ROD_L + CRANK_PIN_R, PISTON_MIN_Z ===
+    // MAIN_ROD_L - CRANK_PIN_R and PISTON_STROKE === 2 * CRANK_PIN_R -- all three of which are
+    // the DEFINITIONS in locomotive.ts, restated. (L+r)-(L-r) = 2r is true of every L and every
+    // r, so no edit to the rod, the pin, the cylinder or `crankSliderPose` could ever fail it,
+    // while its comment claimed it guarded the bore.
+    //
+    // The bore claim is worth making, so make it properly: sweep the crank through a full
+    // revolution using the SAME solver the renderer drives the linkage with, and require the
+    // piston rod -- an 8-unit stub centred on the slider point -- to stay inside the cylinder
+    // at every angle.
+    const ROD_STUB = 8;
+    const boreMin = CYLINDER_Z - CYLINDER_LEN / 2; // 13
+    const boreMax = CYLINDER_Z + CYLINDER_LEN / 2; // 31
+    const out = {
+      pin: new THREE.Vector3(),
+      slider: new THREE.Vector3(),
+      rodMid: new THREE.Vector3(),
+      rodQuat: new THREE.Quaternion(),
+    };
+    let lowest = Infinity;
+    let highest = -Infinity;
+    for (let i = 0; i < 720; i++) {
+      crankSliderPose(
+        new THREE.Vector3(0, WHEEL_Y, 0),
+        new THREE.Vector3(1, 0, 0),
+        (i / 720) * Math.PI * 2,
+        CRANK_PIN_R,
+        MAIN_ROD_L,
+        new THREE.Vector3(0, 0, 1),
+        out,
+      );
+      lowest = Math.min(lowest, out.slider.z - ROD_STUB / 2);
+      highest = Math.max(highest, out.slider.z + ROD_STUB / 2);
+    }
+    expect(lowest).toBeGreaterThanOrEqual(boreMin - 1e-9);
+    expect(highest).toBeLessThanOrEqual(boreMax + 1e-9);
+    // It fills the bore rather than rattling around in a third of it -- which is what makes
+    // the fit a real constraint and not a coincidence of a generous cylinder.
+    expect(lowest).toBeCloseTo(boreMin, 9);
+    expect(highest).toBeCloseTo(boreMax, 9);
+
+    // And the stroke really is 2r, measured from the solver rather than restated from its
+    // own definition.
+    expect(highest - lowest - ROD_STUB).toBeCloseTo(2 * CRANK_PIN_R, 9);
   });
 
   it("points every moving prop at a gear that actually exists", () => {

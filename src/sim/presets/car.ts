@@ -134,29 +134,33 @@ export const ENGINE_STROKE: [number, number] = [0, DRIVE_RANGE / (ROAD_WHEEL_R /
  *  UPRIGHT and rolls forward/back, exactly how a real wheel sits, instead of the old
  *  `[0, 1, 0]` that spun them flat like turntables. The physics is unchanged by this
  *  reorientation: belt links carry rotation regardless of axis, and the engine stays
- *  coincident with the front-left wheel (same position AND axis) so its shaft coupling
- *  still forms.
+ *  coincident with the DRIVESHAFT (same position AND axis) so its shaft coupling still
+ *  forms.
  *
- *  자동차_엔진 (the crank) sits EXACTLY coincident with 자동차_좌앞바퀴 -- same position
- *  [0,8,0], same axis [1,0,0]. `pulley` is one of `evaluatePair`'s `COINCIDENT_ONLY`
- *  types (meshing.ts): a pulley has no direct tooth-mesh rule of its own and only ever
- *  receives rotation by sharing a shaft with whatever drives it, exactly like a
- *  chain/belt wheel is bolted straight onto a power shaft in reality. This is the same
- *  coincident-shaft pattern `defaultLayout.ts`'s own pulley+belt demo cluster already
- *  uses (crank coincident with one pulley, a `RemoteLink` carrying power on to a
- *  second) -- reused here across four wheels instead of two.
+ *  (The three paragraphs that used to stand here described a layout this preset no longer
+ *  has -- an engine coincident with 자동차_좌앞바퀴 at [0,8,0] driving all four wheels at
+ *  EXACTLY its own speed. The engine moved to the car's centre and gained a reduction; what
+ *  follows is the current machine, and every figure in it is pinned in car.test.ts.)
  *
- *  All four wheels share IDENTICAL teeth/module (16 / 1 -> pitchRadius 8), so every
- *  belt ratio between them (`pitchRadius(a) / pitchRadius(b)` in `graph.ts`'s
- *  `buildEdges`, for `kind: "belt"` remote links) is exactly 8/8 = 1. Combined with the
- *  coincident 1:1 crank<->front-left coupling, and the fact that `propagateRotation`
- *  (rotation.ts) uses `sign = +1` for EVERY `coupling`, `chain`, AND `belt` edge --
- *  never the `-1` an ordinary tooth mesh gets -- all four wheels end up turning at
- *  EXACTLY the engine's angular velocity, same magnitude AND same sign. That's the
- *  honest, verifiable claim of this preset: not a real car's differential-driven wheels
- *  (which don't literally share one rigid speed), but "one engine, four wheels, locked
- *  together" -- a legitimate simplified toy-car/gear-clock-style mechanism, verified
- *  numerically (not just derived on paper) in tests/sim/presets/car.test.ts.
+ *  자동차_엔진 (the crank) sits coincident with 자동차_구동축, the driveshaft, at the car's
+ *  centre [10, 8, -10] on axis [0,1,0] -- handle pointing UP into the body rather than out
+ *  past a wheel. `pulley` is one of `evaluatePair`'s `COINCIDENT_ONLY` types (meshing.ts):
+ *  a pulley has no tooth-mesh rule of its own and only ever receives rotation by sharing a
+ *  shaft with whatever drives it, exactly as a belt wheel is bolted straight onto a power
+ *  shaft in reality. So engine -> driveshaft is a 1:1 coupling.
+ *
+ *  From there four belts carry the drive out to the wheels, and THAT is where the ratio
+ *  lives. The driveshaft is small (8 teeth, pitchRadius 4) and every wheel is twice its size
+ *  (16 teeth, pitchRadius 8), so each belt ratio -- `pitchRadius(a) / pitchRadius(b)` in
+ *  `graph.ts`'s `buildEdges` for a `kind: "belt"` link -- is 4/8 = 0.5. The wheels therefore
+ *  turn at HALF the engine's angular velocity, and `propagateRotation` (rotation.ts) uses
+ *  `sign = +1` for every `coupling`, `chain` and `belt` edge -- never the `-1` a tooth mesh
+ *  gets -- so they all turn the same way as the engine and as each other.
+ *
+ *  That is the honest, verifiable claim of this preset: not a real car's differential-driven
+ *  wheels (which don't share one rigid speed), but "one engine, one driveshaft, four wheels
+ *  locked to each other at half engine speed" -- verified numerically, not derived on paper,
+ *  in tests/sim/presets/car.test.ts.
  *
  *  Topology is a spanning TREE across the four wheels, not a loop -- three belts, not
  *  four:
@@ -180,9 +184,13 @@ export const ENGINE_STROKE: [number, number] = [0, DRIVE_RANGE / (ROAD_WHEEL_R /
  *  formula that doesn't apply to belts anyway.
  *
  *  `angularVelocity: -1.0` on the engine is an arbitrary but deliberately non-trivial
- *  (non-1, non-zero, negative) speed -- chosen the same way `clock.ts`'s minute drive
- *  picks `-0.6`, so a direction/ratio test can't pass by some sign-convention accident
- *  that would only show up at a "nice" speed like 1 or -1. */
+ *  The engine is seeded at REST (angularVelocity 0) and carries a `motor`, so its speed is
+ *  an OUTPUT of the torque balance rather than a chosen input -- there is no seed value for
+ *  a ratio test to lean on, and the ratios below are checked against whatever speed the
+ *  engine actually reaches. (This paragraph used to explain a deliberately awkward `-1.0`
+ *  seed, chosen the way `clock.ts` picks `-0.6` so a sign-convention accident could not slip
+ *  through. That value has not existed here since the motor arrived, and the sign it argued
+ *  for was negative where ENGINE_FREE_SPEED is positive.) */
 export function createCarPreset(): LayoutState {
   const midX = TRACK_X / 2; // 10 -- car centre, under the body
   const midZ = -WHEELBASE_Z / 2; // -10
@@ -190,8 +198,9 @@ export function createCarPreset(): LayoutState {
     // Engine + driveshaft live at the car's CENTRE, tucked under the body shell where the
     // crank's protruding handle is hidden (axis [0,1,0] points the handle UP into the body,
     // not out past a wheel like the old front-left-coincident engine did). The small engine
-    // crank turns a wheel-sized driveshaft pulley (coincident 1:1 coupling), which belts out
-    // to the wheels -- so the crank handle no longer sticks out beside the front-left wheel.
+    // crank turns a SMALL driveshaft pulley (coincident 1:1 coupling) that belts out to the
+    // twice-as-large wheels, so the wheels run at half engine speed -- and the crank handle no
+    // longer sticks out beside the front-left wheel.
     // Seeded at REST. A motorised crank's speed is an output of the torque balance, not an
     // input, so the car starts stopped and pulls away under its own torque.
     seedGear("자동차_엔진", "crank", [midX, WHEEL_Y, midZ], [0, 1, 0], 8, 1, 0),
