@@ -38,6 +38,45 @@ function isVec3(value: unknown): boolean {
   return Array.isArray(value) && value.length === 3 && value.every(isFiniteNumber);
 }
 
+/** Same shape check `src/persistence/serialize.ts`'s `isValidVehicle` does on the client --
+ *  another self-contained copy, for the same build-context reason as the two validators
+ *  around it.
+ *
+ *  `vehicles` was not persisted here AT ALL until now: POST and PUT destructured only
+ *  `{ name, gears, remoteLinks }` and GET returned only those, so a car or a locomotive
+ *  saved to the server came back as a machine that could never move again. Worse than the
+ *  equivalent client-side bug that was just fixed, because the gears' own `ridesOn` fields
+ *  DID survive -- so the restored layout was a set of gears all claiming to ride a vehicle
+ *  that no longer existed. Verified against the running server before the fix: POST a car
+ *  with one vehicle at distance 39.27, GET it back, and the response had no `vehicles` key.
+ *
+ *  `gearIds` is required because a vehicle whose `wheel` names no gear in the same layout
+ *  is silently immobile -- its wheel speed reads as 0 forever -- which looks like a
+ *  complete machine rather than an error. The client's `deserializeLayout` rejects that;
+ *  so does this, at write time. */
+function isValidVehiclesArray(value: unknown, gearIds: Set<string>): boolean {
+  return (
+    Array.isArray(value) &&
+    value.every((vehicle) => {
+      if (typeof vehicle !== "object" || vehicle === null) return false;
+      const v = vehicle as Record<string, unknown>;
+      return (
+        typeof v.id === "string" &&
+        v.id.length > 0 &&
+        typeof v.wheel === "string" &&
+        gearIds.has(v.wheel) &&
+        isFiniteNumber(v.radius) &&
+        isFiniteNumber(v.mass) &&
+        isVec3(v.direction) &&
+        isFiniteNumber(v.distance) &&
+        (v.rollingResistance === undefined || isFiniteNumber(v.rollingResistance)) &&
+        (v.limit === undefined ||
+          (Array.isArray(v.limit) && v.limit.length === 2 && v.limit.every(isFiniteNumber)))
+      );
+    })
+  );
+}
+
 /** Same shape check `src/persistence/serialize.ts`'s `isValidGear` does on the client --
  *  kept as a small self-contained copy here rather than a cross-import, for the same
  *  reason `isValidRemoteLinksArray` above is: `server/` and `src/` are separate
@@ -75,13 +114,21 @@ function isValidGearsArray(value: unknown): boolean {
   );
 }
 
+const VEHICLES_ERROR =
+  "vehicles, if present, must be an array of {id, wheel, radius, mass, direction, distance} " +
+  "objects whose `wheel` names a gear in the same layout";
+
+function gearIdsOf(gears: unknown[]): Set<string> {
+  return new Set(gears.map((g) => (g as Record<string, unknown>)?.id).filter((id): id is string => typeof id === "string"));
+}
+
 export function createApp(db: Database.Database): express.Express {
   const app = express();
   app.use(cors());
   app.use(express.json({ limit: "5mb" }));
 
   app.post("/api/layouts", (req, res) => {
-    const { name, gears, remoteLinks } = req.body ?? {};
+    const { name, gears, remoteLinks, vehicles } = req.body ?? {};
     if (typeof name !== "string" || !name.trim() || !Array.isArray(gears)) {
       res.status(400).json({ error: "name (string) and gears (array) are required" });
       return;
@@ -97,11 +144,15 @@ export function createApp(db: Database.Database): express.Express {
       res.status(400).json({ error: "remoteLinks, if present, must be an array of {a, b, kind: 'chain'|'belt'}" });
       return;
     }
+    if (vehicles !== undefined && !isValidVehiclesArray(vehicles, gearIdsOf(gears))) {
+      res.status(400).json({ error: VEHICLES_ERROR });
+      return;
+    }
     const id = randomUUID();
     const now = new Date().toISOString();
     db.prepare(
       "INSERT INTO layouts (id, name, user_id, gears_json, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)",
-    ).run(id, name, JSON.stringify({ gears, remoteLinks: remoteLinks ?? [] }), now, now);
+    ).run(id, name, JSON.stringify({ gears, remoteLinks: remoteLinks ?? [], vehicles: vehicles ?? [] }), now, now);
     res.status(201).json({ id, name, updatedAt: now });
   });
 
@@ -119,10 +170,14 @@ export function createApp(db: Database.Database): express.Express {
       return;
     }
     const stored = JSON.parse(row.gearsJson);
-    // `stored` is either a v1 plain gears array (pre-remoteLinks) or a v2 { gears, remoteLinks } object.
+    // Three stored shapes have existed: v1, a plain gears array (pre-remoteLinks); v2,
+    // { gears, remoteLinks }; and v3, which adds `vehicles`. Older rows simply have no
+    // vehicles, which is not a loss -- nothing could put one there. Defaulting each missing
+    // field to [] is what lets a v1 row still load today.
     const gears = Array.isArray(stored) ? stored : stored.gears;
     const remoteLinks = Array.isArray(stored) ? [] : (stored.remoteLinks ?? []);
-    res.json({ id: row.id, name: row.name, gears, remoteLinks, updatedAt: row.updatedAt });
+    const vehicles = Array.isArray(stored) ? [] : (stored.vehicles ?? []);
+    res.json({ id: row.id, name: row.name, gears, remoteLinks, vehicles, updatedAt: row.updatedAt });
   });
 
   app.put("/api/layouts/:id", (req, res) => {
@@ -131,7 +186,7 @@ export function createApp(db: Database.Database): express.Express {
       res.status(404).json({ error: "layout not found" });
       return;
     }
-    const { name, gears, remoteLinks } = req.body ?? {};
+    const { name, gears, remoteLinks, vehicles } = req.body ?? {};
     if (!Array.isArray(gears)) {
       res.status(400).json({ error: "gears (array) is required" });
       return;
@@ -147,8 +202,12 @@ export function createApp(db: Database.Database): express.Express {
       res.status(400).json({ error: "remoteLinks, if present, must be an array of {a, b, kind: 'chain'|'belt'}" });
       return;
     }
+    if (vehicles !== undefined && !isValidVehiclesArray(vehicles, gearIdsOf(gears))) {
+      res.status(400).json({ error: VEHICLES_ERROR });
+      return;
+    }
     const now = new Date().toISOString();
-    const payload = JSON.stringify({ gears, remoteLinks: remoteLinks ?? [] });
+    const payload = JSON.stringify({ gears, remoteLinks: remoteLinks ?? [], vehicles: vehicles ?? [] });
     if (typeof name === "string" && name.trim()) {
       db.prepare("UPDATE layouts SET name = ?, gears_json = ?, updated_at = ? WHERE id = ?").run(name, payload, now, req.params.id);
     } else {

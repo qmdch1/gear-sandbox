@@ -27,8 +27,13 @@ export async function fetchServerLayout(id: string): Promise<LayoutDetail> {
   // Without it, a stored row from before the validator existed, a manually-edited DB, or a
   // duplicate RemoteLink the server's write-side check doesn't catch (it checks shape, not
   // duplication) would flow straight into live sim/render state unchecked.
-  const { gears, remoteLinks } = validateLayout(body);
-  return { id: body.id, name: body.name, updatedAt: body.updatedAt, gears, remoteLinks };
+  // `vehicles` is taken from the validated result for the same reason the other two fields are.
+  // Dropping it here was one of THREE places the server round-trip silently lost a car: the
+  // send below omitted it, the server stored only { gears, remoteLinks }, and this destructure
+  // discarded whatever did come back. A layout that survived all three came back as gears still
+  // carrying `ridesOn`, riding a vehicle that no longer existed.
+  const { gears, remoteLinks, vehicles } = validateLayout(body);
+  return { id: body.id, name: body.name, updatedAt: body.updatedAt, gears, remoteLinks, vehicles };
 }
 
 export async function saveNewServerLayout(name: string, layout: LayoutState): Promise<LayoutSummary> {
@@ -36,7 +41,7 @@ export async function saveNewServerLayout(name: string, layout: LayoutState): Pr
     await fetch("/api/layouts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, gears: layout.gears, remoteLinks: layout.remoteLinks }),
+      body: JSON.stringify({ name, gears: layout.gears, remoteLinks: layout.remoteLinks, vehicles: layout.vehicles }),
     }),
   );
 }
@@ -46,7 +51,7 @@ export async function updateServerLayout(id: string, name: string, layout: Layou
     await fetch(`/api/layouts/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, gears: layout.gears, remoteLinks: layout.remoteLinks }),
+      body: JSON.stringify({ name, gears: layout.gears, remoteLinks: layout.remoteLinks, vehicles: layout.vehicles }),
     }),
   );
 }

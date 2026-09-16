@@ -239,4 +239,91 @@ describe("layouts API", () => {
       expect(res.body.name).toBe("test");
     });
   });
+
+  describe("vehicles survive the server, because a machine that cannot move is not the one you saved", () => {
+    const CAR = { id: "car", wheel: "wheel", radius: 8, mass: 2, direction: [0, 0, 1], distance: 39.27 };
+    const wheel = () => makeGear({ id: "wheel", ridesOn: "car" });
+
+    it("stores a vehicle and returns it, down to the exact distance travelled", async () => {
+      // Until this was fixed the POST handler destructured only { name, gears, remoteLinks }, so
+      // the vehicle was dropped on the floor of the request and GET had none to return. The gears'
+      // own `ridesOn` fields DID survive, so a saved car came back as a set of gears all claiming
+      // to ride a vehicle that no longer existed -- and no error anywhere.
+      const created = await request(app)
+        .post("/api/layouts")
+        .send({ name: "car", gears: [wheel()], vehicles: [CAR] });
+      expect(created.status).toBe(201);
+
+      const back = await request(app).get(`/api/layouts/${created.body.id}`);
+      expect(back.status).toBe(200);
+      expect(back.body.vehicles).toEqual([CAR]);
+      expect(back.body.vehicles[0].distance).toBe(39.27); // not rounded, not reset to 0
+      expect(back.body.gears[0].ridesOn).toBe("car");
+    });
+
+    it("carries a vehicle through an overwrite too", async () => {
+      const created = await request(app).post("/api/layouts").send({ name: "car", gears: [wheel()], vehicles: [CAR] });
+      const moved = { ...CAR, distance: 120.5 };
+      const put = await request(app)
+        .put(`/api/layouts/${created.body.id}`)
+        .send({ name: "car", gears: [wheel()], vehicles: [moved] });
+      expect(put.status).toBe(200);
+
+      const back = await request(app).get(`/api/layouts/${created.body.id}`);
+      expect(back.body.vehicles).toEqual([moved]);
+    });
+
+    it("refuses a vehicle whose wheel names no gear in the layout", async () => {
+      // Such a vehicle is silently immobile forever -- its wheel speed reads as 0 -- which looks
+      // like a complete machine rather than an error. Reject it at write time, as the client's
+      // own loader does, rather than storing a layout that can never work.
+      const res = await request(app)
+        .post("/api/layouts")
+        .send({ name: "car", gears: [makeGear({ id: "not-the-wheel" })], vehicles: [CAR] });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toMatch(/vehicles/);
+
+      const list = await request(app).get("/api/layouts");
+      expect(list.body).toHaveLength(0); // nothing was written
+    });
+
+    it("refuses a malformed vehicle, and a non-finite distance in particular", async () => {
+      const bad = [
+        { ...CAR, radius: "8" },
+        { ...CAR, distance: null },
+        { ...CAR, direction: [0, 1] },
+        { ...CAR, id: "" },
+        { ...CAR, limit: [0] },
+      ];
+      for (const vehicle of bad) {
+        const res = await request(app).post("/api/layouts").send({ name: "x", gears: [wheel()], vehicles: [vehicle] });
+        expect(res.status).toBe(400);
+      }
+    });
+
+    it("still loads the rows written before vehicles existed, as layouts with no vehicles", async () => {
+      // v1 rows are a bare gears array and v2 rows are { gears, remoteLinks }; neither has a
+      // `vehicles` key. Reading one must give [] rather than undefined -- nothing was lost,
+      // because nothing could have put a vehicle there.
+      const now = new Date().toISOString();
+      db.prepare("INSERT INTO layouts (id, name, user_id, gears_json, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)")
+        .run("v1", "old", JSON.stringify([wheel()]), now, now);
+      db.prepare("INSERT INTO layouts (id, name, user_id, gears_json, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)")
+        .run("v2", "older", JSON.stringify({ gears: [wheel()], remoteLinks: [] }), now, now);
+
+      for (const id of ["v1", "v2"]) {
+        const back = await request(app).get(`/api/layouts/${id}`);
+        expect(back.status).toBe(200);
+        expect(back.body.vehicles).toEqual([]);
+        expect(back.body.gears).toHaveLength(1);
+      }
+    });
+
+    it("accepts a layout with no vehicles at all, as most machines have none", async () => {
+      const created = await request(app).post("/api/layouts").send({ name: "windmill", gears: [makeGear()] });
+      expect(created.status).toBe(201);
+      const back = await request(app).get(`/api/layouts/${created.body.id}`);
+      expect(back.body.vehicles).toEqual([]);
+    });
+  });
 });
