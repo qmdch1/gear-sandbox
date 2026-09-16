@@ -19,6 +19,7 @@ import {
   MOTOR_TEETH,
   HEAD_TEETH,
   BELT_Y,
+  RUN_MIN_Z,
 } from "../../../src/sim/presets/conveyor";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
@@ -91,9 +92,40 @@ describe("createConveyorPreset", () => {
     }
   });
 
-  it("derives the stroke so parcels ride exactly the full run", () => {
-    expect(CARRY_STROKE * HEAD_R).toBeCloseTo(CARRY_TRAVEL, 12);
-    expect(createConveyorPreset().gears[0].reverseAt).toEqual([0, CARRY_STROKE]);
+  it("derives the stroke so the LAST parcel stops exactly at the slab edge, never past it", () => {
+    // The old body of this test opened with `expect(CARRY_STROKE * HEAD_R).toBeCloseTo(
+    // CARRY_TRAVEL)`. CARRY_STROKE is DEFINED as CARRY_TRAVEL / HEAD_R, so HEAD_R cancels and
+    // the assertion holds for every stroke and every radius -- exactly the way the 1/2 cancelled
+    // in the old J = m*r^2/2 ratio test. Setting CARRY_TRAVEL to 5 left it passing.
+    //
+    // What the stroke is actually FOR is the thing now measured: the trailing parcel is the one
+    // nearest the tail, so it is the one that would be tipped off the end first, and the stroke
+    // is derived from ITS start position for that reason. Run the belt to the end of its stroke
+    // and the trailing parcel must come to rest exactly on RUN_MIN_Z -- the slab edge -- having
+    // never gone beyond it.
+    let layout = createConveyorPreset();
+    const head = () => layout.gears.find((g) => g.id === HEAD_ID)!;
+    const trailingZ = () => parcelStartZ(PARCEL_COUNT - 1) - head().rotation * HEAD_R;
+
+    let lowest = trailingZ();
+    for (let i = 0; i < 60 * 20; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { ...layout, gears: r.gears };
+      lowest = Math.min(lowest, trailingZ());
+    }
+
+    // It reaches the edge -- and overshoots it by exactly one tick's worth of belt, because
+    // `reverseAt` is a discrete check that flips the drive on the step AFTER the bound is
+    // crossed. At this belt speed that is 0.067 units, well under a millimetre at this scale
+    // (one world unit is one centimetre). Asserting an exact landing would be asserting a
+    // continuous reverser the simulation does not have; asserting a loose bound would let a
+    // genuinely wrong stroke through. So: within one tick, and no further.
+    const perTick = Math.abs(head().angularVelocity) * HEAD_R * (1 / 60);
+    expect(perTick).toBeGreaterThan(0);
+    expect(lowest).toBeLessThanOrEqual(RUN_MIN_Z); // it really does reach the edge
+    expect(lowest).toBeGreaterThan(RUN_MIN_Z - perTick * 1.001); // and stops within a frame of it
+    // The reverser is what stops it there, so the stroke and the reversal must agree.
+    expect(layout.gears[0].reverseAt).toEqual([0, CARRY_STROKE]);
   });
 
   // NOTE: this checks the SHARED belt travel only -- that it runs out, comes back, and never

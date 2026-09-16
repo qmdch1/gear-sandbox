@@ -293,7 +293,11 @@ describe("createFerrisWheelProps", () => {
       const a = gondolaAngle(i);
       const px = HUB_X + Math.cos(a) * WHEEL_RADIUS;
       const py = HUB_Y + Math.sin(a) * WHEEL_RADIUS;
-      expect(Math.hypot(px - HUB_X, py - HUB_Y)).toBeCloseTo(WHEEL_RADIUS, 10);
+      // (Not `expect(hypot(px - HUB_X, py - HUB_Y)).toBeCloseTo(WHEEL_RADIUS)`, which this test
+      // used to open with: px and py are computed two lines above AS hub + cos/sin * radius, so
+      // that reduced to hypot(cos(a)*R, sin(a)*R) == R -- true for every angle and every radius,
+      // and reading nothing at all from createFerrisWheelProps. The rim claim is only worth
+      // making about a prop the preset actually placed, which is what the lookup below does.)
 
       for (const drop of [0, 1.3, 3.4, 2.0]) {
         const part = props.find(
@@ -304,6 +308,13 @@ describe("createFerrisWheelProps", () => {
             p.position[2] === 0,
         );
         expect(part, `gondola ${i} part at drop ${drop}`).toBeDefined();
+        // The pivot shaft (drop 0) is the part that must sit ON the rim circle. Measured from
+        // the prop's own position, so moving a gondola off the rim fails here.
+        if (drop === 0) {
+          expect(
+            Math.hypot(part!.position[0] - HUB_X, part!.position[1] - HUB_Y),
+          ).toBeCloseTo(WHEEL_RADIUS, 9);
+        }
       }
     }
 

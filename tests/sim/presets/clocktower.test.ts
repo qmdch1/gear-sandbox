@@ -50,9 +50,10 @@ describe("createClockTowerPreset", () => {
 
   it("stacks all three meshes at exactly their summed pitch radii", () => {
     const g = createClockTowerPreset().gears;
-    expect(DRIVE_R + MINUTE_R).toBe(DRIVE_MESH_DISTANCE);
-    expect(MINUTE_R + IDLER_R).toBe(MINUTE_IDLER_DISTANCE);
-    expect(IDLER_R + HOUR_R).toBe(IDLER_HOUR_DISTANCE);
+    // (No `expect(DRIVE_R + MINUTE_R).toBe(DRIVE_MESH_DISTANCE)` here: DRIVE_MESH_DISTANCE is
+    // DEFINED as that sum, so the three such lines this test used to open with could not fail
+    // under any edit. What follows measures the distance between the gears as actually seeded,
+    // which is the thing that can really drift.)
 
     const gap = (a: string, b: string) => Math.abs(byId(g, a).position[1] - byId(g, b).position[1]);
     expect(gap(DRIVE_ID, MINUTE_ID)).toBeCloseTo(DRIVE_MESH_DISTANCE, 10);
@@ -119,14 +120,37 @@ describe("createClockTowerPreset", () => {
 
 describe("createClockTowerProps", () => {
   it("hangs the two hands on DIFFERENT wheels, so they sweep at genuinely different rates", () => {
+    // This test used to filter by `attachTo` alone and check both lists were non-empty. That
+    // could not fail: `createClockTowerProps` also hangs four brass SPOKES on each of the two
+    // wheels, so `hourHand.length > 0` was satisfied by spokes even with the real hour hand
+    // mis-attached, and the attachTo set always held {minute, hour, pendulum} = 3, never below
+    // the 2 it asked for. Re-pointing the hour hand at MINUTE_ID -- precisely the bug the test
+    // names -- left every assertion passing.
+    //
+    // The hands are identifiable without guessing at sizes: of the props riding the two clock
+    // wheels, they are the only ones drawn in FRONT of the dial (z > 0) -- the spokes sit
+    // behind the tower at z = -TOWER_HALF - 1. (The pendulum's rod and bob are also in front,
+    // hence the restriction to the two wheels.)
     const props = createClockTowerProps();
-    const minuteHand = props.filter((p) => p.attachTo === MINUTE_ID);
-    const hourHand = props.filter((p) => p.attachTo === HOUR_ID);
-    expect(minuteHand.length).toBeGreaterThan(0);
-    expect(hourHand.length).toBeGreaterThan(0);
-    // Faking both hands onto one gear would make them move together -- the exact bug this
-    // preset exists to avoid.
-    expect(new Set(props.filter((p) => p.attachTo).map((p) => p.attachTo)).size).toBeGreaterThanOrEqual(2);
+    const hands = props.filter(
+      (p) => (p.attachTo === MINUTE_ID || p.attachTo === HOUR_ID) && p.position[2] > 0,
+    );
+    expect(hands).toHaveLength(2);
+
+    const onWheel = (id: string) => hands.filter((h) => h.attachTo === id);
+    expect(onWheel(MINUTE_ID)).toHaveLength(1);
+    expect(onWheel(HOUR_ID)).toHaveLength(1);
+    // The whole point: two hands, two different wheels. Put both on one and this fails.
+    expect(new Set(hands.map((h) => h.attachTo)).size).toBe(2);
+
+    // And they are the right way round -- the minute hand is the long one on the main dial,
+    // the hour hand the short one on the sub-dial. Swapping them keeps the ratio correct and
+    // the clock unreadable.
+    const [minuteHand] = onWheel(MINUTE_ID);
+    const [hourHand] = onWheel(HOUR_ID);
+    expect(minuteHand.size![0]).toBeGreaterThan(hourHand.size![0]);
+    expect(minuteHand.position[1]).toBe(DIAL_Y);
+    expect(hourHand.position[1]).toBe(SUBDIAL_Y);
   });
 
   it("swings the pendulum about its own pivot, rather than sliding it sideways", () => {
