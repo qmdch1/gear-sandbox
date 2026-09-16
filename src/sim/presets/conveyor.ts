@@ -84,9 +84,12 @@ export function parcelStartZ(i: number): number {
  *  reaches `RUN_MIN_Z` the belt has to turn round, or it rides off the end of the slab and
  *  hangs in mid-air (`windWith` clamps travel, it does not wrap). Deriving the stroke from
  *  `parcelStartZ(PARCEL_COUNT - 1)` rather than from the full 52-unit run is the whole point:
- *  a run-length stroke would carry the two trailing crates 10 and 22 units past the tail
- *  pulley. The leading crate correspondingly stops short of the tail -- which is what a line
- *  of parcels spread along a shuttling belt actually does. */
+ *  a 52-unit stroke would end the three crates at z = -29, -39 and -49, i.e. 3, 13 and 23 units
+ *  past the tail pulley at z = -26 (equivalently 6, 16 and 26 past the slab edge RUN_MIN_Z).
+ *  Note the figures must step by exactly PARCEL_SPACING = 10, since every crate shares one
+ *  stroke -- an earlier version of this comment said "10 and 22", a pair 12 apart, which no
+ *  measurement point could produce. The leading crate correspondingly stops short of the tail
+ *  -- which is what a line of parcels spread along a shuttling belt actually does. */
 export const CARRY_TRAVEL = parcelStartZ(PARCEL_COUNT - 1) - RUN_MIN_Z; // 3 - (-23) = 26
 
 /** Radians of pulley rotation that carry a parcel over exactly [0, CARRY_TRAVEL]. A belt on a

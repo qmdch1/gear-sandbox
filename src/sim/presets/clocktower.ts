@@ -101,10 +101,14 @@ export const BOB_ID = "시계탑_진자추";
 export const PENDULUM_SWING = 0.32;
 export const PENDULUM_SPEED = 0.9;
 /** The pivot hangs on a bracket off the tower's front wall (z = DIAL_Z), below the dial, so the
- *  swing is actually visible instead of being sealed inside opaque masonry. Sitting 6 units
- *  clear of the wall in +z also buys the whole pendulum cluster a permanent 6-unit head start
- *  on every wheel of the going train (all of which sit at z = 0), which is what keeps it out of
- *  both the overlap floor and -- more dangerous -- the mesh WINDOW: see the clearance test. */
+ *  swing is actually visible instead of being sealed inside opaque masonry. It sits 6 units
+ *  clear of the WALL in +z (20 - DIAL_Z = 20 - 14), which is a different quantity from its
+ *  separation from the going train: the train is all at z = 0, so that separation is the full
+ *  20. (This comment used to give 6 for both, understating the train separation by more than
+ *  3x.) Either figure keeps the cluster out of the overlap floor and -- more dangerous -- the
+ *  mesh WINDOW, and the 20 does so with room to spare; see the clearance test. The y gap does
+ *  as much work as the z gap in any case: the pivot at y = 30 is 18 below the hour wheel at
+ *  y = 48, which alone puts that pair outside both. */
 export const PENDULUM_PIVOT: [number, number, number] = [0, 30, 20];
 export const PENDULUM_LENGTH = 14;
 

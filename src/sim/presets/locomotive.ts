@@ -120,12 +120,17 @@ export const DRIVE_SPEED = 0.8;
 /** The locomotive's id as a `Vehicle`, so its boiler, cab and rods can say they ride on it. */
 export const LOCO_VEHICLE_ID = "증기기관차";
 
-/** Mass of the whole locomotive, kg. Its 24 x 66 x ~30 cm bounding box is mostly air -- a
- *  boiler shell, a cab and a footplate over an open frame -- so 4 kg is a heavy desk model
- *  rather than a solid billet. Reflected into the drivers as `mass * r^2` that is 4.0e-2
- *  kg*m^2, about 1.35 times the six drivers' own inertia (2.96e-2) put together: the engine is
- *  accelerating rather more train than machinery, which is why it leans into its start over
- *  roughly nine tenths of a second instead of leaping away. */
+/** Mass of the whole locomotive, kg. Measured from its own prop list (the unrotated boxes,
+ *  cylinders, cones and spheres) it spans about 31 x 43 x 103 cm -- roughly a metre of engine,
+ *  not the 24 x 66 x 30 an earlier version of this comment gave, which was wrong in all three
+ *  axes. That box is mostly air: a boiler shell, a cab and a footplate over an open frame come
+ *  to about 29 kg/m^3, so 4 kg is a heavy desk model rather than a solid billet.
+ *
+ *  The drivers ARE the root shaft here (the motorised crank is one of them), so no reflection
+ *  is needed to compare: `mass * r^2` = 4.0e-2 kg*m^2 against the six drivers' own 2.96e-2 put
+ *  together, i.e. 1.35 times. The engine is accelerating rather more train than machinery,
+ *  which is why it leans into its start over roughly nine tenths of a second instead of
+ *  leaping away. */
 export const LOCO_MASS = 4;
 
 /** Steel wheel on steel rail: rolling resistance of about 0.002, against roughly 0.015 for a

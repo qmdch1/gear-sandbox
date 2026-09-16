@@ -46,8 +46,10 @@ export const HOOK_TRAVEL = 22;
  *  this is 0.75 world units per second: a lift you can actually watch. */
 export const ROPE_RADIUS = 3;
 
-/** A hand-cranked hoist/winch -- a belt-and-pulley demo of REAL mechanical advantage,
- *  the opposite pedagogical point from `car.ts`. `car.ts` uses four pulleys of
+/** A hand-cranked hoist/winch -- a belt-and-pulley demo of speed reduction, the opposite
+ *  pedagogical point from `car.ts`. (This comment used to open by calling it a demo of "REAL
+ *  mechanical advantage", which it is not: see the note below on what the model does and does
+ *  not put behind that word.) `car.ts` uses four pulleys of
  *  IDENTICAL size to show "one engine, four wheels, locked to the same speed" (a
  *  synchronization demo). This preset instead uses two pulleys of DELIBERATELY
  *  DIFFERENT size -- a small driving pulley on the hand crank, and a much larger
@@ -55,14 +57,14 @@ export const ROPE_RADIUS = 3;
  *  tradeoff a belt/pulley pair provides: turn the small pulley fast, the large pulley
  *  (the drum a real winch's rope/cable would spool onto) turns proportionally slower.
  *
- *  In reality that speed reduction is exactly how a hand winch trades crank speed for
- *  lifting force (mechanical advantage) -- but, same stated non-goal as
- *  `differential`'s and `planetary`'s own `GEAR_NOTES`, this sandbox does not model
- *  torque or force at all, only angular velocity/rotation. So the claim this preset
- *  actually makes -- and the only claim its test suite verifies -- is a SPEED ratio:
- *  the drum turns at exactly 1/4 the crank's angular speed, same direction. It does
- *  NOT simulate lifting a load or claim to move more weight; there is no rope/load
- *  mechanic in this sandbox to make that claim honest.
+ *  In reality that speed reduction is exactly how a hand winch trades crank speed for lifting
+ *  force. The sandbox now models torque and inertia (`dynamics.ts`), so the trade itself is
+ *  real in the model -- but nothing here exercises it: this crank carries no `motor`, so its
+ *  speed is given rather than solved for, and WEIGHT never loads a train, because a `load` gear
+ *  is a viscous damper and a rope prop has no mass. A hoist here therefore cannot feel what is
+ *  on its hook. So the claim this preset actually makes -- and the only claim its test suite
+ *  verifies -- is a SPEED ratio: the drum turns at exactly 1/4 the crank's angular speed, same
+ *  direction. It does NOT simulate lifting a load or claim to move more weight.
  *
  *  Layout (top-down, X = crank-to-drum direction):
  *

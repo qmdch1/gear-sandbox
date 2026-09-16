@@ -71,7 +71,10 @@ export function createAirplaneProps(): Prop[] {
 
   const props: Prop[] = [
     // Fuselage: a long cylinder lying along Z (rotate 90° about X to lay the default-Y
-    // cylinder down along Z). Runs from the nose (z=NOSE_Z) back past the tail.
+    // cylinder down along Z). Centred at z = -2 and 38 long, so it spans z = -21..17 -- it
+    // stops ONE unit short of NOSE_Z = 18, where the hub gears sit, and the blades are a
+    // further unit ahead at 19. So the propeller assembly floats just off the nose rather
+    // than meeting it; the earlier "runs from the nose (z=NOSE_Z)" overstated the reach.
     { kind: "cylinder", position: [0, PROP_Y, -2], radius: 3, height: 38, color: body, texture: "metal", rotation: [Math.PI / 2, 0, 0], metalness: 0.5, roughness: 0.45 },
     // Main wings: a wide, thin box spanning left-right (X), mid-fuselage.
     { kind: "box", position: [0, PROP_Y, 2], size: [40, 1, 8], color: wing, texture: "metal", metalness: 0.4, roughness: 0.5 },

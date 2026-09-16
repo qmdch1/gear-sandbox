@@ -372,11 +372,14 @@ export const BASE_Y = 1.5;
  *  motor reverses and the whole train, ratchet included, runs happily backwards; `oneWay` governs
  *  which way power may be relayed through the graph, not which way a shaft may physically turn.
  *
- *  WHAT THIS PRESET DOES NOT CLAIM. This sandbox models angular velocity and rotation, and
- *  nothing else. Nothing here says anything about torque, lifting force, mechanical advantage or
- *  what mass the hook could raise; a real planetary reducer trades speed for torque, but there is
- *  no torque in this model to trade, so the only claim made -- and the only claim the test file
- *  verifies -- is the SPEED relationship between the shafts and the resulting rope travel. */
+ *  WHAT THIS PRESET DOES NOT CLAIM. Nothing here says what mass the hook could raise. A real
+ *  planetary reducer trades speed for torque, and since `dynamics.ts` arrived that trade IS in
+ *  the model -- `shaftBalances` reflects torque back through a ratio as SUM n_i*T_i. Two things
+ *  still stop this preset making a lifting claim. Its motor is a drawn housing rather than a
+ *  `Motor` field, so the input speed is given rather than solved for; and weight never loads a
+ *  train anywhere in this sandbox, because a `load` gear is a viscous damper, not a mass on a
+ *  rope. So the only claim made -- and the only claim the test file verifies -- is the SPEED
+ *  relationship between the shafts and the resulting rope travel. */
 export function createPlanetaryHoistPreset(): LayoutState {
   const gears: GearInstance[] = [
     seedGear(MOTOR_ID, "crank", MOTOR_POS, [0, 0, 1], MOTOR_TEETH, HOIST_MODULE, MOTOR_SPEED),

@@ -484,8 +484,13 @@ export function createFerrisWheelProps(): Prop[] {
   }
 
   // --- boarding platform -------------------------------------------------------------
-  // A raised timber deck standing in FRONT of the wheel (z from 3 to 11), so it abuts the
-  // gondolas (which are only 2.2 deep either side of z = 0) without ever intersecting them.
+  // A raised timber deck standing in FRONT of the wheel (z from 3 to 11). It does NOT clear
+  // the gondolas in z, contrary to what this comment used to say: 2.2 is the car body's
+  // half-depth alone, but the canopy is 2.5 either side and each gondola's pivot shaft is
+  // RIM_Z * 2 + 0.4 = 7.4 long, i.e. 3.7 either side, which reaches into the deck's own 3..11
+  // band. What actually keeps them apart is the Y separation below -- the deck top is at 3.2
+  // and the lowest gondola's floor at 3.5 -- so say that rather than claiming a z clearance
+  // the geometry does not have.
   // Deck top sits at y = 3.2; the lowest gondola's floor is at 24 - 16 - 4.5 = 3.5, so a
   // rider steps up 0.3 into the car.
   const DECK_Y = 2.7;      // deck slab centre; slab is 1 thick -> top 3.2, underside 2.2

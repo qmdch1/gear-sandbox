@@ -58,12 +58,23 @@ export const ROAD_WHEEL_AXIS: [number, number, number] = [1, 0, 0];
 export const CAR_VEHICLE_ID = "자동차";
 
 /** Mass of the whole car, kg: a hefty desk-sized die-cast model, which at 20 x 26 x 15 cm is
- *  about right. This is not decoration -- `dynamics.ts` reflects it into the engine as
- *  `mass * wheelRadius^2` = 1.28e-2 kg*m^2, which is six times ONE wheel's inertia and about
- *  1.5 times that of the whole mechanism (all six gears together come to 8.3e-3). So the engine
- *  spends rather more of its effort accelerating the car than accelerating its own gears, which
- *  is the point: the car pulls away instead of snapping to speed. (An earlier version of this
- *  comment claimed six times ALL FOUR wheels; that was six times one of them.) */
+ *  about right. This is not decoration -- it is most of what the engine has to accelerate.
+ *
+ *  Quote the figures IN ONE FRAME or they mean nothing, because the wheels turn at half engine
+ *  speed (n = 0.5) and inertia reflects as n^2. Referred to the ENGINE shaft, which is where
+ *  `shaftBalances` solves:
+ *
+ *      the car itself   mass * (wheelRadius * n)^2 = 3.2e-3  kg*m^2
+ *      all six gears    SUM J_i * n_i^2            = 2.27e-3 kg*m^2
+ *      total J_eff                                   5.47e-3 kg*m^2
+ *
+ *  So the car is 1.41 times the machinery that carries it, and the engine spends rather more of
+ *  its effort on the vehicle than on its own gears -- which is the point: it pulls away instead
+ *  of snapping to speed. (Two earlier versions of this comment were wrong here: one claimed six
+ *  times ALL FOUR wheels when it was six times one of them, and the next gave 1.28e-2 as the
+ *  figure "reflected into the engine" when that is the WHEEL-frame value -- four times too big
+ *  -- and then compared it against an unreflected 8.3e-3 for the gears. Mixing the two frames
+ *  is the easy mistake; n^2 is what separates them.) */
 export const CAR_MASS = 2;
 
 /** Engine, as a torque-speed curve rather than a commanded speed.

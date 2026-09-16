@@ -307,16 +307,23 @@ export const CASE_LENGTH = CASE_X_MAX - CASE_X_MIN; // 54
  *  A mesh in this sandbox turns its partner backwards (`rotation.ts` gives every mesh edge
  *  sign -1) at `driveTeeth / drivenTeeth`. With the input shaft commanded at +1.2 rad/s:
  *
- *    1단  12/36 = 1/3   ->  36T wheel at -0.4 rad/s   (reduction, the slow, heavy-pulling gear)
+ *    1단  12/36 = 1/3   ->  36T wheel at -0.4 rad/s   (the big reduction -- SLOW, and nothing
+ *                                                       here says "strong"; see below)
  *    2단  16/32 = 1/2   ->  32T wheel at -0.6 rad/s   (reduction)
  *    3단  30/18 = 5/3   ->  18T wheel at -2.0 rad/s   (step-up: a real box's overdrive top)
  *
  *  Three separately verified, visibly different speeds, all running at once off one input --
  *  which is exactly what a CONSTANT-MESH box does. Every pair stays engaged all the time; the
  *  layshaft wheels each spin free on the shaft at their own ratio, and the driver picks one by
- *  sliding a dog collar into it. Nothing here is a claim about torque, pulling power or load
- *  capacity: this sandbox models angular velocity and rotation ONLY. "Reduction" below means
- *  the output turns slower than the input, and nothing more.
+ *  sliding a dog collar into it. Nothing here is a claim about pulling power or load capacity.
+ *  Note carefully what that now rests on: `dynamics.ts` DOES model torque and inertia, and a
+ *  reduction in it really does divide the speed and multiply the torque at the output, exactly
+ *  as the textbook says -- `shaftBalances` refers inertia back as SUM J_i*n_i^2 and torque as
+ *  SUM n_i*T_i. What is missing is anything for that torque to WORK AGAINST: this box has no
+ *  `motor` on its input shaft (its speed is given rather than solved for), and weight never
+ *  loads a train anywhere in this sandbox, because a `load` gear is a viscous damper rather
+ *  than a mass on a rope. So "reduction" below means the output turns slower than the input,
+ *  and the strength that would come with it is real in the model but has nothing to push.
  *
  *  HOW ONE SHAFT IS SPELLED
  *  ------------------------

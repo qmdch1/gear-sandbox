@@ -406,8 +406,13 @@ export function createFactoryProps(): Prop[] {
     props.push({ kind: "box", position: [ENGINE_X, (3 + entablatureY - 1) / 2, sz * 7], size: [2.6, entablatureY - 1 - 3, 2.6], color: IRON, texture: "metal", metalness: 0.6, roughness: 0.45 });
   }
   props.push(
-    // Entablature the cylinder is bolted to. The crosshead tops out at ENGINE_Y + 18 = 36,
-    // just under it.
+    // Entablature the cylinder is bolted to. `crankSliderPose` puts the crosshead's CENTRE at
+    // most crankRadius + rodLength = 5 + 12 = 17 above the crank, i.e. y = ENGINE_Y + 17 = 35
+    // (not the 18/36 this comment used to give -- 18 is not a quantity of this linkage). The
+    // crosshead box is 2.6 tall, so its top face reaches 36.3 while the entablature's underside
+    // is at 36: at top dead centre it passes 0.3 units into the entablature rather than sitting
+    // just under it. Three millimetres at this scale, and left as drawn -- but recorded here
+    // rather than described as a clearance that does not exist.
     { kind: "box", position: [ENGINE_X, entablatureY, 0], size: [14, 2, 18], color: IRON, texture: "metal", metalness: 0.6, roughness: 0.45 },
     // The steam cylinder, standing on the entablature.
     { kind: "cylinder", position: [ENGINE_X, entablatureY + 4.5, 0], radius: 4.2, height: 7, color: IRON, texture: "rust", metalness: 0.55, roughness: 0.6, radialSegments: 24 },
