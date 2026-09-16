@@ -22,6 +22,25 @@ branch in `meshing.ts` nothing drives end to end.
 authored with something below y = 0 (the piston engine by 16 units). `src/sim/ground.ts` seats a
 machine before it is shown, and a test checks each preset and the whole yard.
 
+**The simulation solves real mechanics, not just ratios.** `src/sim/dynamics.ts` integrates each
+motorised shaft from its own torque balance (`J_eff·dω/dt = T_eff`, with reflected inertia
+`ΣJᵢnᵢ²` and reflected torque `ΣnᵢTᵢ`), so a machine takes time to come up to speed, runs slower
+with a load on it, and is held back by the weight it carries. Masses come from the steel volume
+each part is drawn as, so no number in there is a tuning knob. `src/sim/gravity.ts` gives loose
+parts real free fall and bouncing: contact time is solved algebraically inside the step, so a
+drop is exactly `h = gt²/2` and a rebound exactly `e²h` at any frame rate. `src/sim/units.ts`
+pins the scale — **one world unit is one centimetre** — and gravity is selectable (Earth, Moon,
+Mars, Jupiter, none), reaching both the falling parts and a vehicle's rolling resistance.
+
+**Two machines actually drive.** The car and the locomotive are `Vehicle`s with mass, carried by
+no-slip rolling (`distance = wheelRotation × radius`) and turned round by a limit switch that
+reverses the motor, so they overshoot while braking exactly as something with momentum should.
+Their gears never move: travel is a displacement applied when drawing, which is what keeps
+meshing and overlap meaning the same thing parked or moving.
+
+**Sound.** Procedurally synthesised, no audio files: a whirr whose pitch follows the fastest
+gear, tooth clatter over it, and a landing thud whose loudness comes from the impact speed.
+
 **Movement.** Props follow their gears through five mechanisms (`attachTo`, `slideWith`,
 `windWith`, `linkTo`, plus `reverseAt` on a crank) — see AGENTS.md. Belts and chains now travel
 with the wheels driving them, which they did not before: the ribbon geometry depended only on its
@@ -37,12 +56,10 @@ turned back on.
 
 ## Deliberately not done
 
-- **The clock movement and music box stay out of the yard on purpose.** They work and are
-  reachable from the preset panel; they simply have not been placed on the grid. Placing them
-  means measuring their extents and checking the cross-machine overlap floor, as `showroom.ts`
-  documents.
-- **The clock movement and the music box are excluded from the yard on purpose** — they are
-  tabletop pieces and read as scale nonsense beside a locomotive.
+- **The clock movement and music box stay out of the yard on purpose.** They are tabletop
+  pieces and read as scale nonsense beside a locomotive. They work and are reachable from the
+  preset panel; placing them would mean measuring their extents and checking the cross-machine
+  overlap floor, as `showroom.ts` documents.
 - **The showroom does not interlock.** Each machine has its own crank. A single power source
   driving the whole yard would need one connected component, and `rotation.ts` silently discards
   every crank but the first in such a component — so it would mean rebuilding each preset's input,
@@ -56,13 +73,27 @@ turned back on.
   another whole-showroom test (see the test-performance note in AGENTS.md).
 - Repair is still wired to the UI while wear is off, so the button is permanently disabled. Either
   is defensible — leaving it means the feature is there the moment wear is switched back on.
+- **Dropped parts fall through machines.** There is no contact between a loose part and a gear —
+  only with the ground. A part dropped onto the locomotive lands on the floor beside it.
+- **Only two machines are motorised.** The other twenty-one cranks are still ideal velocity
+  sources: honest as "a hand turning a handle at a chosen rate", but they do not spin up and do
+  not sag under load. Converting one is a small change (`motor` on its crank, seed it at rest)
+  but it changes that preset's numbers, so its tests move with it.
+- **A `load` gear is a damper, not a weight.** Nothing hangs off a drum, so a hoist does not feel
+  what it is lifting. This is the biggest remaining gap between the model and the machines it
+  draws.
 
 ## If you are looking for something to do
 
-1. Interlock a *new* preset rather than the yard: one power source, many stations, is what
+1. **Make a weight actually pull.** A `load` could carry a mass and a lever arm and contribute a
+   constant `m·g·r` torque instead of viscous damping — then a hoist really would strain, run
+   slower lifting than lowering, and overhaul when released. Everything needed is already in
+   `dynamics.ts`; it is a new term in the torque sum plus a `load`'s mass, and it would close the
+   gap listed under rough edges above.
+2. Interlock a *new* preset rather than the yard: one power source, many stations, is what
    `factory.ts` already demonstrates and could be pushed much further.
-2. The yard is a 5x4 grid and is full. A 24th machine means either a wider grid (and a bigger
+3. The yard is a 5x4 grid and is full. A 24th machine means either a wider grid (and a bigger
    `GROUND_SIZE`, which `chainGeometry.ts`'s cap derivation cites) or deciding a machine belongs
    on the bench instead.
-3. `planetary` is used but only as an ordinary reduction wheel; a machine built *around* a real
+4. `planetary` is used but only as an ordinary reduction wheel; a machine built *around* a real
    sun/planet/ring arrangement would exercise it the way the capstan now exercises the ratchet.

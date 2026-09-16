@@ -20,6 +20,9 @@ saved layouts. Tests are Vitest. There is no framework — plain modules.
 ```
 src/main.ts       entry point: builds the DOM, seeds the showroom, owns the frame loop
 src/sim/          simulation core: types, meshing, graph, rotation, wear, repair, simulation
+src/sim/units.ts  the world-unit <-> SI scale (1 unit = 1 cm) every physics formula converts at
+src/sim/dynamics.ts  torque / inertia / motor curve for a gear train; rollingDirection
+src/sim/gravity.ts   free fall, contact, restitution and friction for loose dropped parts
 src/sim/presets/  one module per example machine (25 files: 23 presets + index + wheels helper)
 src/render/       THREE.js: scene, gear geometry, props, procedural textures, chain/belt ribbons
 src/ui/           DOM panels (palette, diagnostics, durability, save/load, presets)
@@ -33,13 +36,50 @@ tests/            mirrors src/ (tests/sim, tests/render, tests/ui, tests/integra
 
 ## The one rule that matters most: only claim what you verified
 
-This sandbox models **angular velocity and rotation. Nothing else.** There is no torque, no
-force, no mass, no friction, no load capacity.
+This used to say the sandbox modelled "angular velocity and rotation, nothing else". That is no
+longer true, and the line has moved — so know exactly where it now is.
 
-So: never write that a mechanism "provides mechanical advantage", "lifts N", "is stronger",
-or "delivers torque". A winch here trades crank speed for nothing — it just turns slower.
-Ratios, directions and travel distances are fair game because they are real outputs of the
-model; anything about force is not.
+**Modelled, and fair to claim.** Rotation and angular velocity as before, plus real mechanics in
+`src/sim/dynamics.ts` and `src/sim/gravity.ts`:
+
+- torque, moment of inertia and angular acceleration, `J_eff·dω/dt = T_eff`, with the textbook
+  reflection rules `J_eff = Σ Jᵢnᵢ²` and `T_eff = Σ nᵢTᵢ`;
+- mass, derived from the steel volume each part is actually *drawn* as — never a free parameter;
+- motors with a torque–speed curve, so a machine spins up, sags under load and recovers;
+- viscous bearing and load damping, and rolling resistance as a fraction of a vehicle's weight;
+- gravity at a real 9.80665 m/s² (selectable per body), free fall, restitution and contact
+  friction for loose parts;
+- vehicles carried by no-slip rolling: `distance = wheelRotation × radius`.
+
+Units are pinned in `src/sim/units.ts`: **one world unit is one centimetre**. Every physics
+formula is in SI and converts at that boundary. A quantity in world units used as if it were
+metres is a bug, not a rounding difference.
+
+**Still NOT modelled. Do not claim these:**
+
+- **Weight does not load a gear train.** A `load` gear resists *viscously* (it is a damper), not
+  by hanging off a drum. A hoist lifting a mass does not feel that mass; a crane's jib does not
+  sag. Gravity reaches the gear train through exactly one path — a vehicle's rolling resistance.
+- **No traction limit.** A wheel never slips, spins or skids however much torque it is given.
+- **No contact between machine parts.** Gears do not collide, loose parts fall straight through
+  machines, and nothing pushes anything else. `isOverlapping` is a *diagnostic*, not physics.
+- **No strength, stress or failure under load.** Durability wears with time and speed; it is a
+  gameplay mechanic, not a material model. Nothing breaks from being overloaded.
+- **No steam, no combustion, no thermal or fluid anything.** A motor's straight line stands in
+  for whatever the machine would really be driven by.
+- **No backlash, no compliance, no efficiency loss at a mesh.** A train is perfectly rigid, and
+  its ratios are exact.
+
+So a winch still does not "lift N" and still does not "provide mechanical advantage" in the
+sense of raising a weight. But it is now fair to say a machine takes 0.4 s to come up to speed,
+that a reduction makes a driven gear feel a sixteenth as heavy at the input, or that a car
+needs its engine to accelerate 2 kg — those are real outputs, and the tests assert them
+numerically.
+
+**Every number you write in a comment is a claim.** This repo has drifted before: an earlier
+version of `car.ts` said the car's mass was "six times the four wheels' inertia" when it was six
+times *one* wheel; the locomotive's own file denied the torque model it defines. Run the figure
+before you write it.
 
 The same applies to comments about tests. **Do not write "the test asserts X" unless you wrote
 that assertion.** Several files in this repo once claimed tests that did not exist; they were
@@ -48,7 +88,7 @@ caught and written, but the habit is what causes it.
 ## Verifying a change
 
 ```bash
-npx vitest run          # full suite (810 tests in 69 files); `npm test` is the same thing
+npx vitest run          # full suite (883 tests in 73 files); `npm test` is the same thing
 npx tsc --noEmit        # types — vitest does NOT type-check, so this catches real bugs it misses
 npx vite build          # production build
 ```
