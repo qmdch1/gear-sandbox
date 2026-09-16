@@ -123,8 +123,10 @@ export const HOIST_STROKE = HOOK_TRAVEL / ROPE_RADIUS;
  *  overwriting it. Before that composition existed, the jib orbited the mast while the hook
  *  hung behind in mid-air.
  *
- *  As everywhere in this sandbox, the hook's motion is pure kinematics -- where the hook goes,
- *  never what load it could lift; there is no force model here to make such a claim honest.
+ *  The hook's motion is pure kinematics -- where the hook goes, never what it could lift. That
+ *  limit survives the arrival of `dynamics.ts`: torque, inertia and mass are modelled, but
+ *  WEIGHT never loads a train. A `load` gear is a viscous damper, not a mass on a rope, so a
+ *  crane here cannot feel what is on its hook and no lifting claim would be honest.
  *
  *  Geometry: 20 + 4 = 24, so the slew motor sits 24 units from the mast centre, which also
  *  clears `classify`'s overlap floor of (20 + 4) * 0.95 = 22.8.

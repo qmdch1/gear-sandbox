@@ -168,8 +168,11 @@ export function gondolaAngle(i: number): number {
  *
  *  The honest, verifiable claim of this preset is therefore a SPEED ratio and nothing else:
  *  the wheel hub turns at exactly 1/12 the motor's angular speed, in the opposite direction.
- *  This sandbox models angular velocity and rotation only -- it has no notion of torque,
- *  force, or how much weight a gondola may carry, so no such claim is made here. Every
+ *  This preset's crank carries no `motor`, so its speed is an input rather than an outcome --
+ *  an ideal velocity source, the honest reading of which is "a hand cranking at a chosen rate".
+ *  And what a gondola may CARRY stays unclaimable even now that the sandbox models torque: a
+ *  rider's weight would have to hang off the hub, and nothing in the model lets weight load a
+ *  train (a `load` gear is a viscous damper, not a mass on a rope). Every
  *  number in this comment is checked numerically in tests/sim/presets/ferriswheel.test.ts.
  *
  *  No `reverseAt` and no `travelLimit` anywhere: unlike the hoist's hook or the castle's

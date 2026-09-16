@@ -143,9 +143,10 @@ const PADDLE_COUNT = 16;
  *    omega(맷돌)   = omega(수직축)               =      -1.5 rad/s
  *
  *  A water mill is a step-UP drive: the wheel is huge and slow, the stones need to run fast,
- *  and 36:12 buys exactly 3x. Like every other preset here this sandbox models angular
- *  velocity and accumulated rotation ONLY -- there is no torque, no force, no grinding, and
- *  nothing in this file claims otherwise. The sign flip is not decorative either: a tooth
+ *  and 36:12 buys exactly 3x. The sandbox models torque and inertia, but this mill does not
+ *  use them: its wheel carries no `motor`, so its speed is given rather than solved for, and
+ *  there is no water pushing it, no grinding resistance and no meal. Nothing in this file claims
+ *  otherwise. The sign flip is not decorative either: a tooth
  *  mesh reverses, so the stones run opposite-handed to the wheel.
  *
  *  Nothing here needs `reverseAt` or `travelLimit`: a water wheel genuinely does run one way

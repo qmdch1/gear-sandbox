@@ -111,8 +111,10 @@ export const PINION_Z = AXLE_Z - FINAL_DRIVE_DISTANCE; // -24
  *
  *  WHAT THIS DOES NOT CLAIM. A real differential's defining trick is letting the two wheels turn
  *  at DIFFERENT speeds through a corner while splitting drive between them. That is a torque
- *  relationship, and this sandbox models angular velocity and rotation only -- there is no force
- *  here to split. So both wheels are driven from the one differential and turn together, and the
+ *  relationship, and although `dynamics.ts` now does model torque, it solves ONE torque balance
+ *  per rigid train -- `rotation.ts` gives a connected component a single degree of freedom, so
+ *  there is no second DOF for a differential to divide drive between. So both wheels are driven
+ *  from the one differential and turn together, and the
  *  honest, verified claim of this preset is only the right-angle final drive: the axle runs at
  *  exactly 1/3 of the propshaft, reversed. tests/sim/presets/differentialaxle.test.ts checks that
  *  over hundreds of real ticks.

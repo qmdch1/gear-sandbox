@@ -161,9 +161,14 @@ export const PENDULUM_LENGTH = 14;
  *  actually does. It is a separate, self-powered cluster -- as a real pendulum is independent
  *  of the motion work it regulates -- carried on a bracket off the tower's front wall.
  *
- *  This preset models rotation and angular velocity only, like the rest of the sandbox. Nothing
- *  here says anything about torque, driving weight or how much the train could pull; the wheel
- *  sizes are chosen for what fits the tower, not for any force claim. */
+ *  This preset models rotation and angular velocity only -- NOT, any longer, "like the rest of
+ *  the sandbox": `dynamics.ts` gives the sandbox torque, inertia and a motor torque-speed curve,
+ *  and `simulation.ts` solves a motorised crank's speed rather than reading it. What is true of
+ *  THIS tower is narrower: neither of its cranks carries a `motor`, so both remain ideal
+ *  velocity sources whose speed is given. And driving WEIGHT -- the falling weight that powers a
+ *  real tower clock -- is still unmodellable here, because nothing lets weight load a train: a
+ *  `load` gear is a viscous damper, not a mass on a line. The wheel sizes are chosen for what
+ *  fits the tower, not for any force claim. */
 export function createClockTowerPreset(): LayoutState {
   const driveY = DIAL_Y + DRIVE_MESH_DISTANCE; // 68
   const idlerY = DIAL_Y - MINUTE_IDLER_DISTANCE; // 58

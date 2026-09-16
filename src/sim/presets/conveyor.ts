@@ -119,9 +119,11 @@ export const CARRY_STROKE = CARRY_TRAVEL / HEAD_R; // 26 / 4 = 6.5
  *  along -Z, which is the same rope-on-drum kinematics (radius x angle) a belt on a pulley
  *  obeys.
  *
- *  Purely kinematic, like the rest of this sandbox: this says where the belt and the crates on
- *  it are at each instant, and nothing at all about what the motor could pull or how heavy a
- *  parcel may be. */
+ *  Purely kinematic -- but no longer "like the rest of this sandbox", which now models torque
+ *  and inertia in `dynamics.ts`. This belt's drive carries no `motor` field, so its speed is
+ *  given rather than solved for, and the parcels are props carried by `windWith` rather than
+ *  bodies with mass. So this says where the belt and the crates on it are at each instant, and
+ *  nothing about what the drive could pull or how heavy a parcel may be. */
 export function createConveyorPreset(): LayoutState {
   const gears: GearInstance[] = [
     seedGear(MOTOR_ID, "crank", [0, BELT_Y, HEAD_Z], [1, 0, 0], MOTOR_TEETH, CONVEYOR_MODULE, MOTOR_SPEED),

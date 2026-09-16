@@ -169,9 +169,10 @@ export const CRANKPIN_IDS: readonly string[] = [
  *
  *  WHAT THIS PRESET DOES **NOT** CLAIM
  *  -----------------------------------
- *  This sandbox models angular velocity and rotation only. Nothing here is combustion,
- *  torque, power or "capacity": the flywheel is a spinning prop, not an energy store, and
- *  the four cylinders do not add anything up. The honest, test-verified claims are exactly
+ *  Nothing here is combustion, power or "capacity". The sandbox does model torque and inertia,
+ *  but this engine is turned by a hand crank with no `motor` on it, so its speed is given rather
+ *  than solved for -- and the flywheel is a spinning prop whose stored energy nothing reads, so
+ *  the four cylinders still do not add anything up. The honest, test-verified claims are exactly
  *  two: (1) all five crank-line wheels turn at the same speed and direction as the hand
  *  crank -- ratio 1, no reversal anywhere; (2) each piston reciprocates over a stroke of
  *  exactly 8 world units, with cylinders 2 and 3 exactly half a revolution behind 1 and 4. */

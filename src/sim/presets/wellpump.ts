@@ -91,9 +91,11 @@ export const STROKE = BUCKET_TRAVEL / ROPE_RADIUS;
  *  Both turn about world X so the handle stands upright beside the well, the way someone would
  *  actually crank it.
  *
- *  The bucket's rise is pure kinematics, like everything else in this sandbox: rope on a drum
- *  of radius r lifts by r * angle. It says where the bucket goes, never how heavy a bucket the
- *  well could raise -- there is no force model here to make such a claim honest.
+ *  The bucket's rise is pure kinematics: rope on a drum of radius r lifts by r * angle. It says
+ *  where the bucket goes, never how heavy a bucket the well could raise. That stays true now
+ *  that the sandbox models torque, because WEIGHT still never loads a train -- a `load` gear is
+ *  a viscous damper, not a mass on a rope -- and this handle carries no `motor` anyway, so its
+ *  speed is given rather than solved for.
  *
  *  Stroke: the handle reverses at 0 and BUCKET_TRAVEL / ROPE_RADIUS radians, which sweeps the
  *  bucket over exactly [0, BUCKET_TRAVEL] and back, forever -- ending each draw with the

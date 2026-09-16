@@ -85,10 +85,13 @@ export const WHEEL_TIP_R = WHEEL_R + TABLE_MODULE; // 21
  *
  *  A 20:1 step-down in ONE mesh is what a worm buys you: an ordinary spur pair would need a
  *  40-tooth pinion against an 800-tooth wheel to do the same. What it does NOT buy you here is
- *  anything about force -- this sandbox models angular velocity and rotation only, so a worm
- *  drive in it is a SPEED reduction and a one-way path, nothing else. Real worm sets are often
- *  self-locking, but that comes from friction, which this model does not have; the one-way
- *  behaviour below is `evaluatePair`'s `oneWay` field, a rule, not a friction result. */
+ *  mechanical advantage you could put a number on: this table's crank carries no `motor` (the
+ *  "motor" further down is a drawn housing, not a `Motor` field), so its speed is given rather
+ *  than solved for, and a worm drive in it is a SPEED reduction and a one-way path. Real worm
+ *  sets are often self-locking, which comes from friction AT THE MESH -- the sandbox has viscous
+ *  bearing drag, rolling resistance and contact friction for loose parts, but nothing at a tooth
+ *  contact, so it cannot produce self-locking. The one-way behaviour below is `evaluatePair`'s
+ *  `oneWay` field, a rule, not a friction result. */
 export const WORM_RATIO = WORM_STARTS / WHEEL_TEETH; // 2 / 40 = 1/20 = 0.05
 
 export const MOTOR_SPEED = 6;

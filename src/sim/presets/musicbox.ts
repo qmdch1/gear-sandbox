@@ -133,9 +133,11 @@ export const FAN_SWEEP_R = Math.hypot(FAN_OFFSET + FAN_BLADE[0] / 2, FAN_BLADE[1
  *  the same direction as the key. All of it is verified numerically over hundreds of real ticks
  *  in tests/sim/presets/musicbox.test.ts rather than only derived here.
  *
- *  This sandbox models angular velocity and rotation only. Nothing here says anything about the
- *  torque a mainspring would deliver, how long a real movement would run, or how hard the pins
- *  would strike -- only how fast each part turns relative to the others.
+ *  The sandbox does model torque and inertia now, but this movement does not use them: its
+ *  crank carries no `motor`, so it turns at a speed that is given rather than solved for. So
+ *  nothing here says what torque a mainspring would deliver, how long a real movement would run
+ *  before unwinding, or how hard the pins would strike -- only how fast each part turns relative
+ *  to the others.
  *
  *  Everything runs about world Z so the barrel lies across the case with its pins facing the
  *  comb, the way a real movement is laid out.
