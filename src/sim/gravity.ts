@@ -137,14 +137,19 @@ export function stepBody(
     remaining -= t;
 
     const approach = -vy; // positive: how fast it is coming down onto the floor
-    // Sliding contact converts some horizontal motion to spin and heat. The normal impulse over
-    // a bounce is m*(1+e)*approach, so the tangential impulse Coulomb friction can supply is
-    // mu times that -- mass cancels, leaving a speed change.
-    const tangentialLoss = friction * (1 + e) * approach;
+    const landing = approach < restSpeed(g, dt);
+    // Sliding contact converts some horizontal motion to spin and heat. Coulomb friction can
+    // supply a tangential impulse of mu times the NORMAL impulse, and the normal impulse is
+    // m*(1 + e_used)*approach -- where e_used is the restitution this particular contact is
+    // resolved with. A landing brings the body to rest against the floor rather than throwing
+    // it back, so its normal impulse is m*approach: using (1 + e) there would brake a sliding
+    // part by up to 1.85x more than the contact could physically have taken from it. Mass
+    // cancels throughout, leaving a speed change.
+    const tangentialLoss = friction * (1 + (landing ? 0 : e)) * approach;
     ({ vx, vz } = brakeHorizontal(vx, vz, tangentialLoss));
 
-    if (approach < restSpeed(g, dt)) {
-      // Landed. Park it rather than starting an infinite sequence of shrinking bounces.
+    if (landing) {
+      // Park it rather than starting an infinite sequence of shrinking bounces.
       vy = 0;
       resting = true;
       continue;
@@ -171,9 +176,13 @@ export function stepBody(
   return { ...body, position: [x, y, z], velocity: [vx, vy, vz], rotation, resting };
 }
 
-/** Smallest time in (0, limit] at which a body at `y` moving at `vy` under acceleration `a`
+/** Smallest time in [0, limit] at which a body at `y` moving at `vy` under acceleration `a`
  *  reaches `floor`, or null if it does not within the window. Solves the quadratic directly
- *  instead of substepping, so the answer does not depend on the frame rate. */
+ *  instead of substepping, so the answer does not depend on the frame rate.
+ *
+ *  Zero is a legitimate answer, and the one case that returns it is a body ALREADY at or below
+ *  the floor and still moving into it: contact is happening now, and reporting the next crossing
+ *  instead would let it sink for another step first. Every other answer is strictly positive. */
 export function timeToFloor(
   y: number,
   vy: number,
@@ -182,7 +191,10 @@ export function timeToFloor(
   limit: number,
 ): number | null {
   const c = y - floor;
-  if (c <= 0 && vy <= 0) return 0; // already at or under the floor and still descending
+  // Already at or under the floor and not moving away from it: contact is now. `a` does not
+  // enter this -- an upward acceleration large enough to rescue the body within the step would
+  // still have it in contact at t = 0, which is the thing being reported.
+  if (c <= 0 && vy <= 0) return 0;
   // 0.5*a*t^2 + vy*t + c = 0
   if (Math.abs(a) < 1e-12) {
     if (vy >= 0) return null;

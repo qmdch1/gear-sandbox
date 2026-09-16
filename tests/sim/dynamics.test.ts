@@ -136,6 +136,27 @@ describe("reflected inertia", () => {
     expect(balance.inertia).toBeCloseTo(expected, 12);
   });
 
+  it("refers TORQUE back through the ratio itself, not its square", () => {
+    // Inertia reflects as n^2 and torque as n -- two different powers of the same number, and
+    // a mix-up would be invisible at n = 1, which is the only ratio the rest of this file's
+    // motors ever run at. Hang a load behind a 4:1 reduction and check the drag it contributes
+    // at the input is LOAD_DAMPING * n^2 (the load's own damping torque, -c*w_load, referred
+    // back: n * c * (n * w_root)).
+    const layout = pair(10, 40);
+    // A load coupled coincidentally onto the driven wheel turns at the driven wheel's speed.
+    layout.gears.push(gear({ id: "brake", type: "load", teeth: 0, module: 2, position: [25, 0, 0] }));
+    const edges = buildEdges(layout.gears, layout.remoteLinks);
+    expect(driveRatios(layout.gears, edges).get("brake")!.ratio).toBeCloseTo(-0.25, 9);
+
+    const withLoad = shaftBalances(layout.gears, edges, []).get("drive")!;
+    const without = shaftBalances(layout.gears.slice(0, 2), buildEdges(layout.gears.slice(0, 2), []), [])
+      .get("drive")!;
+    expect(withLoad.damping - without.damping).toBeCloseTo(LOAD_DAMPING * 0.25 * 0.25, 12);
+    // If torque reflected as n^2 * n or as n^0 the figure would be 16x or 16x off respectively.
+    expect(withLoad.damping - without.damping).not.toBeCloseTo(LOAD_DAMPING, 6);
+    expect(withLoad.damping - without.damping).not.toBeCloseTo(LOAD_DAMPING * 0.25, 6);
+  });
+
   it("a bigger machine takes longer to come up to speed", () => {
     const spinUp = (drivenTeeth: number) => {
       let layout = pair(10, drivenTeeth);

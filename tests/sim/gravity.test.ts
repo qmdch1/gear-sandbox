@@ -153,6 +153,39 @@ describe("bouncing", () => {
     expect(current.resting).toBe(true); // and it does eventually settle
   });
 
+  it("clamps restitution into [0, 1], so no part can launch itself out of the world", () => {
+    // e > 1 returns more energy than the impact carried in, so each bounce would climb higher
+    // than the last. The clamp is the only thing between a hand-edited save and a part leaving
+    // the scene for good.
+    const h = 300;
+    const runaway = run(body({ position: [0, h, 0], radius: 0, restitution: 4 }), 4, 1 / 600);
+    expect(runaway.apexAfterFirstContact).toBeLessThanOrEqual(h + 1e-6);
+    // Clamped to exactly 1 -- a perfect bounce, returning to the height it fell from.
+    expect(runaway.apexAfterFirstContact).toBeCloseTo(h, 0);
+    // And a negative e behaves as a dead drop, not as a body sucked downward.
+    const negative = run(body({ position: [0, h, 0], restitution: -2 }), 2, 1 / 240).body;
+    expect(negative.resting).toBe(true);
+    expect(negative.position[1]).toBeCloseTo(2, 9);
+  });
+
+  it("a bouncing part is braked sideways by the contact, in proportion to how hard it lands", () => {
+    // Coulomb friction at a bounce can take mu*(1+e) times the approach speed out of the
+    // horizontal motion. Nothing asserted this, so the whole tangential branch could have been
+    // deleted without a single test noticing.
+    // Dropped 40 units it arrives at 280 units/s, so a mu = 0.4 floor takes
+    // 0.4 * (1 + 0.8) * 280 = 202 units/s of sideways speed at the bounce -- enough to be
+    // unmistakable against a 600 unit/s slide, and not enough to stop it dead, which would
+    // make the comparison below say nothing.
+    const sideways = (friction: number) =>
+      run(body({ position: [0, 40, 0], velocity: [600, 0, 0], restitution: 0.8 }), 0.4, 1 / 600, {
+        friction,
+      }).body.velocity[0];
+    expect(sideways(0)).toBeCloseTo(600, 6); // frictionless: it keeps every bit of it
+    expect(sideways(0.4)).toBeLessThan(600); // and a real floor takes some away
+    expect(sideways(0.4)).toBeGreaterThan(0); // but never reverses it
+    expect(sideways(0.8)).toBeLessThan(sideways(0.4)); // a grippier floor takes more
+  });
+
   it("honours a raised floor", () => {
     const { body: landed } = run(body({ position: [0, 300, 0], restitution: 0 }), 2, 1 / 120, {
       groundY: 50,
