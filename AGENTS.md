@@ -85,10 +85,35 @@ The same applies to comments about tests. **Do not write "the test asserts X" un
 that assertion.** Several files in this repo once claimed tests that did not exist; they were
 caught and written, but the habit is what causes it.
 
+### The assertion that cannot fail
+
+The commonest defect found in this repo's tests is not a wrong assertion — it is one that is
+true by construction. A sweep turned up around thirty. They come in four shapes:
+
+1. **Restating a definition.** `export const TIP_R = R + MODULE` in the preset, and
+   `expect(TIP_R).toBe(R + MODULE)` in the test. No edit to anything can fail it.
+2. **An algebraic identity.** `CARRY_STROKE` is defined as `CARRY_TRAVEL / HEAD_R`, so
+   `expect(CARRY_STROKE * HEAD_R).toBeCloseTo(CARRY_TRAVEL)` cancels `HEAD_R` and holds for
+   every value. The same way a ratio of two inertias cancels the `1/2` in `J = m·r²/2`.
+3. **Re-measuring the test's own arithmetic.** The test computes `px = HUB_X + cos(a)·R`, then
+   asserts `hypot(px − HUB_X, …) === R`. It never reads the thing under test at all.
+4. **Asserting what the integrator enforces.** `simulation.ts` clamps a vehicle into its limit
+   every tick, so asserting `|distance| <= limit` in a loop restates the clamp. (Worse when the
+   machine never approaches the bound anyway.)
+
+The giveaway is that **both sides of the assertion come from the same place**. A real assertion
+crosses a boundary: constant against *measured geometry*, derivation against a *simulation that
+was actually run*, preset against the *props it actually emitted*.
+
+**Prove it can fail.** Before claiming a test covers something, break the thing on purpose and
+watch it go red — change the constant, mis-attach the prop, enlarge the crank pin. If it stays
+green, the test does not cover what its name says. Every test fixed in this repo for this reason
+was verified that way, and the same injection passed against the old version.
+
 ## Verifying a change
 
 ```bash
-npx vitest run          # full suite (883 tests in 73 files); `npm test` is the same thing
+npx vitest run          # full suite (892 tests in 73 files); `npm test` is the same thing
 npx tsc --noEmit        # types — vitest does NOT type-check, so this catches real bugs it misses
 npx vite build          # production build
 ```

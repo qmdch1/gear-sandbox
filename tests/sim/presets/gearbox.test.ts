@@ -81,6 +81,7 @@ import {
   dogToothAngle,
 } from "../../../src/sim/presets/gearbox";
 import { evaluatePair, pitchRadius, MESH_TOLERANCE } from "../../../src/sim/meshing";
+import { computeSpurProfilePoints } from "../../../src/render/gearGeometry";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
 import type { GearInstance, LayoutState } from "../../../src/sim/types";
@@ -421,10 +422,31 @@ describe("createGearboxProps", () => {
  *  circle and is cut 1.25 modules below it), never against a bare pitch radius. */
 describe("gearbox clearances", () => {
   it("measures rims at the tooth tip and hubs at the root, not at the pitch circle", () => {
-    expect(DRIVEN1_TIP_R).toBe(DRIVEN1_R + GEARBOX_MODULE); // 9.5
-    expect(DRIVE3_TIP_R).toBe(DRIVE3_R + GEARBOX_MODULE); // 8
-    expect(DRIVE1_ROOT_R).toBe(DRIVE1_R - GEARBOX_MODULE * 1.25); // 2.375
-    expect(DRIVEN2_ROOT_R).toBe(DRIVEN2_R - GEARBOX_MODULE * 1.25); // 7.375
+    // These four assertions used to read `expect(DRIVEN1_TIP_R).toBe(DRIVEN1_R +
+    // GEARBOX_MODULE)` and so on -- the DEFINITIONS in gearbox.ts, restated. Nothing about the
+    // gears this box is actually drawn with could have made them fail, while every clearance
+    // test below leans on these constants being the real reach of a real tooth.
+    //
+    // So check them against the geometry the renderer builds. `computeSpurProfilePoints` is
+    // what `gearGeometry.ts` extrudes, so the furthest and nearest points of that profile ARE
+    // the tip and root the clearances have to respect. If the addendum or dedendum factors in
+    // gearGeometry.ts ever move, these constants become wrong and this fails -- which is the
+    // whole reason the suite quotes tip and root rather than pitch radii.
+    const reach = (teeth: number, module: number) => {
+      const pts = computeSpurProfilePoints(teeth, module);
+      const radii = pts.map((v) => Math.hypot(v.x, v.y));
+      return { tip: Math.max(...radii), root: Math.min(...radii) };
+    };
+    expect(reach(STAGE1_DRIVEN_TEETH, GEARBOX_MODULE).tip).toBeCloseTo(DRIVEN1_TIP_R, 9);
+    expect(reach(STAGE3_DRIVE_TEETH, GEARBOX_MODULE).tip).toBeCloseTo(DRIVE3_TIP_R, 9);
+    expect(reach(STAGE1_DRIVE_TEETH, GEARBOX_MODULE).root).toBeCloseTo(DRIVE1_ROOT_R, 9);
+    expect(reach(STAGE2_DRIVEN_TEETH, GEARBOX_MODULE).root).toBeCloseTo(DRIVEN2_ROOT_R, 9);
+
+    // And the figures themselves, so a reader can check the arithmetic at a glance.
+    expect(DRIVEN1_TIP_R).toBe(9.5);
+    expect(DRIVE3_TIP_R).toBe(8);
+    expect(DRIVE1_ROOT_R).toBe(2.375);
+    expect(DRIVEN2_ROOT_R).toBe(7.375);
   });
 
   it("keeps the biggest wheel out of the oil and the tallest gear under the top cover", () => {
