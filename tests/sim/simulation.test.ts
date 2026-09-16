@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { tick } from "../../src/sim/simulation";
+import { createCarPreset } from "../../src/sim/presets/car";
+import { createLocomotivePreset } from "../../src/sim/presets/locomotive";
 import type { GearInstance, LayoutState, RemoteLink } from "../../src/sim/types";
 
 function makeGear(overrides: Partial<GearInstance>): GearInstance {
@@ -949,5 +951,52 @@ describe("the 시간배율 (time scale) multiplier", () => {
     expect(spin(1)).toBeCloseTo(2, 6); // 2 rad/s for one second
     expect(spin(3)).toBeCloseTo(6, 6); // three times the simulated time, three times the angle
     expect(spin(0.5)).toBeCloseTo(1, 6);
+  });
+});
+
+describe("a vehicle is carried by its wheel, not by a number of its own", () => {
+  it("stops dead when its road wheel breaks", () => {
+    // `updatedGears` freezes a broken gear's rotation, so a vehicle that kept travelling would
+    // be sliding along on a wheel that has visibly stopped -- breaking the no-slip relation the
+    // travel is supposed to BE. The case is real rather than theoretical: a broken CRANK keeps
+    // its stored angularVelocity in the map (propagateRotation seeds every crank from its own
+    // field before excluding broken ones from driving), and the locomotive's road wheel IS its
+    // motorised crank.
+    let layout: LayoutState = createLocomotivePreset();
+    for (let i = 0; i < 180; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+    }
+    const movedWhileWell = layout.vehicles![0].distance;
+    expect(movedWhileWell).toBeGreaterThan(0);
+
+    layout = {
+      ...layout,
+      gears: layout.gears.map((g) => (g.id === layout.vehicles![0].wheel ? { ...g, broken: true } : g)),
+    };
+    for (let i = 0; i < 180; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+    }
+    expect(layout.vehicles![0].distance).toBe(movedWhileWell); // not one unit further
+  });
+
+  it("is stopped by its limit while the wheels keep turning, like a kerb", () => {
+    const fresh = createCarPreset();
+    const stop = 6; // a kerb only six units down the road, so it is certainly reached
+    let layout: LayoutState = {
+      ...fresh,
+      gears: fresh.gears.map((g) => ({ ...g, reverseAt: undefined })),
+      vehicles: fresh.vehicles!.map((v) => ({ ...v, limit: [-stop, stop] })),
+    };
+    for (let i = 0; i < 600; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { ...layout, gears: r.gears, vehicles: r.vehicles };
+      expect(layout.vehicles![0].distance).toBeLessThanOrEqual(stop);
+    }
+    expect(layout.vehicles![0].distance).toBe(stop); // parked against it, not short of it
+    const wheel = layout.gears.find((g) => g.id === layout.vehicles![0].wheel)!;
+    expect(Math.abs(wheel.angularVelocity)).toBeGreaterThan(0.1); // wheels still spinning
+    expect(wheel.rotation * 8).toBeGreaterThan(stop); // and they have out-turned the travel
   });
 });

@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { serializeLayout, deserializeLayout, validateLayout } from "../../src/persistence/serialize";
 import type { GearInstance, LayoutState } from "../../src/sim/types";
+import { createCarPreset } from "../../src/sim/presets/car";
+import { tick } from "../../src/sim/simulation";
 
 /** A fully-populated, valid gear -- the baseline the rejection tests below mutate. */
 function validGear(): GearInstance {
@@ -140,5 +142,74 @@ describe("validateLayout", () => {
     expect(() => validateLayout(null)).toThrow("Invalid gear-sandbox save file");
     expect(() => validateLayout("not an object")).toThrow("Invalid gear-sandbox save file");
     expect(() => validateLayout({})).toThrow("Invalid gear-sandbox save file");
+  });
+});
+
+describe("vehicles survive a save", () => {
+  // A Vehicle is simulation state, not decoration: it carries the mass the engine must
+  // accelerate and the distance already travelled. Dropping it on save was not a cosmetic
+  // loss -- a reloaded car kept its engine and its wheels and simply could not go anywhere,
+  // with no error and nothing on screen to say what had gone missing.
+  it("round-trips a real driving machine, and it still drives afterwards", () => {
+    const layout = createCarPreset();
+    let driven: LayoutState = layout;
+    for (let i = 0; i < 120; i++) {
+      const r = tick(driven, 1 / 60, 1, { wear: false });
+      driven = { ...driven, gears: r.gears, vehicles: r.vehicles };
+    }
+    expect(driven.vehicles![0].distance).toBeGreaterThan(0);
+
+    const restored = deserializeLayout(serializeLayout(driven));
+    expect(restored.vehicles).toEqual(driven.vehicles);
+    expect(restored.gears[0].motor).toEqual(driven.gears[0].motor);
+    expect(restored.gears[0].ridesOn).toBe(driven.gears[0].ridesOn);
+
+    // The strongest statement of "nothing was lost": run the reloaded machine and the original
+    // side by side and require them to agree exactly. Asserting merely that it travels FURTHER
+    // would be wrong as well as weak -- by four seconds the car has reached the end of its run
+    // and the reverser has already turned it round, so its distance is falling.
+    const advance = (start: LayoutState) => {
+      let cur = start;
+      for (let i = 0; i < 300; i++) {
+        const r = tick(cur, 1 / 60, 1, { wear: false });
+        cur = { ...cur, gears: r.gears, vehicles: r.vehicles };
+      }
+      return cur;
+    };
+    const fromSave = advance(restored);
+    const fromMemory = advance(driven);
+    expect(fromSave.vehicles![0].distance).toBeCloseTo(fromMemory.vehicles![0].distance, 12);
+    expect(fromSave.gears[0].angularVelocity).toBeCloseTo(fromMemory.gears[0].angularVelocity, 12);
+    expect(fromSave.vehicles![0].distance).not.toBe(driven.vehicles![0].distance); // still alive
+  });
+
+  it("still loads a save written before vehicles existed", () => {
+    const old = JSON.stringify({ version: 2, gears: [validGear()], remoteLinks: [] });
+    const loaded = deserializeLayout(old);
+    expect(loaded.vehicles).toBeUndefined();
+  });
+
+  it("rejects a motor with a non-finite number instead of NaN-ing the whole train", () => {
+    // freeSpeed goes straight into a division and stallTorque into an integration, so a bad
+    // one does not fail loudly: it turns the shaft's speed into NaN and every ratio carries
+    // the NaN out to every gear in the component. Better to refuse the file.
+    const bad = JSON.stringify({
+      version: 2,
+      gears: [{ ...validGear(), type: "crank", motor: { freeSpeed: null, stallTorque: 1 } }],
+      remoteLinks: [],
+    });
+    expect(() => deserializeLayout(bad)).toThrow();
+  });
+
+  it("rejects a vehicle whose road wheel is not in the layout", () => {
+    // Such a vehicle would read its wheel speed as a permanent zero and sit there looking like
+    // a machine that had merely stopped -- worse than an error, because it looks complete.
+    const orphan = JSON.stringify({
+      version: 2,
+      gears: [validGear()],
+      remoteLinks: [],
+      vehicles: [{ id: "v", wheel: "nobody", radius: 8, mass: 2, direction: [0, 0, 1], distance: 0 }],
+    });
+    expect(() => deserializeLayout(orphan)).toThrow(/바퀴/);
   });
 });

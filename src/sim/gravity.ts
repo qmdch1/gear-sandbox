@@ -46,14 +46,27 @@ export interface GravityOptions {
   friction?: number;
 }
 
-/** Below this approach speed (world units/s) a contact is treated as a landing rather than a
- *  bounce. Without such a floor, `e` applied to an ever-smaller speed produces an infinite
- *  sequence of ever-shorter bounces -- Zeno's paradox, which in a real integrator shows up as a
- *  part that jitters on the floor forever and never sleeps. Chosen as the speed gravity alone
- *  imparts in about one 60 Hz frame (9.81 m/s^2 * 1/60 s ~ 0.16 m/s -> 16 units/s): a body
- *  slower than that cannot leave the floor for a whole frame anyway, so calling it landed
- *  discards nothing visible. */
+/** The reference resting speed: what `restSpeed` below works out for Earth gravity at 60 Hz.
+ *  Kept as a named figure because it is the case worth having a number for, but it is NOT what
+ *  the integrator uses -- see `restSpeed`. */
 export const REST_SPEED = 16;
+
+/** Below this approach speed (world units/s) a contact is a landing rather than a bounce.
+ *
+ *  Without such a floor, `e` applied to an ever-smaller speed produces an infinite sequence of
+ *  ever-shorter bounces -- Zeno's paradox, which in a real integrator shows up as a part that
+ *  jitters on the floor forever and never sleeps. The threshold is `g * dt`: the speed gravity
+ *  alone imparts in one step, and therefore the speed below which a body cannot leave the floor
+ *  for a whole step anyway, so calling it landed discards nothing anyone could see.
+ *
+ *  DERIVED from the actual gravity and the actual step rather than hard-coded, because a
+ *  constant sized for Earth at 60 Hz is wrong everywhere else: on the Moon it is ten times too
+ *  big and would kill bounces a sixth-gravity drop should still be making, and at 240 Hz it
+ *  discards four times more than it needs to. At zero gravity it is zero -- correctly, since
+ *  nothing is pressing the body down and no bounce is ever too small to finish. */
+export function restSpeed(gravityUnits: number, dt: number): number {
+  return gravityUnits * dt;
+}
 
 /** How many contacts a single step will resolve before giving up and parking the body. A step
  *  that needs more than this is a body wedged into the floor, not a body bouncing. */
@@ -130,13 +143,25 @@ export function stepBody(
     const tangentialLoss = friction * (1 + e) * approach;
     ({ vx, vz } = brakeHorizontal(vx, vz, tangentialLoss));
 
-    if (approach < REST_SPEED) {
+    if (approach < restSpeed(g, dt)) {
       // Landed. Park it rather than starting an infinite sequence of shrinking bounces.
       vy = 0;
       resting = true;
       continue;
     }
     vy = e * approach;
+  }
+
+  // Running out of contacts inside one step means the body is being pinched into the floor
+  // rather than bouncing off it -- a huge dt, a restitution of exactly 1 arriving almost
+  // horizontally. The loop condition alone would leave `remaining` unspent AND the body still
+  // falling, so the next step starts from a state that re-triggers the same thrash forever and
+  // the part buzzes on the floor. Park it: the doc above promises exactly that, and a body this
+  // confused has no visible motion left to lose.
+  if (remaining > 0) {
+    y = Math.max(y, floor);
+    vy = 0;
+    resting = true;
   }
 
   // While in contact, a rolling body turns by its travel over its radius -- the same no-slip

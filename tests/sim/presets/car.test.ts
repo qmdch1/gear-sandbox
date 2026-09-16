@@ -182,6 +182,16 @@ describe("createCarPreset", () => {
     expect(nearest).toBeLessThan(0); // overshooting past the start while braking is real momentum
   });
 
+  it("carries the MECHANISM with it too, not just the bodywork", () => {
+    // Without this the body drives away and leaves all four wheels, the engine and the
+    // driveshaft standing at the start line, spinning on the spot -- and nothing reports it,
+    // because the simulation is equally happy either way: `ridesOn` is a drawing instruction.
+    const layout = createCarPreset();
+    expect(layout.gears.length).toBeGreaterThan(0);
+    for (const gear of layout.gears) expect(gear.ridesOn).toBe(CAR_VEHICLE_ID);
+    expect(layout.vehicles!.map((v) => v.id)).toEqual([CAR_VEHICLE_ID]);
+  });
+
   it("carries its body with it: every chassis prop rides the car", () => {
     const props = createCarProps();
     expect(props.length).toBeGreaterThan(0);

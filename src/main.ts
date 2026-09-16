@@ -80,7 +80,8 @@ let remoteLinks: RemoteLink[] = [];
 let vehicles: Vehicle[] = [];
 /** Downward acceleration, m/s^2. Earth by default; the gravity control can move the whole yard
  *  to the Moon, where a car's rolling resistance is a sixth of what it was and every dropped
- *  part takes six times as long to land. */
+ *  part takes two and a half times as long to land -- fall time goes as sqrt(2h/g), so a sixth
+ *  of the gravity is sqrt(6) = 2.45 times the time, not six times it. */
 let gravity: number = EARTH_GRAVITY;
 /** Loose parts falling and bouncing around the yard. Simulation state, stepped every frame by
  *  `sim/gravity.ts`; entirely separate from the gear layout, which is exactly what they are --
@@ -113,6 +114,10 @@ function deleteGear(id: string): void {
   const result = removeGear(id, gears, remoteLinks);
   gears = result.gears;
   remoteLinks = result.remoteLinks;
+  // A vehicle whose road wheel has just been deleted has nothing left to measure its travel
+  // with: its wheel speed would read as a permanent zero and it would sit there looking like a
+  // machine that had merely stopped. Drop the vehicle with the wheel that carried it.
+  vehicles = vehicles.filter((v) => v.wheel !== id);
   if (selectedGearId === id) selectedGearId = null;
   durabilityPanel.hide();
   dirtyTracker.markDirty();
@@ -122,6 +127,7 @@ try {
   if (loaded) {
     gears = loaded.gears;
     remoteLinks = loaded.remoteLinks;
+    vehicles = loaded.vehicles ?? [];
   } else {
     // First-ever visit (or cleared storage): seed the finished-object showroom (car,
     // airplane, windmill, bicycle) instead of an empty canvas or an abstract bench of
@@ -325,7 +331,7 @@ document.querySelector("#clear-parts")!.addEventListener("click", () => {
 
 new SaveLoadPanel(document.querySelector("#save-load")!, {
   save: () => {
-    saveToLocalStorage({ gears, remoteLinks });
+    saveToLocalStorage({ gears, remoteLinks, vehicles });
     dirtyTracker.markClean();
   },
   load: () => {
@@ -333,13 +339,14 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
     if (loaded) {
       gears = loaded.gears;
       remoteLinks = loaded.remoteLinks;
+      vehicles = loaded.vehicles ?? [];
       // The loaded state IS the new "saved" baseline until the user edits it further.
       dirtyTracker.markClean();
       resetTransientUiState();
     }
   },
   exportFile: () => {
-    const blob = exportToFile({ gears, remoteLinks });
+    const blob = exportToFile({ gears, remoteLinks, vehicles });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -353,6 +360,7 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
       const loaded = await importFromFile(file);
       gears = loaded.gears;
       remoteLinks = loaded.remoteLinks;
+      vehicles = loaded.vehicles ?? [];
       // Same reasoning as `load` above: an imported file is a new saved baseline.
       dirtyTracker.markClean();
       resetTransientUiState();
@@ -363,10 +371,11 @@ new SaveLoadPanel(document.querySelector("#save-load")!, {
 });
 
 new ServerSyncPanel(document.querySelector("#server-sync")!, {
-  getLayout: () => ({ gears, remoteLinks }),
+  getLayout: () => ({ gears, remoteLinks, vehicles }),
   applyLoadedLayout: (loaded) => {
     gears = loaded.gears;
     remoteLinks = loaded.remoteLinks;
+    vehicles = loaded.vehicles ?? [];
     dirtyTracker.markClean();
     resetTransientUiState();
   },

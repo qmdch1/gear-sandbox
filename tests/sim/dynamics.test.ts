@@ -53,6 +53,12 @@ describe("mass and inertia come from what the part is actually drawn as", () => 
     const small = gear({ teeth: 10 });
     const big = gear({ teeth: 20 }); // twice the radius
     expect(momentOfInertia(big) / momentOfInertia(small)).toBeCloseTo(16, 9);
+    // The ratio above is scale-invariant, so it cannot see the 1/2 at all -- J = m*r^2 would
+    // pass it just as happily, and a disc modelled as a hoop is twice as hard to spin up as it
+    // should be. Pin the constant itself against the absolute value.
+    const r = unitsToMetres(10);
+    expect(momentOfInertia(big)).toBeCloseTo(0.5 * gearMass(big) * r * r, 15);
+    expect(momentOfInertia(big)).toBeLessThan(gearMass(big) * r * r); // a disc, not a hoop
   });
 
   it("gives a rack no rotational inertia -- it translates", () => {

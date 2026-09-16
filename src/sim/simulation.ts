@@ -189,7 +189,15 @@ export function tick(
   // wheel's speed is the one the kinematics just produced, so the vehicle can never travel at a
   // speed its own wheels are not turning at.
   const updatedVehicles: Vehicle[] | undefined = layout.vehicles?.map((v) => {
-    const wheelSpeed = angularVelocities.get(v.wheel) ?? 0;
+    // A BROKEN wheel does not turn, so it carries nothing: `updatedGears` freezes a broken
+    // gear's `rotation`, and a vehicle that kept travelling on the speed that gear was last
+    // commanded at would break the no-slip relation the travel is supposed to BE -- the car
+    // would slide along on a wheel that had visibly stopped. The check is needed because a
+    // broken CRANK keeps its stored `angularVelocity` in the map (`propagateRotation` seeds
+    // every crank from its own field and only then excludes broken ones from driving), which
+    // is exactly the case a motorised road wheel like the locomotive's main driver is in.
+    const wheel = byId.get(v.wheel);
+    const wheelSpeed = wheel && !wheel.broken ? angularVelocities.get(v.wheel) ?? 0 : 0;
     let distance = v.distance + wheelSpeed * v.radius * step;
     if (v.limit) {
       const [lo, hi] = v.limit;

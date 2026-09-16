@@ -122,6 +122,23 @@ export function computeSyncActions(
   return { toAdd, toRemoveIds };
 }
 
+/** A gear's drawn position: where the preset put it, plus how far the vehicle carrying it has
+ *  driven. The simulation's own `position` never moves -- that is what keeps meshing and overlap
+ *  meaning the same thing whether a machine is parked or doing thirty -- so anything that draws
+ *  in world space has to add the ride itself. */
+function ridePosition(
+  gear: GearInstance,
+  offsets: Map<string, THREE.Vector3>,
+): [number, number, number] {
+  const offset = gear.ridesOn ? offsets.get(gear.ridesOn) : undefined;
+  if (!offset) return gear.position;
+  return [
+    gear.position[0] + offset.x,
+    gear.position[1] + offset.y,
+    gear.position[2] + offset.z,
+  ];
+}
+
 export class SceneSync {
   private objects = new Map<string, GearMeshObject>();
   private linkMeshes = new Map<string, THREE.Mesh>();
@@ -441,7 +458,18 @@ export class SceneSync {
       // the ribbon's geometry depends only on its two endpoints, and gears never move, so every
       // frame drew byte-identical links: the sprockets spun while the chain sat perfectly still.
       const travel = a.rotation * pitchRadius(a);
-      const geometry = buildLinkRibbon(a.position, b.position, width, link.kind, travel);
+      // The ribbon has to be drawn where its two wheels ARE, which on a vehicle is not where
+      // the simulation keeps them: `ridesOn` displaces the wheels by how far the vehicle has
+      // driven, and a ribbon built from the authored positions stays anchored at the start line
+      // and stretches further behind the machine every second. Offset each end by its own gear's
+      // ride, so a belt between two wheels of the same vehicle simply travels with them.
+      const geometry = buildLinkRibbon(
+        ridePosition(a, rideOffsets),
+        ridePosition(b, rideOffsets),
+        width,
+        link.kind,
+        travel,
+      );
       const existing = this.linkMeshes.get(key);
       if (existing) {
         existing.geometry.dispose();

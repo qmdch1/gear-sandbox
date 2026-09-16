@@ -69,35 +69,59 @@ export interface Motor {
  *  the two endpoints of the curve. Signed correctly in both directions of rotation without any
  *  sign handling, because the formula is written in terms of the speed ERROR. */
 export function motorTorque(motor: Motor, speed: number): number {
-  if (motor.freeSpeed === 0) return 0;
+  const { constantTorque, slope } = motorCurve(motor);
+  return constantTorque - slope * speed;
+}
+
+/** The motor's straight line split into the two halves a stable integrator needs: the part that
+ *  does not depend on speed, and the slope that does. `T = k*(freeSpeed - w)` is exactly
+ *  `k*freeSpeed - k*w`, so this IS the curve -- written once here and used by both
+ *  `motorTorque` (which evaluates it at a speed) and `shaftBalances` (which needs the two halves
+ *  apart, because a first-order system only integrates stably with the speed-dependent half
+ *  treated implicitly). Keeping them as one function is what stops the tested form and the form
+ *  the simulation actually runs from drifting into two different motors. */
+export function motorCurve(motor: Motor): { constantTorque: number; slope: number } {
+  if (motor.freeSpeed === 0) return { constantTorque: 0, slope: 0 };
   const k = motor.stallTorque / Math.abs(motor.freeSpeed);
-  return k * (motor.freeSpeed - speed);
+  return { constantTorque: k * motor.freeSpeed, slope: k };
 }
 
 /** Mass of a gear in kilograms, as the steel disc it is drawn as: m = rho * pi * r^2 * t.
  *
- *  A zero-teeth part (`load`, and anything else with no pitch circle) is drawn as a `module * 2`
- *  cylinder by `gearGeometry.ts`, so it is massed at that radius -- the same substitution
- *  `overlapRadius` already makes for the same reason. A rack is not a disc at all; it is massed
- *  as a bar `10 * module` long with a `module` by thickness cross-section, which is roughly the
- *  toothed strip that gets drawn. */
+ *  Every case below matches the geometry `gearGeometry.ts` actually builds, because the doc
+ *  above promises the mass is the mass of the DRAWN object and a mass derived from a shape
+ *  nobody can see would be a tuning knob wearing a physics costume.
+ *
+ *  - A rack is a toothed strip, not a disc: `rackGeometry` lays `teeth` teeth end to end at one
+ *    circular pitch (pi * module) each, over a section `(addendum + dedendum) = 2.25 * module`
+ *    tall. Its length therefore scales with its TOOTH COUNT, which a fixed `10 * module` bar
+ *    missed entirely -- a 40-tooth rack would have been massed as if it were an 8-tooth one.
+ *  - A zero-teeth part (`load`, and anything else with no pitch circle) is drawn as a cylinder
+ *    of radius `module * 2` -- the same substitution `overlapRadius` makes, for the same reason
+ *    -- and TWICE the standard thickness.
+ *  - Everything else is the disc of its own pitch radius. */
 export function gearMass(g: GearInstance): number {
   const t = unitsToMetres(GEAR_THICKNESS);
   if (g.type === "rack") {
-    const length = unitsToMetres(10 * g.module);
-    const height = unitsToMetres(g.module);
+    // Mirrors `rackGeometry`'s own clamp: a rack is never drawn with fewer than 4 teeth, and a
+    // zero/NaN tooth count falls back to 8.
+    const teeth = Math.max(4, Math.round(g.teeth) || 8);
+    const length = unitsToMetres(teeth * Math.PI * g.module);
+    const height = unitsToMetres(2.25 * g.module); // addendum 1.0 + dedendum 1.25, per gearGeometry
     return STEEL_DENSITY * length * height * t;
   }
-  const r = unitsToMetres(pitchRadius(g) || g.module * 2);
-  return STEEL_DENSITY * Math.PI * r * r * t;
+  const toothed = pitchRadius(g);
+  const r = unitsToMetres(toothed || g.module * 2);
+  // The zero-teeth cylinder is drawn at GEAR_THICKNESS * 2.
+  return STEEL_DENSITY * Math.PI * r * r * (toothed ? t : t * 2);
 }
 
 /** Moment of inertia of a gear about its own axis, kg*m^2: the uniform disc's J = m*r^2/2.
  *
  *  A rack has no rotational inertia -- it translates. Its mass still matters, and it enters the
- *  train through `reflectedInertia` below as m*r_driver^2, where r_driver is the pitch radius of
- *  the pinion pushing it; this function returns 0 for it rather than inventing a J it does not
- *  have. */
+ *  train through `shaftBalances` below as m*(r_driver*n_driver)^2, where r_driver is the pitch
+ *  radius of the pinion pushing it; this function returns 0 for it rather than inventing a J it
+ *  does not have. */
 export function momentOfInertia(g: GearInstance): number {
   if (g.type === "rack") return 0;
   const r = unitsToMetres(pitchRadius(g) || g.module * 2);
@@ -199,8 +223,9 @@ export interface DynamicsOptions {
   gravity?: number;
 }
 
-/** One component's torque balance, referred to its root shaft. Exposed for tests and for the
- *  diagnostics panel, which shows what the machine is actually fighting. */
+/** One component's torque balance, referred to its root shaft. Exposed so the numbers can be
+ *  asserted directly rather than only inferred from how a machine ends up behaving; nothing in
+ *  the UI reads it yet. */
 export interface ShaftBalance {
   root: string;
   /** Reflected inertia at the root shaft, kg*m^2. */
@@ -265,10 +290,10 @@ export function shaftBalances(
     // damping. The motor curve is itself one of these, with T0 = k * freeSpeed and slope k.
     let constantTorque = 0;
     let slope = gear.type === "load" ? LOAD_DAMPING : BEARING_DAMPING;
-    if (gear.type === "crank" && gear.motor && gear.motor.freeSpeed !== 0) {
-      const k = gear.motor.stallTorque / Math.abs(gear.motor.freeSpeed);
-      constantTorque += k * gear.motor.freeSpeed;
-      slope += k;
+    if (gear.type === "crank" && gear.motor) {
+      const curve = motorCurve(gear.motor);
+      constantTorque += curve.constantTorque;
+      slope += curve.slope;
     }
     torque.set(r.root, torque.get(r.root)! + constantTorque * r.ratio);
     damping.set(r.root, damping.get(r.root)! + slope * r.ratio * r.ratio);

@@ -59,9 +59,11 @@ export const CAR_VEHICLE_ID = "자동차";
 
 /** Mass of the whole car, kg: a hefty desk-sized die-cast model, which at 20 x 26 x 15 cm is
  *  about right. This is not decoration -- `dynamics.ts` reflects it into the engine as
- *  `mass * wheelRadius^2`, where it is roughly SIX TIMES the four wheels' own inertia put
- *  together. Which is the point: the engine spends nearly all its effort accelerating the car,
- *  exactly as a real one does, so the car pulls away rather than snapping to speed. */
+ *  `mass * wheelRadius^2` = 1.28e-2 kg*m^2, which is six times ONE wheel's inertia and about
+ *  1.5 times that of the whole mechanism (all six gears together come to 8.3e-3). So the engine
+ *  spends rather more of its effort accelerating the car than accelerating its own gears, which
+ *  is the point: the car pulls away instead of snapping to speed. (An earlier version of this
+ *  comment claimed six times ALL FOUR wheels; that was six times one of them.) */
 export const CAR_MASS = 2;
 
 /** Engine, as a torque-speed curve rather than a commanded speed.
@@ -194,6 +196,12 @@ export function createCarPreset(): LayoutState {
   // gear -- the parts keep the fixed geometry that makes them mesh, and the assembly as a whole
   // is carried by `Vehicle.distance`.
   gears[0].motor = { freeSpeed: ENGINE_FREE_SPEED, stallTorque: ENGINE_STALL_TORQUE };
+  // Every part of the mechanism travels with the car. Without this the body drives away and
+  // leaves all four wheels, the engine and the driveshaft standing at the start line, spinning
+  // on the spot -- and nothing anywhere would report it, because the simulation is perfectly
+  // happy either way: `ridesOn` is a drawing instruction, and the gear positions it does not
+  // touch are what keep the belts and couplings valid.
+  for (const gear of gears) gear.ridesOn = CAR_VEHICLE_ID;
   gears[0].reverseAt = ENGINE_STROKE; // a limit switch: drive out, brake, drive back
 
   return {

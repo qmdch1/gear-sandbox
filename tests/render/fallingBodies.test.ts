@@ -85,4 +85,28 @@ describe("FallingBodiesView", () => {
     view.sync([{ ...rolling, velocity: [0, 0, 0] }]);
     expect((scene.children[0] as THREE.Mesh).quaternion.equals(orientation)).toBe(true);
   });
+
+  it("does not dispose the SHARED material when one part of that kind is cleared away", () => {
+    // `materialFor` hands out one instance per texture kind. Disposing it with a departing mesh
+    // would blank every other part of that kind still on the floor -- and the cache would keep
+    // handing out the dead material to every part dropped afterwards.
+    const scene = new THREE.Scene();
+    const view = new FallingBodiesView(scene);
+    // Indices 0 and 3 are both steel, so they share one material.
+    view.sync([makeDroppedPart(0, [0, 100, 0]), makeDroppedPart(3, [20, 100, 0])]);
+    const shared = (scene.children[0] as THREE.Mesh).material as THREE.Material;
+    expect((scene.children[1] as THREE.Mesh).material).toBe(shared);
+    let materialDisposed = false;
+    shared.addEventListener("dispose", () => (materialDisposed = true));
+
+    view.sync([makeDroppedPart(3, [20, 100, 0])]);
+    expect(materialDisposed).toBe(false);
+    expect((scene.children[0] as THREE.Mesh).material).toBe(shared);
+
+    // Even clearing everything leaves the cache intact, so the next drop still draws.
+    view.clear();
+    expect(materialDisposed).toBe(false);
+    view.sync([makeDroppedPart(0, [0, 100, 0])]);
+    expect((scene.children[0] as THREE.Mesh).material).toBe(shared);
+  });
 });

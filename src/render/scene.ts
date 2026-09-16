@@ -41,10 +41,11 @@ export function resizeToContainer(ctx: SceneContext): void {
 
 export function createScene(canvas: HTMLCanvasElement): SceneContext {
   const scene = new THREE.Scene();
-  // A sky rather than a flat backdrop: deep blue overhead easing to a pale horizon. It gives
-  // the yard a skyline to sit against, and because it is an equirectangular texture the same
-  // gradient is what polished metal now reflects. Falls back to the old flat colour wherever
-  // there is no canvas (jsdom), so a headless run still builds a valid scene.
+  // A sky rather than a flat backdrop: deep blue overhead easing to a pale horizon, giving the
+  // yard a skyline to sit against. It is `scene.background` ONLY -- what the metal reflects is
+  // `scene.environment`, which is the RoomEnvironment PMREM built further down, so changing this
+  // gradient changes the backdrop and not the highlights. Falls back to the old flat colour
+  // wherever there is no canvas (jsdom), so a headless run still builds a valid scene.
   const sky = makeSkyTexture("#20293a", "#8fa3bd");
   scene.background = sky ?? new THREE.Color(0x1a1d22);
 

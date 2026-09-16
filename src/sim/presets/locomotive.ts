@@ -120,10 +120,12 @@ export const DRIVE_SPEED = 0.8;
 /** The locomotive's id as a `Vehicle`, so its boiler, cab and rods can say they ride on it. */
 export const LOCO_VEHICLE_ID = "증기기관차";
 
-/** Mass of the whole locomotive, kg. At 24 x 66 x ~30 cm of mostly cast metal this is a heavy
- *  desk model, and the weight is the point: reflected into the drivers as `mass * r^2` it is
- *  several times their own inertia put together, so the engine leans into its start the way a
- *  locomotive does instead of leaping away. */
+/** Mass of the whole locomotive, kg. Its 24 x 66 x ~30 cm bounding box is mostly air -- a
+ *  boiler shell, a cab and a footplate over an open frame -- so 4 kg is a heavy desk model
+ *  rather than a solid billet. Reflected into the drivers as `mass * r^2` that is 4.0e-2
+ *  kg*m^2, about 1.35 times the six drivers' own inertia (2.96e-2) put together: the engine is
+ *  accelerating rather more train than machinery, which is why it leans into its start over
+ *  roughly nine tenths of a second instead of leaping away. */
 export const LOCO_MASS = 4;
 
 /** Steel wheel on steel rail: rolling resistance of about 0.002, against roughly 0.015 for a
@@ -219,12 +221,19 @@ export const QUARTER = Math.PI / 2;
  *
  *  --- What this model does NOT claim ---------------------------------------------------
  *
- *  This sandbox integrates angular velocity and rotation, and nothing else. It has no notion
- *  of steam pressure, force, torque, tractive effort or haulage. The claims made here and
- *  verified in tests/sim/presets/locomotive.test.ts are purely kinematic: all six wheels turn
- *  at exactly the crank's +0.8 rad/s, the generator pinion turns at exactly -3.2 rad/s, the two
- *  sides stay exactly 90 degrees apart, and the piston sweeps exactly the 10-unit interval
- *  [17, 27] ahead of its wheel.
+ *  The sandbox now does model torque, inertia and mass (`dynamics.ts`), and this engine uses
+ *  them: DRIVE_SPEED is the drive's no-load speed rather than a commanded one, the drivers have
+ *  the inertia of the steel discs they are drawn as, and LOCO_MASS is really accelerated and
+ *  really resisted by rolling friction. What it still does NOT model is steam: there is no
+ *  boiler pressure, no cut-off, no regulator, and the cylinders are along for the ride rather
+ *  than being where the power comes from. A torque-speed line stands in for all of it.
+ *
+ *  So the speed is an OUTCOME, not a constant: the drive settles near 0.59 rad/s, about three
+ *  quarters of its 0.8 rad/s free speed, and takes roughly nine tenths of a second to get
+ *  there. What stays exactly true, and is verified in tests/sim/presets/locomotive.test.ts, is
+ *  every RELATIONSHIP: all six wheels turn at exactly the same speed as each other at every
+ *  instant, the generator pinion at exactly -4x that, the two sides exactly 90 degrees apart,
+ *  and the piston sweeping exactly the 10-unit interval [17, 27] ahead of its wheel.
  *
  *  Two deliberate simplifications, stated plainly so nobody reads more into the picture than is
  *  there. First, the sandbox drives the linkage FROM the wheel: `crankSliderPose` takes the

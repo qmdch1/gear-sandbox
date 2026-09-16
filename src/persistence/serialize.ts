@@ -1,4 +1,4 @@
-import type { GearInstance, GearType, LayoutState, RemoteLink } from "../sim/types";
+import type { GearInstance, GearType, LayoutState, RemoteLink, Vehicle } from "../sim/types";
 import { wouldDuplicateLink } from "../sim/remoteLinks";
 
 const SCHEMA_VERSION = 2;
@@ -33,7 +33,43 @@ function isValidGear(value: unknown): value is GearInstance {
     typeof g.broken === "boolean" &&
     isFiniteNumber(g.rotation) &&
     isFiniteNumber(g.angularVelocity) &&
-    (g.linearPosition === undefined || isFiniteNumber(g.linearPosition))
+    (g.linearPosition === undefined || isFiniteNumber(g.linearPosition)) &&
+    // A motor's two numbers go straight into a division and an integration, so a non-finite one
+    // does not fail loudly -- it turns the shaft's speed into NaN, and the NaN then propagates
+    // through every ratio to every gear in the component. A layout that arrives with a bad motor
+    // must be rejected here, where the error can still name the file, rather than becoming a
+    // scene where nothing moves and nothing says why.
+    isValidMotor(g.motor) &&
+    (g.ridesOn === undefined || (typeof g.ridesOn === "string" && g.ridesOn.length > 0))
+  );
+}
+
+function isValidMotor(value: unknown): boolean {
+  if (value === undefined) return true; // a crank without one is an ideal velocity source
+  if (typeof value !== "object" || value === null) return false;
+  const m = value as Record<string, unknown>;
+  return isFiniteNumber(m.freeSpeed) && isFiniteNumber(m.stallTorque);
+}
+
+/** A `Vehicle` is simulation state, not decoration: it carries the mass the engine has to
+ *  accelerate and the distance already travelled. Dropping it on save was not a cosmetic loss --
+ *  a reloaded car kept its engine and its wheels and simply stopped being able to go anywhere,
+ *  with no error and nothing in the scene to suggest what had gone missing. */
+function isValidVehicle(value: unknown): value is Vehicle {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.id === "string" &&
+    v.id.length > 0 &&
+    typeof v.wheel === "string" &&
+    v.wheel.length > 0 &&
+    isFiniteNumber(v.radius) &&
+    isFiniteNumber(v.mass) &&
+    isVec3(v.direction) &&
+    isFiniteNumber(v.distance) &&
+    (v.rollingResistance === undefined || isFiniteNumber(v.rollingResistance)) &&
+    (v.limit === undefined ||
+      (Array.isArray(v.limit) && v.limit.length === 2 && v.limit.every(isFiniteNumber)))
   );
 }
 
@@ -58,7 +94,18 @@ function dedupeRemoteLinks(links: RemoteLink[]): RemoteLink[] {
 }
 
 export function serializeLayout(layout: LayoutState): string {
-  return JSON.stringify({ version: SCHEMA_VERSION, gears: layout.gears, remoteLinks: layout.remoteLinks }, null, 2);
+  return JSON.stringify(
+    {
+      version: SCHEMA_VERSION,
+      gears: layout.gears,
+      remoteLinks: layout.remoteLinks,
+      // Omitted entirely when there are none, so a save of an ordinary bolted-down machine is
+      // byte-identical to what it was before vehicles existed.
+      ...(layout.vehicles?.length ? { vehicles: layout.vehicles } : {}),
+    },
+    null,
+    2,
+  );
 }
 
 /** Validates and normalizes an already-parsed candidate layout (untrusted `unknown` shape --
@@ -82,7 +129,31 @@ export function validateLayout(parsed: unknown): LayoutState {
   if (!Array.isArray(remoteLinks) || !remoteLinks.every(isValidRemoteLink)) {
     throw new Error("Invalid gear-sandbox save file");
   }
-  return { gears: gears as GearInstance[], remoteLinks: dedupeRemoteLinks(remoteLinks as RemoteLink[]) };
+  // Saves written before vehicles existed have no `vehicles` field at all -- default to none
+  // rather than reject them, exactly as `remoteLinks` does for v1 saves.
+  const vehicles = candidate.vehicles === undefined ? [] : candidate.vehicles;
+  if (!Array.isArray(vehicles) || !vehicles.every(isValidVehicle)) {
+    throw new Error("레이아웃 파일이 올바르지 않습니다: vehicles 형식이 잘못되었습니다.");
+  }
+  // A vehicle whose wheel is not in the layout would silently never move (its wheel speed reads
+  // as 0) -- worse than an error, because the machine looks complete. Reject it here.
+  const ids = new Set((gears as GearInstance[]).map((g) => g.id));
+  for (const v of vehicles as Vehicle[]) {
+    if (!ids.has(v.wheel)) {
+      throw new Error(`레이아웃 파일이 올바르지 않습니다: 차량 "${v.id}"의 바퀴 "${v.wheel}"가 없습니다.`);
+    }
+  }
+  // `vehicles` is omitted from the result when there are none, mirroring `serializeLayout`
+  // omitting the field. That keeps the round trip an exact identity in BOTH directions: a
+  // layout of an ordinary bolted-down machine comes back as the object it went in as, rather
+  // than growing an empty array that every existing caller and test would then have to know
+  // about. An explicit empty array on the way in normalises to absent, which is the same thing.
+  const layout: LayoutState = {
+    gears: gears as GearInstance[],
+    remoteLinks: dedupeRemoteLinks(remoteLinks as RemoteLink[]),
+  };
+  if ((vehicles as Vehicle[]).length > 0) layout.vehicles = vehicles as Vehicle[];
+  return layout;
 }
 
 export function deserializeLayout(json: string): LayoutState {

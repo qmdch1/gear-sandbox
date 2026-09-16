@@ -296,3 +296,70 @@ describe("SceneSync", () => {
     expect(ctx.scene.children.length).toBe(withoutLinks + 1);
   });
 });
+
+describe("a vehicle carries everything that is drawn on it", () => {
+  const NO_PROBLEMS = { unconnectedIds: [], noPowerIds: [], overlapPairs: [] };
+
+  /** Two belt-linked wheels bolted to one vehicle. */
+  function ridingLayout() {
+    return [
+      makeGear({ id: "front", type: "pulley", teeth: 16, position: [0, 8, 0], axis: [1, 0, 0], ridesOn: "v" }),
+      makeGear({ id: "rear", type: "pulley", teeth: 16, position: [0, 8, -20], axis: [1, 0, 0], ridesOn: "v" }),
+    ];
+  }
+  const LINK = [{ a: "front", b: "rear", kind: "belt" as const }];
+  const vehicle = (distance: number) => [
+    { id: "v", wheel: "front", radius: 8, mass: 2, direction: [0, 0, 1] as [number, number, number], distance },
+  ];
+
+  it("moves the gear meshes, and by exactly the distance travelled -- without accumulating", () => {
+    const { scene, groundPlane } = createScene(document.createElement("canvas"));
+    const sync = new SceneSync({ scene } as never);
+    // The scene already contains the ground plane and the grid; the gear meshes are what sync
+    // adds on top of them.
+    const gearMesh = () =>
+      scene.children.find(
+        (c) => (c as THREE.Mesh).isMesh && c !== groundPlane && (c as THREE.Mesh).geometry?.type !== "TubeGeometry",
+      ) as THREE.Mesh;
+
+    sync.sync(ridingLayout(), [], NO_PROBLEMS, vehicle(0));
+    const parked = gearMesh().position.clone();
+    expect(parked.z).toBeCloseTo(0, 9); // it starts where the preset put it
+
+    sync.sync(ridingLayout(), [], NO_PROBLEMS, vehicle(30));
+    const driven = gearMesh().position.clone();
+    expect(driven.z - parked.z).toBeCloseTo(30, 9);
+
+    // Re-syncing at the SAME distance must land in the same place. If the offset were added to
+    // whatever the mesh already showed rather than to the pose `update()` sets, the vehicle
+    // would gain 30 units every frame and be over the horizon in a second.
+    sync.sync(ridingLayout(), [], NO_PROBLEMS, vehicle(30));
+    expect(gearMesh().position.z).toBeCloseTo(driven.z, 9);
+  });
+
+  it("takes the belt with it instead of stretching it back to the start line", () => {
+    // The ribbon's geometry is built from its two gears' positions, and the simulation
+    // deliberately never moves those. Drawn from them raw, the belt stayed anchored where the
+    // machine set off from and grew longer every second the vehicle drove.
+    const { scene } = createScene(document.createElement("canvas"));
+    const sync = new SceneSync({ scene } as never);
+    const ribbon = () => {
+      const mesh = scene.children.find(
+        (c) => (c as THREE.Mesh).isMesh && (c as THREE.Mesh).geometry?.type === "TubeGeometry",
+      ) as THREE.Mesh;
+      mesh.geometry.computeBoundingBox();
+      return mesh.geometry.boundingBox!.clone();
+    };
+
+    sync.sync(ridingLayout(), LINK, NO_PROBLEMS, vehicle(0));
+    const parked = ribbon();
+    sync.sync(ridingLayout(), LINK, NO_PROBLEMS, vehicle(30));
+    const driven = ribbon();
+
+    // Same belt, moved bodily: its length is unchanged and both ends shifted by the travel.
+    const length = (b: THREE.Box3) => b.max.z - b.min.z;
+    expect(length(driven)).toBeCloseTo(length(parked), 6);
+    expect(driven.min.z - parked.min.z).toBeCloseTo(30, 6);
+    expect(driven.max.z - parked.max.z).toBeCloseTo(30, 6);
+  });
+});

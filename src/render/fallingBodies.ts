@@ -20,8 +20,12 @@ export class FallingBodiesView {
     for (const [id, mesh] of this.meshes) {
       if (live.has(id)) continue;
       this.scene.remove(mesh);
+      // Geometry is this mesh's own (its radius differs per part) and must go. The MATERIAL is
+      // not: `materialFor` hands out one shared instance per texture kind, so disposing it here
+      // would blank every other part of that kind still in the scene -- and it would keep being
+      // handed out afterwards, now pointing at freed GPU resources. Shared things are freed by
+      // whoever owns the cache, not by a departing user of it.
       mesh.geometry.dispose();
-      (mesh.material as THREE.Material).dispose();
       this.meshes.delete(id);
     }
 
