@@ -82,6 +82,18 @@ turned back on.
 - **A `load` gear is a damper, not a weight.** Nothing hangs off a drum, so a hoist does not feel
   what it is lifting. This is the biggest remaining gap between the model and the machines it
   draws.
+- **Eleven of the twenty-three presets have had a defect audit; twelve have not.** The audited
+  ones (car, locomotive, clocktower, conveyor, ferriswheel, differentialaxle, castle, airplane,
+  hoist, gearbox, factory) each yielded real findings — stale claims, figures measurement
+  contradicted, tests that could not fail — all since fixed. The unaudited twelve are capstan,
+  carousel, clock, musicbox, pistonengine, planetaryhoist, towercrane, watermill, wellpump,
+  windmill, wormtable and bicycle. Nothing suggests they are cleaner; they simply have not been
+  looked at. (The repo-wide sweeps — the "no force model" claims and the definitional-identity
+  assertions — did cover all twenty-three.)
+- **About sixteen assertions still restate a definition**, each sitting beside a real
+  measurement in the same test (`expect(RING_R + MOTOR_R).toBe(MESH_DISTANCE)` immediately above
+  a measurement of the actual gap between the two gears). They are redundant rather than
+  dangerous, but they read as coverage. The fourteen that stood alone have been dealt with.
 
 ## If you are looking for something to do
 
