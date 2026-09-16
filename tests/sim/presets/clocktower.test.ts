@@ -146,9 +146,14 @@ describe("createClockTowerProps", () => {
     // And they are the right way round -- the minute hand is the long one on the main dial,
     // the hour hand the short one on the sub-dial. Swapping them keeps the ratio correct and
     // the clock unreadable.
+    // Both hands are boxes; `Prop` is a union, so narrow on `kind` rather than reaching for a
+    // `size` the cylinder members do not have.
     const [minuteHand] = onWheel(MINUTE_ID);
     const [hourHand] = onWheel(HOUR_ID);
-    expect(minuteHand.size![0]).toBeGreaterThan(hourHand.size![0]);
+    expect(minuteHand.kind).toBe("box");
+    expect(hourHand.kind).toBe("box");
+    if (minuteHand.kind !== "box" || hourHand.kind !== "box") throw new Error("unreachable");
+    expect(minuteHand.size[0]).toBeGreaterThan(hourHand.size[0]);
     expect(minuteHand.position[1]).toBe(DIAL_Y);
     expect(hourHand.position[1]).toBe(SUBDIAL_Y);
   });
