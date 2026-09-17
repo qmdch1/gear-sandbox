@@ -211,8 +211,22 @@ export function createTowerCraneProps(): Prop[] {
     { kind: "box", position: [-COUNTER_REACH / 2, SLEW_Y + 3, 0], size: [COUNTER_REACH, 1.6, 2.4], color: yellow, texture: "metal", metalness: 0.6, roughness: 0.4, attachTo: SLEW_RING_ID },
     // Counterweight slab at the tail.
     { kind: "box", position: [-COUNTER_REACH, SLEW_Y + 1, 0], size: [5, 5, 5], color: concrete, texture: "stone", roughness: 0.9, metalness: 0.04, attachTo: SLEW_RING_ID },
-    // Operator cab at the pivot.
-    { kind: "box", position: [5, SLEW_Y - 2, 0], size: [4, 4, 4], color: dark, texture: "metal", metalness: 0.5, roughness: 0.45, attachTo: SLEW_RING_ID },
+    // Operator cab, cantilevered off the slewing platform CLEAR OF THE MAST.
+    //
+    // It used to sit at x = 5. A 4-wide box centred there has its inner face 3 units from the
+    // slew axis, so as it swung it swept the band from radius 3 out to 7.28 (its corners) over
+    // y = 42..46 -- and the four mast legs stand at (+/-3, +/-3) with a 1x1 section, i.e. radius
+    // 3.54..4.95, running from y = 1 to y = 47. The cab passed clean through a leg four times a
+    // revolution, penetrating 1.95 of its own 2.0 half-width at 45 degrees.
+    //
+    // At slew angle 0 -- the pose that renders on load -- it cleared the legs by 0.5 in z, which
+    // is why it always looked right. Nothing could report it: `classify` compares gear centres,
+    // and props are not in the physics at all.
+    //
+    // x = 8 puts the inner face at 6, clear of the legs' 4.95 outermost corner by a full unit,
+    // which is also where a real tower crane hangs its cab: outboard of the mast, on the part
+    // that turns.
+    { kind: "box", position: [8, SLEW_Y - 2, 0], size: [4, 4, 4], color: dark, texture: "metal", metalness: 0.5, roughness: 0.45, attachTo: SLEW_RING_ID },
     // A-frame apex, and a tie bar out to each arm.
     { kind: "box", position: [0, SLEW_Y + 11, 0], size: [1.2, 14, 1.2], color: yellow, texture: "metal", metalness: 0.6, roughness: 0.4, attachTo: SLEW_RING_ID },
     { kind: "box", position: [JIB_REACH / 2, SLEW_Y + 11, 0], size: [Math.hypot(JIB_REACH, 14), 0.6, 0.6], color: steel, texture: "metal", rotation: [0, 0, -Math.atan2(14, JIB_REACH)], metalness: 0.7, roughness: 0.35, attachTo: SLEW_RING_ID },

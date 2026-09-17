@@ -243,4 +243,55 @@ describe("createTowerCraneProps -- the hook swings AND hoists", () => {
       expect(ids.has(p.windWith!.gear)).toBe(true);
     }
   });
+
+  it("swings the upper works clear of the mast it stands on", () => {
+    // The operator cab used to sweep straight through each of the four mast legs, four times a
+    // revolution, penetrating 1.95 of its own 2.0 half-width. At slew angle 0 -- the pose that
+    // renders on load -- it cleared them by 0.5 in z, so it always looked right, and nothing in
+    // the simulation could say otherwise: `classify` compares GEAR CENTRES, and props carry no
+    // contact model at all.
+    //
+    // `attachTo` turns a prop about its gear's axis, which here is vertical, so a swinging part
+    // sweeps the band between its nearest and furthest distance from that axis, at its own
+    // height. A fixed part inside BOTH that band and that height band is struck every turn.
+    const props = createTowerCraneProps();
+    const ring = createTowerCranePreset().gears.find((g) => g.id === SLEW_RING_ID)!;
+    const [cx, , cz] = ring.position;
+
+    const bounds = (p: (typeof props)[number]) => {
+      const half =
+        p.kind === "box"
+          ? [p.size[0] / 2, p.size[1] / 2, p.size[2] / 2]
+          : p.kind === "cylinder" || p.kind === "cone"
+            ? [p.radius, p.height / 2, p.radius]
+            : p.kind === "sphere"
+              ? [p.radius, p.radius, p.radius]
+              : [p.radius + p.tube, p.radius + p.tube, p.tube];
+      // Horizontal distance from the slew axis, at the near and far corners.
+      const dx = Math.abs(p.position[0] - cx);
+      const dz = Math.abs(p.position[2] - cz);
+      const near = Math.hypot(Math.max(0, dx - half[0]), Math.max(0, dz - half[2]));
+      const far = Math.hypot(dx + half[0], dz + half[2]);
+      return { near, far, lo: p.position[1] - half[1], hi: p.position[1] + half[1] };
+    };
+
+    const swinging = props.filter((p) => p.attachTo === SLEW_RING_ID && !p.rotation);
+    const fixed = props.filter((p) => !p.attachTo && !p.windWith && !p.rotation);
+    expect(swinging.length).toBeGreaterThan(3);
+    expect(fixed.length).toBeGreaterThan(3);
+
+    for (const s of swinging) {
+      const a = bounds(s);
+      for (const f of fixed) {
+        const b = bounds(f);
+        const heightOverlap = Math.min(a.hi, b.hi) - Math.max(a.lo, b.lo);
+        if (heightOverlap <= 0) continue; // passes over or under it
+        const radialOverlap = Math.min(a.far, b.far) - Math.max(a.near, b.near);
+        expect(
+          radialOverlap,
+          `swinging ${s.kind} at [${s.position}] sweeps through fixed ${f.kind} at [${f.position}]`,
+        ).toBeLessThanOrEqual(0);
+      }
+    }
+  });
 });
