@@ -31,7 +31,18 @@ function seedGear(
 }
 
 const SAILS_Y = 26; // the sails hub sits high on the tower
-const SAILS_Z = 4; // slightly in front of the tower so the sails clear it
+/** How far in +z the sail assembly stands off the tower's axis.
+ *
+ *  It has to clear the STONE, and the stone is a radius-7 cylinder. The sails are drawn at
+ *  SAILS_Z + 1.5 and their spars are 0.6 deep, so the near face sits at SAILS_Z + 1.2 and the
+ *  tower is only cleared when that reaches 7, i.e. SAILS_Z >= 5.8. At the 4 this used to be,
+ *  the spars occupied z 5.2..5.8 -- between 1.2 and 1.8 units INSIDE the masonry, with the
+ *  lower two blades buried along most of their length as they swung down past the wall. The
+ *  comment claimed they cleared it; they never did.
+ *
+ *  6.5 leaves 0.7 of daylight between spar and stone, and keeps the hub gear itself (a disc of
+ *  pitch radius 8 lying in the XY plane) inboard of the tower wall, where a windshaft belongs. */
+const SAILS_Z = 6.5;
 
 /** A windmill. The real, verifiable mechanism is the sail hub (the crank -- here the
  *  "wind" is the input that turns it) driving, through a right-angle bevel mesh, a vertical
@@ -83,7 +94,14 @@ export function createWindmillProps(): Prop[] {
   const props: Prop[] = [
     // Tower: a big cylinder from the ground up to just under the cap. (A cylinder with
     // equal top/bottom radius; the taper is faked by a slightly narrower cap on top.)
-    { kind: "cylinder", position: [0, 10, 0], radius: 7, height: 32, color: stone, texture: "stone", radialSegments: 24, roughness: 0.92, metalness: 0.03 },
+    //
+    // `position` is the CENTRE, so this spans y = 12 +/- 12 = 0..24 -- from the ground plane to
+    // exactly the cap's underside. It used to be centred at 10 with height 32, which spans
+    // -6..26: six units of masonry below the ground plane, and a top that pushed two units up
+    // INSIDE the cap rather than stopping just under it. `seatOnGround` hid the first half by
+    // lifting the whole machine 6, which is why it looked right while the numbers said
+    // otherwise; nothing hid the second.
+    { kind: "cylinder", position: [0, 12, 0], radius: 7, height: 24, color: stone, texture: "stone", radialSegments: 24, roughness: 0.92, metalness: 0.03 },
     // Cap sitting on top of the tower, where the sail hub is mounted.
     { kind: "cylinder", position: [0, 27, 0], radius: 5.5, height: 6, color: cap, texture: "wood", radialSegments: 24, roughness: 0.85, metalness: 0.05 },
   ];
