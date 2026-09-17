@@ -55,4 +55,24 @@ describe("createAirplanePreset", () => {
     expect(kinds.has("cylinder")).toBe(true); // fuselage
     expect(kinds.has("box")).toBe(true); // wings/tail/blades
   });
+
+  it("rides the propeller blades on the hub gear, so the propeller actually spins", () => {
+    // The blades are the only part of this aeroplane that MOVES. They spin because each blade
+    // prop carries `attachTo: "비행기_프로펠러"`; without it the hub gear turns behind a
+    // propeller nailed to the sky. Nothing checked that: the props test counted props and
+    // looked at the kind set, exactly as the windmill's did before the same gap was found
+    // there, so dropping the attachment left every test in this file green.
+    const gearIds = new Set(createAirplanePreset().gears.map((g) => g.id));
+    const attached = createAirplaneProps().filter((p) => p.attachTo);
+
+    expect(attached.length).toBeGreaterThanOrEqual(2); // at least two blades
+    for (const blade of attached) {
+      expect(blade.attachTo).toBe("비행기_프로펠러");
+      expect(gearIds.has(blade.attachTo!)).toBe(true); // and that gear exists
+    }
+    // The airframe is static: fuselage, wings and tail must NOT ride a gear, or the whole
+    // aeroplane would spin with the propeller.
+    const airframe = createAirplaneProps().filter((p) => !p.attachTo);
+    expect(airframe.length).toBeGreaterThan(3);
+  });
 });

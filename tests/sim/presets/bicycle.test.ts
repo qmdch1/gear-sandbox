@@ -84,4 +84,39 @@ describe("createBicyclePreset", () => {
     expect(kinds.has("ring")).toBe(true); // tires
     expect(kinds.has("box")).toBe(true); // frame/seat/bars
   });
+
+  it("rides the spokes on their own wheel hubs, so the wheels visibly turn", () => {
+    // A torus tyre is rotationally symmetric: spun, it looks perfectly still. The spokes are
+    // what make the motion readable, and they only move because each carries `attachTo` naming
+    // its own hub. The preset says so in a comment; nothing tested it, so mis-pointing a wheel's
+    // spokes at the other hub -- or dropping the attachment -- left this file entirely green
+    // while a wheel sat frozen.
+    const gearIds = new Set(createBicyclePreset().gears.map((g) => g.id));
+    const spokes = createBicycleProps().filter((p) => p.attachTo);
+    expect(spokes.length).toBeGreaterThanOrEqual(16); // eight per wheel
+
+    const perHub = new Map<string, number>();
+    for (const s of spokes) {
+      expect(gearIds.has(s.attachTo!)).toBe(true);
+      perHub.set(s.attachTo!, (perHub.get(s.attachTo!) ?? 0) + 1);
+    }
+    // Both wheels are spoked, and neither borrowed the other's hub.
+    expect(perHub.get("자전거_뒷바퀴허브")).toBeGreaterThan(0);
+    expect(perHub.get("자전거_앞바퀴허브")).toBeGreaterThan(0);
+    expect(perHub.size).toBe(2);
+
+    // Each wheel's spokes are centred on that wheel, not floating over the other one. The two
+    // wheels are separated along Z (both hubs sit at x = 0, spinning about the X axis), so Z is
+    // the axis that tells them apart.
+    const gears = createBicyclePreset().gears;
+    const hubZ = (id: string) => gears.find((g) => g.id === id)!.position[2];
+    const rearZ = hubZ("자전거_뒷바퀴허브");
+    const frontZ = hubZ("자전거_앞바퀴허브");
+    expect(rearZ).not.toBe(frontZ); // otherwise the comparison below says nothing
+    for (const s of spokes) {
+      const own = s.attachTo === "자전거_뒷바퀴허브" ? rearZ : frontZ;
+      const other = s.attachTo === "자전거_뒷바퀴허브" ? frontZ : rearZ;
+      expect(Math.abs(s.position[2] - own)).toBeLessThan(Math.abs(s.position[2] - other));
+    }
+  });
 });

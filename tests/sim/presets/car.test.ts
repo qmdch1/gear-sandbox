@@ -207,4 +207,26 @@ describe("createCarPreset", () => {
     expect(props.length).toBeGreaterThan(0);
     for (const prop of props) expect(prop.ridesOn).toBe(CAR_VEHICLE_ID);
   });
+
+  it("spins each wheel's spokes on that wheel, as well as carrying them along", () => {
+    // A car's wheel prop is the one thing in this repo that needs BOTH mechanisms at once:
+    // `attachTo` so the spokes turn with their wheel, and `ridesOn` so they travel with the
+    // car. The `ridesOn` half is covered above; the `attachTo` half was not covered anywhere,
+    // and a wheel whose spokes lost it would slide down the road without ever rotating --
+    // which, since a pulley disc is rotationally symmetric, is the whole of the visible
+    // difference between a rolling wheel and a skidding one.
+    const layout = createCarPreset();
+    const wheelIds = new Set(layout.gears.filter((g) => g.type === "pulley").map((g) => g.id));
+    const spokes = createCarProps().filter((p) => p.attachTo);
+
+    expect(spokes.length).toBeGreaterThanOrEqual(24); // six per wheel, four wheels
+    const perWheel = new Map<string, number>();
+    for (const sp of spokes) {
+      expect(wheelIds.has(sp.attachTo!)).toBe(true); // names a real wheel, not the driveshaft
+      expect(sp.ridesOn).toBe(CAR_VEHICLE_ID); // and travels with the car too
+      perWheel.set(sp.attachTo!, (perWheel.get(sp.attachTo!) ?? 0) + 1);
+    }
+    // All four road wheels are spoked -- not three with one borrowing another's hub.
+    expect(perWheel.size).toBe(4);
+  });
 });
