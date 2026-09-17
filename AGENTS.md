@@ -117,6 +117,37 @@ that constant's own definition. If it fires on something you wrote, do not resha
 slip past it — assert a literal, a measured geometry, or the result of a run instead. The other
 three shapes still need your own eyes.
 
+### Parts drawn inside other parts
+
+The second-commonest defect found here, after the unfailable assertion, is a prop drawn through
+geometry a comment says it clears. Six so far: windmill sails 1.2-1.8 units inside the stone
+tower; capstan bars sweeping through the drum four times a revolution; a clock hand buried 0.74
+into its brass bezel; a locomotive crosshead 0.3 into the entablature; a ferris wheel deck said
+to clear gondolas that reach past it; a carousel deck hovering 1.25 above the pad it "sits on".
+
+Nothing in the simulation can notice. `classify`'s overlap check compares GEAR CENTRES only, so
+a bar that reaches 22 units past a gear 18 away is invisible to it, and the sandbox models no
+contact between machine parts at all (see the list above). Props are not in the physics.
+
+**A general guard for this was tried and does not work.** Sweeping every `attachTo` prop's
+annulus about its gear's axis and intersecting it with every static prop reports the real cases
+— but it also reports a bicycle fork inside its own wheel, a car's axle rod inside its wheel
+spokes, and a dozen more where a static part is meant to sit inside a moving one's circle. The
+props model carries boxes and cylinders with Euler rotations, and their bounding volumes are far
+too coarse to tell an intended enclosure from a collision. A check people have to placate is
+worse than no check, so there isn't one.
+
+What works instead, and what every preset's suite should do for the parts that matter:
+
+- Measure the actual spans. `position` is a CENTRE, so a prop of height `h` spans `y ± h/2`; a
+  `ring` is a TORUS, so "inside the bezel" means within `tube` of the centreline circle, not
+  inside `radius`. Both of those caught real bugs the obvious comparison missed.
+- Compare against the thing the comment names, and assert the direction the comment claims —
+  `expect(nearestFace).toBeGreaterThan(TOWER_R)`, `expect(padTop).toBeCloseTo(deckBottom)`.
+- Remember `seatOnGround` shifts the whole machine, so an authored y and a drawn y differ
+  whenever a machine was authored below the floor. Measure the seated result when the claim is
+  about the ground.
+
 **If you run parallel agents to audit this repo, give each one its own worktree.** Proving a
 test can fail means editing a source file, and several agents doing that at once in one checkout
 means every full-suite run is measuring somebody else's half-finished injection, and a `git add
