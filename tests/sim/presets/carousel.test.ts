@@ -12,6 +12,8 @@ import {
   REDUCTION,
   MOTOR_SPEED,
   HORSE_COUNT,
+  RIDE_R,
+  RIM_R,
   horseAngle,
   horseFacing,
 } from "../../../src/sim/presets/carousel";
@@ -89,6 +91,38 @@ describe("createCarouselProps", () => {
     // The deck and canopy alone are rotationally symmetric and would show nothing; the
     // asymmetric riders are what make the motion readable.
     expect(turning.filter((p) => p.kind === "box").length).toBeGreaterThanOrEqual(HORSE_COUNT * 2);
+
+    // ...and they have to be OFF-AXIS, measured from the ring gear's own centre. `attachTo`
+    // sweeps a prop about that centre, so a rider sitting on it travels nowhere however fast
+    // the ride turns. Nothing in this file used to read a horse's x or z at all: collapsing
+    // every horse and pole to the axis left all thirteen tests green, and so did shifting the
+    // ring gear 5 units sideways so the whole 56-unit ride wobbled bodily round a 10-unit
+    // circle. Both are measured here now, which is what the preset header already claims.
+    const ring = createCarouselPreset().gears.find((g) => g.id === RING_ID)!;
+    const riders = turning.filter((p) => p.kind === "box");
+    for (const rider of riders) {
+      const r = Math.hypot(rider.position[0] - ring.position[0], rider.position[2] - ring.position[2]);
+      expect(r).toBeGreaterThan(RIDE_R * 0.5); // out on the platform, not on the pivot
+    }
+    // The ride turns about its own centre rather than orbiting some other point.
+    expect(ring.position[0]).toBe(0);
+    expect(ring.position[2]).toBe(0);
+  });
+
+  it("stands the ride on its pad instead of hovering over it", () => {
+    // The pad's comment says "the ride sits on it". It did not: the pad topped out at y = 1.0
+    // under a deck whose underside is at 2.25, leaving 1.25 units of nothing between the
+    // foundation and the carousel. `depthBelowGround` is 0 here, so `seatOnGround` never
+    // shifted it and the authored heights are the drawn ones.
+    const props = createCarouselProps();
+    const cyl = props.filter((p) => p.kind === "cylinder") as Array<
+      Extract<(typeof props)[number], { kind: "cylinder" }>
+    >;
+    const pad = cyl.find((p) => !p.attachTo && p.radius > RIM_R)!;
+    const deck = cyl.find((p) => p.attachTo === RING_ID)!;
+
+    expect(pad.position[1] - pad.height / 2).toBe(0); // on the ground
+    expect(pad.position[1] + pad.height / 2).toBeCloseTo(deck.position[1] - deck.height / 2, 9);
   });
 
   it("spaces the horses evenly around the ride rather than piling them at one angle", () => {

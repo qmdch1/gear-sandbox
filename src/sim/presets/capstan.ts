@@ -77,6 +77,25 @@ export const DRUM_X = MESH_DISTANCE;
 export const DRUM_Y = 9;
 export const BAR_Y = DRUM_Y;
 
+/** Height of the BARS themselves, as drawn. Deliberately NOT `BAR_Y`.
+ *
+ *  The bar gear has to sit at `BAR_Y = DRUM_Y` because that is the plane its mesh with the
+ *  ratchet lives in. The timber bars do not: they are props `attachTo`-ed to a gear whose axis
+ *  is vertical, and rotating about a vertical axis leaves y alone, so they may be drawn at any
+ *  height and still sweep correctly.
+ *
+ *  They have to be, because a bar is 22 long and centred at r = 11, so its tip reaches 22 units
+ *  from the capstan's axis -- past the drum, which stands only DRUM_X = 18 away with a radius
+ *  of 9. Drawn at BAR_Y the bars occupied y 8.2..9.8 and swept straight through the drum barrel
+ *  (y 1.5..9.5), the ratchet disc and the whelps, four times a revolution. Nothing objected:
+ *  `classify` compares gear CENTRES, which are a clear 18 apart, and the sandbox models no
+ *  contact between machine parts at all.
+ *
+ *  DRUM_Y + 3.5 puts them at y 11.7..13.3, clear above both the drum (top 9.5) and the pawls
+ *  (top DRUM_Y + 1.9 = 10.9) -- which is also where a real capstan's bars are, at the head's
+ *  top, well above the gear it drives. */
+export const BAR_PROP_Y = DRUM_Y + 3.5;
+
 /** 캡스턴 (ship's capstan / anchor windlass) -- bars pushed round by hand wind the anchor chain
  *  onto a drum, and a RATCHET stops the chain's weight running the whole thing back.
  *
@@ -198,7 +217,7 @@ export function createCapstanProps(): Prop[] {
     const a = barAngle(i);
     props.push({
       kind: "box",
-      position: [Math.cos(a) * 11, BAR_Y, Math.sin(a) * 11],
+      position: [Math.cos(a) * 11, BAR_PROP_Y, Math.sin(a) * 11],
       size: [22, 1.6, 1.6],
       color: timber,
       texture: "wood",

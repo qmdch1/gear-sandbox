@@ -50,8 +50,8 @@ export const REDUCTION = MOTOR_TEETH / RING_TEETH; // 1/6
 export const MOTOR_SPEED = 1.2;
 
 const DECK_Y = 3; // platform deck height
-const RIDE_R = 20; // radius the horses ride at
-const RIM_R = RIDE_R + 8; // 28 -- shared rim radius of the deck edge and the canopy base
+export const RIDE_R = 20; // radius the horses ride at
+export const RIM_R = RIDE_R + 8; // 28 -- shared rim radius of the deck edge and the canopy base
 const CANOPY_Y = 27; // canopy centre height
 const CANOPY_H = 9;
 /** Three's `ConeGeometry` centres the cone on its own origin, so the base circle -- the
@@ -129,8 +129,13 @@ export function createCarouselProps(): Prop[] {
   const horseCol = 0xe8e0d0;
 
   const props: Prop[] = [
-    // Static ground pad the ride sits on.
-    { kind: "cylinder", position: [0, 0.5, 0], radius: RING_R + 2, height: 1, color: stone, texture: "stone", roughness: 0.95, metalness: 0.03 },
+    // Static ground pad the ride sits on -- and it has to actually REACH the ride. `position`
+    // is the centre, so this spans y = 0 .. DECK_Y - 0.75, the underside of the turning deck.
+    // It used to be height 1 centred at 0.5, topping out at y = 1.0 against a deck whose
+    // underside is at 2.25: a 1.25-unit gap with nothing in it, so the whole carousel hovered
+    // over its own foundation. `seatOnGround` does not hide that -- `depthBelowGround` is 0 for
+    // this preset, so the authored heights are the ones drawn.
+    { kind: "cylinder", position: [0, (DECK_Y - 0.75) / 2, 0], radius: RING_R + 2, height: DECK_Y - 0.75, color: stone, texture: "stone", roughness: 0.95, metalness: 0.03 },
     // The turning deck.
     { kind: "cylinder", position: [0, DECK_Y, 0], radius: RIM_R, height: 1.5, color: timber, texture: "wood", textureRepeat: [6, 6], roughness: 0.75, metalness: 0.05, attachTo: RING_ID },
     // Centre pole (symmetric, so it is left static -- attaching it would show nothing).

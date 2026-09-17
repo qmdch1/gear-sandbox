@@ -142,7 +142,53 @@ describe("createCapstanProps", () => {
     for (const p of hoisted) {
       expect(p.windWith!.gear).toBe(C.DRUM_ID);
       expect(p.windWith!.travel).toEqual([0, C.CHAIN_TRAVEL]);
+      // The RADIUS is the quantity `sceneSync` actually multiplies the drum's rotation by --
+      // `clamp(gear.rotation * p.radius, lo, hi)` -- and no assertion in this file read it.
+      // Halving it left every test green while the anchor rose half as far as the suite's own
+      // names promise, because the only "lift" anyone measured was one the test recomputed
+      // for itself from ROPE_RADIUS.
+      expect(p.windWith!.radius).toBe(C.ROPE_RADIUS);
     }
+
+    // And the three have to agree: at the end of the bar's stroke the drum has turned far
+    // enough that rotation x radius is exactly the travel, with no clamping left to do. If the
+    // stroke, the radius and the travel drift apart, the anchor either stops short of the
+    // hawse pipe or sits pinned at its stop for part of every cycle.
+    let layout = preset();
+    let furthest = 0;
+    for (let i = 0; i < 60 * 120; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+      furthest = Math.max(furthest, layout.gears.find((g) => g.id === C.DRUM_ID)!.rotation);
+    }
+    expect(furthest * C.ROPE_RADIUS).toBeCloseTo(C.CHAIN_TRAVEL, 6);
+  });
+
+  it("swings the bars clear over the drum instead of through it", () => {
+    // A bar is 22 long, centred at r = 11, so its tip reaches 22 units from the capstan's
+    // axis -- past the drum, which stands DRUM_X = 18 away with a radius of 9. Drawn at the
+    // gear's own height the bars ran through the drum barrel, the ratchet disc and the whelps
+    // four times a revolution. `classify` never objects: it compares gear CENTRES, a clear 18
+    // apart, and the sandbox models no contact between machine parts at all. So the check has
+    // to be made here, in y: the bars ride above everything their sweep passes over.
+    const props = C.createCapstanProps();
+    const bars = props.filter((p) => p.attachTo === C.BAR_ID && p.kind === "box");
+    expect(bars.length).toBe(C.BAR_COUNT);
+
+    const barBottom = Math.min(...bars.map((b) => b.position[1] - (b as { size: number[] }).size[1] / 2));
+    // Everything that stands within reach of a bar tip, measured from the capstan axis.
+    const inSweep = props.filter((p) => {
+      if (bars.includes(p)) return false;
+      const r = Math.hypot(p.position[0], p.position[2]);
+      return r < 22 + 9; // generous: anything the 22-unit tip could plausibly foul
+    });
+    const tallest = Math.max(
+      ...inSweep.map((p) => {
+        const h = "size" in p ? (p.size as number[])[1] : "height" in p ? (p.height as number) : 0;
+        return p.position[1] + h / 2;
+      }),
+    );
+    expect(barBottom).toBeGreaterThan(tallest);
   });
 
   it("points every moving prop at a gear that actually exists", () => {
