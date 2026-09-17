@@ -79,13 +79,19 @@ export function gearLowestY(g: GearInstance): number {
   return g.position[1] - (rimDrop + halfThickness);
 }
 
-/** How far a machine hangs below the ground plane (y = 0), or 0 when it already sits on it. */
-export function depthBelowGround(gears: GearInstance[], props: Prop[]): number {
+/** The lowest world Y anything in a machine reaches -- gears and props together. Negative when
+ *  part of it is under the floor, positive when the whole machine hovers above it. Returns 0 for
+ *  an empty machine, which has no lowest point to report and needs no seating either. */
+export function lowestPoint(gears: GearInstance[], props: Prop[]): number {
   let lowest = Infinity;
   for (const g of gears) lowest = Math.min(lowest, gearLowestY(g));
   for (const p of props) lowest = Math.min(lowest, propLowestY(p));
-  if (!Number.isFinite(lowest)) return 0;
-  return Math.max(0, -lowest);
+  return Number.isFinite(lowest) ? lowest : 0;
+}
+
+/** How far a machine hangs below the ground plane (y = 0), or 0 when it already sits on it. */
+export function depthBelowGround(gears: GearInstance[], props: Prop[]): number {
+  return Math.max(0, -lowestPoint(gears, props));
 }
 
 /** Lifts a whole machine so nothing hangs through the floor.
@@ -101,14 +107,25 @@ export function depthBelowGround(gears: GearInstance[], props: Prop[]): number {
  *  `showroom.ts` relies on for its horizontal grid offsets. `classify` sees the same edges and the
  *  same overlaps before and after.
  *
+ *  IT SEATS, IT DOES NOT MERELY RESCUE. The translation is `-lowestPoint`, so a machine that
+ *  hovers is brought DOWN onto the floor just as one that is buried is lifted out of it. An
+ *  earlier version only ever lifted, which left a machine authored entirely above y = 0 floating
+ *  with nothing under it -- the music box stood half a unit off the ground that way, its case
+ *  resting on air. Nothing reported it, because "nothing is below the floor" was true.
+ *
  *  This seats a machine; it does not centre or scale it. A machine already on the ground is
  *  returned untouched, so calling it is idempotent. */
 export function seatOnGround(
   layout: LayoutState,
   props: Prop[],
 ): { layout: LayoutState; props: Prop[] } {
-  const lift = depthBelowGround(layout.gears, props);
-  if (lift === 0) return { layout, props };
+  const lift = -lowestPoint(layout.gears, props);
+  // Anything at rounding scale is already seated. `lowestPoint` runs a rotated prop's
+  // half-extents through sin/cos, so a machine that has just been seated measures 2.22e-16
+  // rather than 0; translating by that would be a no-op everywhere except in the last bits of
+  // every coordinate, which costs the idempotency this function promises. One part in a
+  // trillion of a centimetre is not a gap anyone can see.
+  if (Math.abs(lift) < 1e-9) return { layout, props };
   return {
     layout: {
       gears: layout.gears.map((g) => ({
@@ -116,7 +133,7 @@ export function seatOnGround(
         position: [g.position[0], g.position[1] + lift, g.position[2]] as Vec3,
       })),
       remoteLinks: layout.remoteLinks,
-      // Lifting is a translation, so a vehicle's travel along the ground is untouched by it.
+      // Seating is a translation, so a vehicle's travel along the ground is untouched by it.
       vehicles: layout.vehicles,
     },
     props: props.map((p) => ({
