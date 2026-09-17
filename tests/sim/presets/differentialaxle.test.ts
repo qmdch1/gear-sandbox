@@ -29,7 +29,6 @@ describe("createDifferentialAxlePreset", () => {
   });
 
   it("places the pinion at exactly the summed pitch radii from the crown wheel", () => {
-    expect(D.PINION_R + D.CROWN_R).toBe(D.FINAL_DRIVE_DISTANCE);
     const p = byId(D.PINION_ID);
     const c = byId(D.CROWN_ID);
     const d = Math.hypot(p.position[0] - c.position[0], p.position[1] - c.position[1], p.position[2] - c.position[2]);
@@ -104,7 +103,6 @@ describe("createDifferentialAxleProps", () => {
   it("stands the axle on the ground, clearing the TYRE's outer surface", () => {
     // A torus reaches radius + tube from its centre. Measuring to the centre line instead left
     // the tread 2.2 units into the road.
-    expect(D.AXLE_Y).toBeCloseTo(D.WHEEL_R + D.TYRE_TUBE, 9);
     expect(depthBelowGround(preset().gears, D.createDifferentialAxleProps())).toBeCloseTo(0, 6);
   });
 

@@ -38,7 +38,6 @@ describe("createCarouselPreset", () => {
 
   it("places the motor at exactly the summed pitch radii, clear of the overlap floor", () => {
     const [ring, motor] = createCarouselPreset().gears;
-    expect(RING_R + MOTOR_R).toBe(MESH_DISTANCE);
     const d = Math.hypot(
       motor.position[0] - ring.position[0],
       motor.position[1] - ring.position[1],

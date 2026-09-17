@@ -20,6 +20,8 @@ import {
   BARREL_LEN,
   BARREL_R,
   BOX_MODULE,
+  REDUCTION_TEETH,
+  GOVERNOR_TEETH,
   REDUCTION_TIP_R,
   GOVERNOR_TIP_R,
   PIN_RADIUS,
@@ -30,6 +32,7 @@ import {
   GOVERNOR_Y,
   PIN_TIP_RADIUS,
 } from "../../../src/sim/presets/musicbox";
+import { computeSpurProfilePoints } from "../../../src/render/gearGeometry";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
@@ -55,8 +58,6 @@ describe("createMusicBoxPreset", () => {
     const key = layout.gears.find((g) => g.id === WINDER_ID)!;
     const gov = layout.gears.find((g) => g.id === GOVERNOR_ID)!;
 
-    expect(WINDER_R + REDUCTION_R).toBe(WIND_MESH_DISTANCE);
-    expect(REDUCTION_R + GOVERNOR_R).toBe(GOVERNOR_MESH_DISTANCE);
 
     const dist = (a: typeof wheel, b: typeof wheel) =>
       Math.hypot(a.position[0] - b.position[0], a.position[1] - b.position[1], a.position[2] - b.position[2]);
@@ -164,9 +165,23 @@ describe("createMusicBoxProps", () => {
  *  the box it is supposed to live in. */
 describe("music box clearances", () => {
   it("measures rims at the tooth tip, not the pitch circle", () => {
-    // gearGeometry.ts: addendumRadius = pitchRadius + module * 1.0.
-    expect(REDUCTION_TIP_R).toBe(REDUCTION_R + BOX_MODULE);
-    expect(GOVERNOR_TIP_R).toBe(GOVERNOR_R + BOX_MODULE);
+    // This test used to hold only `expect(REDUCTION_TIP_R).toBe(REDUCTION_R + BOX_MODULE)` and
+    // its governor twin -- the DEFINITIONS in musicbox.ts, restated, and so unfailable. Every
+    // clearance test below leans on these two constants being the real outer reach of a real
+    // tooth, which nothing checked.
+    //
+    // Measure it from the profile `gearGeometry.ts` actually extrudes. If its addendum factor
+    // ever moves, these constants silently understate the rim and the clearances below start
+    // passing for wheels that really do spear the lid -- so this is the assertion that makes
+    // the rest of the suite mean something.
+    const tip = (teeth: number) => {
+      const pts = computeSpurProfilePoints(teeth, BOX_MODULE);
+      return Math.max(...pts.map((v) => Math.hypot(v.x, v.y)));
+    };
+    expect(tip(REDUCTION_TEETH)).toBeCloseTo(REDUCTION_TIP_R, 9);
+    expect(tip(GOVERNOR_TEETH)).toBeCloseTo(GOVERNOR_TIP_R, 9);
+    expect(REDUCTION_TIP_R).toBe(6.25);
+    expect(GOVERNOR_TIP_R).toBe(1);
   });
 
   it("keeps the great wheel inside the case instead of spearing the lid", () => {
@@ -181,11 +196,16 @@ describe("music box clearances", () => {
   });
 
   it("whirs the fan clear of the barrel, past the end of it", () => {
+    // An INEQUALITY against part of a definition is not the vacuous shape: FAN_Z is
+    // BARREL_LEN / 2 + 1.5, and this fails the moment that offset stops being positive -- set
+    // FAN_Z to 0 and it goes red. (It was briefly swept away with the genuine tautologies
+    // because the detector only looked at which names appeared on the line; the detector now
+    // looks at the matcher too.)
+    expect(FAN_Z).toBeGreaterThan(BARREL_LEN / 2);
     // The fan's circle would otherwise cut through the brass barrel: it reaches to within
     // GOVERNOR_MESH_DISTANCE - FAN_SWEEP_R of the arbor, which is inside the barrel's radius.
     expect(GOVERNOR_MESH_DISTANCE - FAN_SWEEP_R).toBeLessThan(BARREL_R);
     // ...so it has to live beyond the barrel's end instead.
-    expect(FAN_Z).toBeGreaterThan(BARREL_LEN / 2);
   });
 
   it("sweeps the pins just past the comb without driving them through it", () => {

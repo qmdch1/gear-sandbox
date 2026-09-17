@@ -38,7 +38,6 @@ describe("createWatermillPreset", () => {
   it("places the wallower at exactly the summed pitch radii, on perpendicular axes", () => {
     const layout = createWatermillPreset();
     const [wheel, wallower] = layout.gears;
-    expect(WHEEL_PITCH_RADIUS + WALLOWER_PITCH_RADIUS).toBe(MESH_DISTANCE);
     const dx = wallower.position[0] - wheel.position[0];
     const dy = wallower.position[1] - wheel.position[1];
     const dz = wallower.position[2] - wheel.position[2];

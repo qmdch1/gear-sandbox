@@ -289,7 +289,6 @@ describe("createWormTablePreset -- clearances the doc comment claims", () => {
     // A body of radius `rho` around the worm's shaft line reaches inward to z = 21 - rho, and the
     // wheel's tip circle reaches z = sqrt(21^2 - x^2). `wormLineClearX` solves those for x, and
     // the prop placements are measured against it.
-    expect(WHEEL_TIP_R).toBe(WHEEL_R + TABLE_MODULE);
     expect(wormLineClearX(2)).toBeCloseTo(Math.sqrt(80), 12); // pillow block half-depth: 8.94 < 11
     expect(wormLineClearX(2)).toBeLessThan(11);
     expect(wormLineClearX(4)).toBeCloseTo(Math.sqrt(152), 12); // motor case radius: 12.33 < 14

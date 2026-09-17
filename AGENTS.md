@@ -24,6 +24,7 @@ src/sim/units.ts  the world-unit <-> SI scale (1 unit = 1 cm) every physics form
 src/sim/dynamics.ts  torque / inertia / motor curve for a gear train; rollingDirection
 src/sim/gravity.ts   free fall, contact, restitution and friction for loose dropped parts
 src/sim/presets/  one module per example machine (25 files: 23 presets + index + wheels helper)
+tests/meta/       guards on the test suite itself (see "the assertion that cannot fail")
 src/render/       THREE.js: scene, gear geometry, props, procedural textures, chain/belt ribbons
 src/ui/           DOM panels (palette, diagnostics, durability, save/load, presets)
 src/interaction/  placement + drag controls
@@ -110,10 +111,25 @@ watch it go red — change the constant, mis-attach the prop, enlarge the crank 
 green, the test does not cover what its name says. Every test fixed in this repo for this reason
 was verified that way, and the same injection passed against the old version.
 
+Shape 1 is now **enforced**: `tests/meta/vacuousAssertions.test.ts` fails the build if any line
+in `tests/sim/presets/` mentions an exported preset constant together with every constant in
+that constant's own definition. If it fires on something you wrote, do not reshape the line to
+slip past it — assert a literal, a measured geometry, or the result of a run instead. The other
+three shapes still need your own eyes.
+
+**If you run parallel agents to audit this repo, give each one its own worktree.** Proving a
+test can fail means editing a source file, and several agents doing that at once in one checkout
+means every full-suite run is measuring somebody else's half-finished injection, and a `git add
+-A` can commit one. Two audit rounds here left stray probe files behind and a live injection in
+`wellpump.ts`; the `.gitignore` now swallows anything named `*probe*`, `*scratch*` or `*tmp*`,
+but the injections are the sharper hazard. Run such agents with `isolation: "worktree"`, and
+before committing anything after a parallel run, read `git diff src/` and not just the test
+output.
+
 ## Verifying a change
 
 ```bash
-npx vitest run          # full suite (892 tests in 73 files); `npm test` is the same thing
+npx vitest run          # full suite (893 tests in 74 files); `npm test` is the same thing
 npx tsc --noEmit        # types — vitest does NOT type-check, so this catches real bugs it misses
 npx vite build          # production build
 ```

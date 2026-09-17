@@ -13,3 +13,10 @@ probe*.ts
 _*probe*
 repro.ts
 **/__tmp_*
+# Agents keep inventing new spellings for the same thing (zzprobe-*, *_probe_tmp, scratch-*),
+# so match the WORD anywhere rather than a fixed prefix. A real test file never has "probe",
+# "scratch" or "tmp" in its name -- it is named after what it tests.
+*probe*
+*scratch*
+*_tmp*
+*tmp_*

@@ -52,7 +52,6 @@ describe("createWellPumpPreset", () => {
   });
 
   it("derives the stroke so the bucket sweeps exactly its full travel", () => {
-    expect(STROKE * ROPE_RADIUS).toBeCloseTo(BUCKET_TRAVEL, 12);
     expect(createWellPumpPreset().gears[0].reverseAt).toEqual([0, STROKE]);
   });
 

@@ -135,7 +135,6 @@ describe("createGearboxPreset", () => {
       expect(byId(layout, id).position[1]).toBe(INPUT_Y);
     }
     for (const id of DRIVEN_IDS) expect(byId(layout, id).position[1]).toBe(LAY_Y);
-    expect(INPUT_Y - LAY_Y).toBe(CENTER_DISTANCE);
   });
 
   it("gives every stage the same tooth-count sum, which is what puts them on ONE centre distance", () => {
@@ -143,7 +142,6 @@ describe("createGearboxPreset", () => {
     expect(STAGE1_DRIVE_TEETH + STAGE1_DRIVEN_TEETH).toBe(STAGE_TEETH_SUM);
     expect(STAGE2_DRIVE_TEETH + STAGE2_DRIVEN_TEETH).toBe(STAGE_TEETH_SUM);
     expect(STAGE3_DRIVE_TEETH + STAGE3_DRIVEN_TEETH).toBe(STAGE_TEETH_SUM);
-    expect((GEARBOX_MODULE * STAGE_TEETH_SUM) / 2).toBe(CENTER_DISTANCE);
 
     // The summed pitch radii therefore land on the same number for all three pairs.
     expect(DRIVE1_R + DRIVEN1_R).toBe(CENTER_DISTANCE);
@@ -246,7 +244,6 @@ describe("createGearboxPreset", () => {
     const perpendicular = Math.hypot(lever.position[1] - RAIL_Y, lever.position[2] - RAIL_Z);
     expect(perpendicular).toBeCloseTo(LEVER_R, 12);
     expect(pitchRadius(lever)).toBe(LEVER_R);
-    expect(LEVER_Y).toBe(RAIL_Y + LEVER_R);
 
     const edge = evaluatePair(lever, rail);
     expect(edge).not.toBeNull();
@@ -331,7 +328,6 @@ describe("createGearboxPreset", () => {
     expect(byId(layout, RAIL_ID).travelLimit).toEqual([-SHIFT_TRAVEL, SHIFT_TRAVEL]);
     // rotation.ts drives a rack at crankSpeed * pitchRadius(pinion), so the stroke IS
     // LEVER_R per radian of lever -- which is why the two bounds agree exactly.
-    expect(SHIFT_TRAVEL).toBe(LEVER_R * SHIFT_SWING);
     expect(byId(layout, LEVER_ID).angularVelocity).toBe(LEVER_SPEED);
   });
 
@@ -470,7 +466,6 @@ describe("gearbox clearances", () => {
   it("buries each splined collar inside its drive gear's root circle", () => {
     // gearGeometry.ts sprocketGeometry: hub = pitchRadius * 0.85, teeth stand module * 0.9
     // proud of it. That whole reach has to vanish inside the SMALLEST drive gear.
-    expect(COLLAR_OUTER_R).toBeCloseTo(COLLAR_R * 0.85 + COLLAR_MODULE * 0.9, 12);
     expect(COLLAR_OUTER_R).toBeLessThan(DRIVE1_ROOT_R); // 1.236 < 2.375
   });
 
@@ -480,8 +475,6 @@ describe("gearbox clearances", () => {
   });
 
   it("slides the fork in the clear bay between stage 1 and stage 2, never through a gear", () => {
-    expect(FORK_MIN_X).toBe(FORK_X - SHIFT_TRAVEL); // 8
-    expect(FORK_MAX_X).toBe(FORK_X + SHIFT_TRAVEL); // 16
     // gearGeometry.ts extrudes a gear GEAR_THICKNESS = 0.4 along its axis, so a stage's discs
     // occupy x = stageX .. stageX + 0.4. The fork clears both neighbours.
     expect(FORK_MIN_X).toBeGreaterThan(STAGE1_X + 0.4);

@@ -22,7 +22,6 @@ describe("createCapstanPreset", () => {
 
   it("meshes the bars to the ratchet at the summed pitch radii, on PARALLEL axes", () => {
     // The ratchet branch needs PARALLEL axes, unlike the bevel and worm branches beside it.
-    expect(C.BAR_R + C.RATCHET_R).toBe(C.MESH_DISTANCE);
     const bars = byId(C.BAR_ID);
     const ratchet = byId(C.RATCHET_ID);
     const d = Math.hypot(
@@ -97,7 +96,6 @@ describe("createCapstanPreset", () => {
 
   it("hauls the anchor over exactly [0, CHAIN_TRAVEL] and pays it back out, forever", () => {
     // The stroke is derived, not guessed: lift = -REDUCTION * ROPE_RADIUS * barRotation.
-    expect(C.BAR_STROKE[0] * -(C.REDUCTION * C.ROPE_RADIUS)).toBeCloseTo(C.CHAIN_TRAVEL, 9);
     expect(byId(C.BAR_ID).reverseAt).toEqual(C.BAR_STROKE);
 
     let layout = preset();

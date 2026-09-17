@@ -124,8 +124,6 @@ describe("createPlanetaryHoistPreset", () => {
   });
 
   it("derives the motor's reversing stroke from the hook's travel rather than guessing it", () => {
-    expect(P.LIFT_PER_MOTOR_RADIAN).toBeCloseTo(P.MOTOR_TO_DRUM * P.ROPE_RADIUS, 12);
-    expect(P.MOTOR_REVERSE_AT[1] * P.LIFT_PER_MOTOR_RADIAN).toBeCloseTo(P.HOOK_TRAVEL, 9);
     expect(gearById(P.MOTOR_ID).reverseAt).toEqual(P.MOTOR_REVERSE_AT);
   });
 });

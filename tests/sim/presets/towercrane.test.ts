@@ -38,7 +38,6 @@ describe("createTowerCranePreset", () => {
     const layout = createTowerCranePreset();
     const ring = layout.gears.find((g) => g.id === SLEW_RING_ID)!;
     const motor = layout.gears.find((g) => g.id === SLEW_MOTOR_ID)!;
-    expect(SLEW_RING_R + SLEW_MOTOR_R).toBe(SLEW_MESH_DISTANCE);
     const d = Math.hypot(
       motor.position[0] - ring.position[0],
       motor.position[1] - ring.position[1],
@@ -110,7 +109,6 @@ describe("createTowerCranePreset", () => {
   });
 
   it("derives the hoist stroke so the hook sweeps exactly its full travel", () => {
-    expect(HOIST_STROKE * ROPE_RADIUS).toBeCloseTo(HOOK_TRAVEL, 12);
     const hoistMotor = createTowerCranePreset().gears.find((g) => g.id === HOIST_MOTOR_ID)!;
     expect(hoistMotor.reverseAt).toEqual([0, HOIST_STROKE]);
   });
