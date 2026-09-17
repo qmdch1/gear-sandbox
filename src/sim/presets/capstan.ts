@@ -231,10 +231,16 @@ export function createCapstanProps(): Prop[] {
   // The chain and the anchor it hauls. The chain is a taut guide line spanning the travel; the
   // anchor climbs it.
   const hawseX = DRUM_X + DRUM_R + 6;
-  // The flukes are canted, so they reach lower than their box centres suggest -- at the obvious
-  // rest height the crown and flukes sat 3 units into the sea bed. Lifting the whole anchor by
-  // its own clearance keeps it on the ground at full pay-out.
-  const A = 3;
+  // The flukes are canted, so they reach lower than their box centres suggest: at the obvious
+  // rest height the lower fluke corner dips 0.0999 below the sea bed while the crown sits
+  // exactly on it. Lifting the whole anchor by that clearance -- and by nothing more -- is what
+  // keeps it ON the ground at full pay-out.
+  //
+  // It used to be 3, which is thirty times the clearance and turns the fix inside out: the
+  // anchor then hung 2.9 above the sea bed and 0.9 above the top face of its own deck, resting
+  // on nothing at all. (The comment's "3 units into the sea bed" belonged to the chain guide
+  // cylinder five lines below, which really was that far under.)
+  const A = 0.1;
   props.push(
     // The chain spans exactly the anchor's travel, starting at its rest height. Sized from
     // CHAIN_TRAVEL + 6 and centred at CHAIN_TRAVEL / 2 it reached 3 units below the sea bed --

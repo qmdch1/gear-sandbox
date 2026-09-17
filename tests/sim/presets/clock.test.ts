@@ -1,17 +1,76 @@
 import { describe, it, expect } from "vitest";
-import { createClockPreset, createClockProps } from "../../../src/sim/presets/clock";
+import { createClockPreset, createClockProps, HOUR_R } from "../../../src/sim/presets/clock";
 import { evaluatePair } from "../../../src/sim/meshing";
 import { buildEdges, classify } from "../../../src/sim/graph";
 import { tick } from "../../../src/sim/simulation";
 
 describe("createClockProps", () => {
   it("supplies a clock hand (and hub) attached to the hour wheel, so a moving hand sweeps the dial", () => {
+    // Counting attached props and asking for "at least 2" -- which is all this used to do --
+    // leaves every individual attachment free to break, because THREE props carry it. Measured:
+    // deleting the long pointer's `attachTo` passed; re-pointing it at the idler (whose centre
+    // is 66 units away, so the hand would orbit right off the dial at twelve times the speed)
+    // passed; and attaching all twelve tick marks to the hour wheel, so the dial turns with the
+    // hand and the clock can never show a different time, passed too.
+    const layout = createClockPreset();
+    const gearIds = new Set(layout.gears.map((g) => g.id));
     const props = createClockProps();
-    const handParts = props.filter((p) => p.attachTo === "시계_시침휠");
-    // The hand, its counterweight tail, and the centre hub cap all spin with the hour wheel.
-    expect(handParts.length).toBeGreaterThanOrEqual(2);
-    // The dial (bezel + tick marks) stays static (not attached).
-    expect(props.some((p) => p.attachTo === undefined)).toBe(true);
+    const attached = props.filter((p) => p.attachTo);
+
+    // Everything that moves hangs off the hour wheel, and that gear exists.
+    for (const p of attached) {
+      expect(p.attachTo).toBe("시계_시침휠");
+      expect(gearIds.has(p.attachTo!)).toBe(true);
+    }
+
+    // The POINTER specifically -- the longest attached box, and the only part of this clock
+    // anyone reads -- is one of them. Identified by length rather than by index so reordering
+    // the props cannot quietly retarget the check.
+    const boxes = attached.filter((p) => p.kind === "box") as Array<
+      Extract<(typeof props)[number], { kind: "box" }>
+    >;
+    expect(boxes.length).toBeGreaterThanOrEqual(2); // pointer + counterweight tail
+    const pointer = boxes.reduce((a, b) => (a.size[0] >= b.size[0] ? a : b));
+    expect(pointer.attachTo).toBe("시계_시침휠");
+    expect(pointer.size[0]).toBeGreaterThan(HOUR_R); // it really does reach out over the dial
+
+    // And the DIAL stays still. Not "some prop is unattached" -- every tick mark and the bezel
+    // must be static, or the face turns with the hand and the clock reads the same forever.
+    const staticParts = props.filter((p) => !p.attachTo);
+    expect(staticParts.length).toBeGreaterThanOrEqual(12); // twelve hour marks, at least
+    expect(staticParts.length).toBeGreaterThan(attached.length);
+  });
+
+  it("stops the hand at the hour marks instead of driving it into the bezel", () => {
+    // The bezel is a TORUS, so "inside the bezel" is not a comparison against its radius: the
+    // brass occupies everything within `tube` of the centreline circle. The hand used to be
+    // HOUR_R + 1.5*S long, which put its tip 0.74 units inside that material at the hand's
+    // lowest edge -- while the constant's comment said it reached "just inside the bezel".
+    // Same class as the windmill sails drawn inside the tower.
+    const props = createClockProps();
+    const ring = props.find((p) => p.kind === "ring") as Extract<
+      (typeof props)[number],
+      { kind: "ring" }
+    >;
+    const boxes = props.filter((p) => p.attachTo && p.kind === "box") as Array<
+      Extract<(typeof props)[number], { kind: "box" }>
+    >;
+    const pointer = boxes.reduce((a, b) => (a.size[0] >= b.size[0] ? a : b));
+
+    // Radius of the tip, measured from the dial's own centre rather than from the world origin.
+    const tipR = pointer.position[0] + pointer.size[0] / 2 - ring.position[0];
+    const lo = pointer.position[1] - pointer.size[1] / 2;
+    const hi = pointer.position[1] + pointer.size[1] / 2;
+
+    // Distance from the tip to the torus centreline, at whichever edge of the hand comes
+    // closest to it. Outside the tube means clear brass.
+    const gap = Math.min(
+      ...[lo, hi].map((y) => Math.hypot(tipR - ring.radius, y - ring.position[1])),
+    );
+    expect(gap).toBeGreaterThan(ring.tube);
+
+    // ...and it still reaches out far enough to point at something.
+    expect(tipR).toBeGreaterThan(HOUR_R);
   });
 });
 

@@ -173,7 +173,14 @@ export function createClockProps(): Prop[] {
   // 1/12 the minute drive, so this sweeps slowly -- the visible "clock is running" motion. A box's
   // long axis is X, so at rest it points to 3 o'clock and the sweep carries it round from there.
   const handColor = 0x1a1a1e;
-  const handLen = HOUR_R + 1.5 * S; // reaches just inside the bezel
+  // Long enough to reach the hour marks, short enough to stay OUT of the brass bezel ring.
+  // The ring is a torus at y = 0.4*S whose tube radius is 1.2*S, so its material begins at
+  // radius bezelR - 1.2*S = HOUR_R + 1.3*S. At the old HOUR_R + 1.5*S the hand tip was 0.2*S
+  // beyond that -- the tip sat inside the brass, by 0.74 units measured against the torus at
+  // the hand's lowest edge -- while this comment said it reached "just inside the bezel". The
+  // tick marks sit on the same radius the ring's inner surface does, so pointing AT them is
+  // exactly where the hand should stop.
+  const handLen = HOUR_R + 1.2 * S;
   props.push({
     kind: "box",
     position: [HOUR_X + handLen / 2, 1.1 * S, 0],

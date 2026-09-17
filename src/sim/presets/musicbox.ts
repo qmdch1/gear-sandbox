@@ -89,7 +89,10 @@ const COMB_HALF_HEIGHT = 0.5;
 /** What actually fixes the comb's height is the GREAT WHEEL, not the pins. The wheel is
  *  coincident with the barrel, so it is drawn as a disc straight across the barrel's mid-plane,
  *  and the comb runs the barrel's whole length -- so the comb has to hang below the wheel's tip
- *  circle or the wheel saws through it (which it did, by 4.4, before `BOX_MODULE` came down).
+ *  circle or the wheel saws through it -- which it did, and not by the 4.4 an earlier version of
+ *  this comment gave. At the old BOX_MODULE of 0.5 the wheel's tip circle reached 8.4 below the
+ *  comb's top face and 7.4 below its underside: the comb was not sawn into, it was swallowed
+ *  whole, its farthest corner lying 5.32 from the arbor against a tip radius of 12.5.
  *  0.25 of clearance under the tip circle leaves the pins sweeping 0.55 above the comb: close
  *  enough to read as plucking, with nothing interpenetrating. */
 export const COMB_Y = ARBOR_Y - REDUCTION_TIP_R - 0.25 - COMB_HALF_HEIGHT; // 5

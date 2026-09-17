@@ -204,4 +204,28 @@ describe("createCapstanProps", () => {
     const used = new Set(C.createCapstanProps().map((p) => p.texture).filter(Boolean));
     for (const kind of ["wood", "metal", "rust"]) expect(used.has(kind as never)).toBe(true);
   });
+
+  it("rests the anchor on the sea bed at full pay-out, not in the air above its own deck", () => {
+    // The lift constant exists to stop the canted flukes dipping through the floor, and it was
+    // set thirty times too high: the anchor hung 2.9 above the sea bed and 0.9 above the top
+    // face of the deck it is supposed to lie on, resting on nothing. The figure it used had
+    // been borrowed from the chain guide cylinder, which really was 3 units under.
+    const props = C.createCapstanProps();
+    const anchor = props.filter((p) => p.windWith); // the parts the chain lifts
+    expect(anchor.length).toBeGreaterThanOrEqual(5);
+
+    const lowestOf = (p: (typeof props)[number]) => {
+      const h = "size" in p ? (p.size as number[])[1] : "height" in p ? (p.height as number) : 0;
+      // A canted fluke reaches lower than its box centre: rotating a box about z sweeps its
+      // half-diagonal down, so account for that rather than for the upright half-height.
+      const w = "size" in p ? (p.size as number[])[0] : 0;
+      const rot = (p.rotation as number[] | undefined)?.[2] ?? 0;
+      const reach = rot === 0 ? h / 2 : (Math.abs(Math.sin(rot)) * w + Math.abs(Math.cos(rot)) * h) / 2;
+      return p.position[1] - reach;
+    };
+    const lowest = Math.min(...anchor.map(lowestOf));
+
+    expect(lowest).toBeGreaterThanOrEqual(0); // not through the floor...
+    expect(lowest).toBeLessThan(0.5); // ...and actually ON it, not hovering
+  });
 });
