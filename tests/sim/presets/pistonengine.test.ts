@@ -399,5 +399,48 @@ describe("createPistonEngineProps", () => {
         expect(Math.abs(web.position[0] - bore)).toBeGreaterThan(4.9); // clear of a 3.9-radius piston
       }
     }
+
+    // The deck and the cover are two of the four parts this test's NAME promises, and the two
+    // that close the tops of the bores -- and nothing used to locate them. The only assertion
+    // that could have noticed was `boxes.length >= 10` against the 12 the comment enumerates:
+    // exactly two units of slack, which is precisely enough to delete both. Measured: deleting
+    // the head deck and the rocker cover left all thirteen tests in this file green, with the
+    // head bolts and spark plugs floating over open bores.
+    const wide = boxes.filter((p) => p.kind === "box" && p.size[0] > 40 && p.position[1] > 15);
+    expect(wide).toHaveLength(2); // the deck, and the cover on top of it
+
+    const [deck, cover] = wide.sort((a, b) => a.position[1] - b.position[1]) as Array<
+      Extract<(typeof props)[number], { kind: "box" }>
+    >;
+    // The cover sits on the deck, not floating above it or sunk through it.
+    expect(cover.position[1] - cover.size[1] / 2).toBeCloseTo(deck.position[1] + deck.size[1] / 2, 6);
+    // And the deck's UNDERSIDE -- the face a piston would strike, not its centre line --
+    // stands clear of the crown at top dead centre.
+    const crownAtTdc = PISTON_TDC_Y + 2.5;
+    expect(deck.position[1] - deck.size[1] / 2).toBeGreaterThan(crownAtTdc);
+  });
+
+  it("stands every spark plug where it can actually be seen", () => {
+    // All four were drawn inside the rocker cover: 2.2 of each plug's 2.6 units of height sat
+    // inside an opaque box, another 0.35 inside the deck, leaving a 0.05 sliver between them.
+    // Four plugs modelled and none of them visible. Props are not in the physics, so nothing in
+    // the simulation could report it.
+    const props = createPistonEngineProps();
+    const plugs = props.filter((p) => p.kind === "cylinder" && p.radius === 0.75) as Array<
+      Extract<(typeof props)[number], { kind: "cylinder" }>
+    >;
+    expect(plugs.length).toBe(BORE_X.length);
+
+    const cover = props.filter((p) => p.kind === "box" && p.size[0] > 40 && p.position[1] > 15)
+      .sort((a: any, b: any) => b.position[1] - a.position[1])[0] as Extract<
+      (typeof props)[number],
+      { kind: "box" }
+    >;
+    for (const plug of plugs) {
+      const zGap = Math.abs(plug.position[2] - cover.position[2]) - cover.size[2] / 2 - plug.radius;
+      const yGap = plug.position[1] - plug.height / 2 - (cover.position[1] + cover.size[1] / 2);
+      // Clear of the cover in z (standing beside it) or in y (standing proud of it).
+      expect(Math.max(zGap, yGap)).toBeGreaterThan(0);
+    }
   });
 });

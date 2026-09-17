@@ -272,7 +272,11 @@ export function createPistonEngineProps(): Prop[] {
   const END_WALL_X = 27;
   const WEB_X = [-END_WALL_X, -BORE_PITCH, 0, BORE_PITCH, END_WALL_X]; // -27, -14, 0, 14, 27
   const BLOCK_SPAN = END_WALL_X * 2 + 2; // 56, outer face to outer face
-  const DECK_Y = 22; // top of the block: piston crown at TDC reaches 17 + 2.5 = 19.5, so 2.5 clear
+  // Top of the block. `position` is a prop's CENTRE and the deck is 2.5 thick, so its UNDERSIDE
+  // -- the face a piston would actually strike -- is at 20.75. The crown at top dead centre
+  // reaches PISTON_TDC_Y + 2.5 = 19.5, leaving 1.25 of clearance. (This comment used to say
+  // 2.5, measuring to the deck's centre line through solid metal.)
+  const DECK_Y = 22;
   const BLOCK_Z = -1; // block centred slightly behind the crank plane, open toward +Z
 
   const props: Prop[] = [
@@ -293,7 +297,10 @@ export function createPistonEngineProps(): Prop[] {
     },
     // Rocker cover on top of the deck.
     {
-      kind: "box", position: [0, DECK_Y + 2.8, BLOCK_Z], size: [BLOCK_SPAN - 6, 3, 9],
+      // Resting ON the deck: the deck's top face is DECK_Y + 1.25 and the cover is 3 thick, so
+      // its centre belongs at DECK_Y + 2.75. At DECK_Y + 2.8 it floated 0.05 above the metal
+      // it is bolted to.
+      kind: "box", position: [0, DECK_Y + 2.75, BLOCK_Z], size: [BLOCK_SPAN - 6, 3, 9],
       color: coverCol, texture: "metal", textureRepeat: [6, 1], metalness: 0.5, roughness: 0.5,
     },
     // Oil pan slung under the crankcase.
@@ -323,8 +330,13 @@ export function createPistonEngineProps(): Prop[] {
     }
   }
 
-  // Two engine mounting feet on the crankcase flanks.
-  for (const x of [-END_WALL_X + 5, END_WALL_X - 5]) {
+  // Two engine mounting feet, outboard of the oil pan so they read as feet.
+  //
+  // At +/-(END_WALL_X - 5) = +/-22 each 8-wide foot spanned x 18..26 against a pan spanning
+  // +/-22, so half of every foot was buried inside the sump over the sump's whole depth: what
+  // was drawn was a foot growing out of the side of the oil pan. +/-(END_WALL_X + 1) puts the
+  // inner face at 24, a clear 2 outboard of the pan wall.
+  for (const x of [-END_WALL_X - 1, END_WALL_X + 1]) {
     props.push({
       kind: "box", position: [x, -11.6, BLOCK_Z], size: [8, 1.6, 15],
       color: boltCol, texture: "rust", textureRepeat: [2, 2], metalness: 0.4, roughness: 0.8,
@@ -425,9 +437,14 @@ export function createPistonEngineProps(): Prop[] {
       color: boltCol, texture: "rust", textureRepeat: [2, 1], metalness: 0.5, roughness: 0.7,
       linkTo: { ...link, role: "pin" },
     });
-    // Spark plug sunk into the head above this bore (static -- it is part of the head).
+    // Spark plug standing on the head deck beside this bore (static -- part of the head).
     props.push({
-      kind: "cylinder", position: [boreX, DECK_Y + 2.2, BLOCK_Z], radius: 0.75, height: 2.6, radialSegments: 12,
+      // Beside the rocker cover, not under it. At BLOCK_Z the plug sat inside the cover for
+      // 2.2 of its 2.6 units and inside the deck for another 0.35, leaving a 0.05 sliver
+      // visible between them -- four plugs drawn and none of them seen. The cover is 9 deep
+      // against the deck's 13, so BLOCK_Z + 5.5 is on bare deck, the same band the head bolts
+      // already stand in. Sitting ON the deck (centre 24.55) rather than sunk through it.
+      kind: "cylinder", position: [boreX, 24.55, BLOCK_Z + 5.5], radius: 0.75, height: 2.6, radialSegments: 12,
       color: boltCol, texture: "rust", textureRepeat: [1, 1], metalness: 0.45, roughness: 0.75,
     });
   }
