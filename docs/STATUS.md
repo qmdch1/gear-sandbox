@@ -82,18 +82,26 @@ turned back on.
 - **A `load` gear is a damper, not a weight.** Nothing hangs off a drum, so a hoist does not feel
   what it is lifting. This is the biggest remaining gap between the model and the machines it
   draws.
-- **Eleven of the twenty-three presets have had a defect audit; twelve have not.** The audited
-  ones (car, locomotive, clocktower, conveyor, ferriswheel, differentialaxle, castle, airplane,
-  hoist, gearbox, factory) each yielded real findings — stale claims, figures measurement
-  contradicted, tests that could not fail — all since fixed. The unaudited twelve are capstan,
-  carousel, clock, musicbox, pistonengine, planetaryhoist, towercrane, watermill, wellpump,
-  windmill, wormtable and bicycle. Nothing suggests they are cleaner; they simply have not been
-  looked at. (The repo-wide sweeps — the "no force model" claims and the definitional-identity
-  assertions — did cover all twenty-three.)
-- **About sixteen assertions still restate a definition**, each sitting beside a real
-  measurement in the same test (`expect(RING_R + MOTOR_R).toBe(MESH_DISTANCE)` immediately above
-  a measurement of the actual gap between the two gears). They are redundant rather than
-  dangerous, but they read as coverage. The fourteen that stood alone have been dealt with.
+- **All twenty-three presets have now had a defect audit, and every one yielded real defects.**
+  Roughly seventy findings in total, each reproduced by measurement before it was acted on, and
+  each fix proved by injection: break the thing the test names, watch it go red, revert. Two
+  classes dominated. First, assertions that could not fail -- about thirty, now removed, with
+  `tests/meta/vacuousAssertions.test.ts` blocking the commonest shape mechanically. Second,
+  parts drawn through other parts, all of them invisible to the simulation: windmill sails
+  inside the tower, capstan bars sweeping the drum, a tower-crane cab through each mast leg four
+  times a revolution, a clock hand buried in its bezel, four spark plugs inside a rocker cover,
+  a well mouth paved over with stone, and two clamp bars drawn inside each other over 3.7 units.
+  A carousel, a bicycle and a set of millstones were all hovering over the things said to carry
+  them.
+
+  A third pattern is worth naming because it recurred five times: a preset deliberately adds an
+  asymmetric part -- sails, spokes, paddles, a key on a shaft -- precisely so that rotation is
+  legible, and then nothing tests that the part is still attached or still visible. Detaching
+  all forty asymmetric props from the water wheel left its suite green with the wheel rendering
+  pixel-identical every frame.
+
+  What no longer needs doing: the audit itself. What a future session should be suspicious of is
+  any NEW preset, since every existing one arrived with defects of exactly these kinds.
 
 ## If you are looking for something to do
 

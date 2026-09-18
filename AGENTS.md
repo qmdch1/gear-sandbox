@@ -160,7 +160,7 @@ output.
 ## Verifying a change
 
 ```bash
-npx vitest run          # full suite (893 tests in 74 files); `npm test` is the same thing
+npx vitest run          # full suite (958 tests in 75 files); `npm test` is the same thing
 npx tsc --noEmit        # types — vitest does NOT type-check, so this catches real bugs it misses
 npx vite build          # production build
 ```
