@@ -260,8 +260,12 @@ export function boltAngle(i: number): number {
 }
 
 /** Four through-rods clamping the two flanges together. These DO cross the gear plane, at
- *  HOUSING_FLANGE_R, so their angles are chosen 45 degrees away from all three mesh directions;
- *  the test measures the real distance from each rod to each mating pinion's tip circle. */
+ *  HOUSING_FLANGE_R, so their angles are chosen 45 degrees away from all three mesh directions.
+ *  tests/sim/presets/planetaryhoist.test.ts measures the real distance from each rod to every
+ *  gear on the plane against that gear's tip circle. (That sentence stood here for a long time
+ *  before it was true: no test referenced TIE_ROD_ANGLES, HOUSING_FLANGE_R or any other constant
+ *  in this block, so the whole "Body geometry the clearance tests pin" section was pinned by
+ *  nothing at all. Putting the rods on the mesh directions now fails, naming the gear fouled.) */
 export const TIE_ROD_ANGLES = [Math.PI / 4, (3 * Math.PI) / 4, (5 * Math.PI) / 4, (7 * Math.PI) / 4];
 export const TIE_ROD_R = 0.5;
 
@@ -289,8 +293,17 @@ export const ROPE_RIB_COUNT = 20;
 export const ROPE_RIB_R = 8.4;
 const ROPE_RIB_HALF_HEIGHT = 0.35;
 /** How low the spiral rope ribs sweep as the barrel turns -- the real floor the rising hook has
- *  to stop under, half a unit lower than the barrel's own underside. */
-export const RIB_SWEEP_LOW = SHAFT_Y - (ROPE_RIB_R + ROPE_RIB_HALF_HEIGHT); // 35.25
+ *  to stop under.
+ *
+ *  A rib is `size: [1.4, ROPE_RIB_HALF_HEIGHT * 2, 1]` turned by `rotation: [0, 0, a]`, so its
+ *  local X -- half-length 0.7 -- points RADIALLY and ROPE_RIB_HALF_HEIGHT is the TANGENTIAL half
+ *  width. The corner furthest from the drum axis is therefore at
+ *  hypot(ROPE_RIB_R + 0.7, ROPE_RIB_HALF_HEIGHT) = 9.1067, not ROPE_RIB_R + 0.35 = 8.75: the
+ *  old form added the tangential half-width along the radius, which is the wrong half of the
+ *  box. The ribs sweep 1.107 below the barrel's underside, not the "half a unit" this comment
+ *  used to claim, and the headroom over HOOK_BLOCK_TOP is 21.193 rather than 21.55. HOOK_TRAVEL
+ *  of 20 still fits under it -- the hook never fouled; the figures were simply wrong. */
+export const RIB_SWEEP_LOW = SHAFT_Y - Math.hypot(ROPE_RIB_R + 0.7, ROPE_RIB_HALF_HEIGHT); // 34.893
 export function ropeRibAngle(i: number): number {
   return i * 0.85;
 }
@@ -361,9 +374,14 @@ export const BASE_Y = 1.5;
  *
  *  So the drum turns at ONE EIGHTH of the motor -- and because the rope spools at ROPE_RADIUS 8,
  *  the hook rises exactly one world unit per radian the motor turns. That is the whole point of
- *  the machine: the motor visibly buzzes, the hook visibly crawls. Every one of those numbers is
- *  checked numerically over hundreds of real ticks in tests/sim/presets/planetaryhoist.test.ts,
- *  not merely derived here.
+ *  the machine: the motor visibly buzzes, the hook visibly crawls.
+ *
+ *  Every one of those RATIOS is checked numerically over hundreds of real ticks in
+ *  tests/sim/presets/planetaryhoist.test.ts. The absolute signs above hold for the hoisting half
+ *  of the cycle only: `MOTOR_REVERSE_AT` flips the motor at each end of the hook's travel, so
+ *  the whole table inverts together twice a cycle. (For a long time this said every NUMBER was
+ *  checked, and only three of the twelve were -- motor, drum and bull gear, the motor through a
+ *  `Math.abs` that hid the reversal entirely.)
  *
  *  THE RATCHET is a genuine one-way member, not decoration: `evaluatePair`'s ratchet branch marks
  *  the bull-gear/ratchet edge `oneWay: "aToB"` (the bull gear is `a`, since it comes first in the

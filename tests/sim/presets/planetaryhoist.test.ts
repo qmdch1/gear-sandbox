@@ -97,6 +97,79 @@ describe("createPlanetaryHoistPreset", () => {
     }
   });
 
+  it("turns every one of the twelve shafts at the ratio the header tabulates", () => {
+    // The preset's header lists a speed for all twelve shafts and then says "Every one of those
+    // numbers is checked numerically over hundreds of real ticks in
+    // tests/sim/presets/planetaryhoist.test.ts, not merely derived here." That was not true: the
+    // loop above asserts three of them -- motor, drum and bull gear -- and the helical pinion,
+    // planetary, idler, aux pinion, governor, ratchet, counter, motor sprocket and cooling fan
+    // were never compared against any figure. The fan did not appear in this file at all. So
+    // check them, rather than soften the claim.
+    //
+    // Ratios against the motor's CURRENT speed, not the header's absolute figures. Those figures
+    // are written for the hoisting half of the cycle, and `MOTOR_REVERSE_AT` flips the motor at
+    // each end of the hook's travel -- so every absolute sign in the table inverts together
+    // twice a cycle while every RATIO holds at every instant. (The loop above hides this by
+    // wrapping the motor in Math.abs; that is why nothing noticed the machine spends half its
+    // life running the other way.) The sign of each ratio is half the claim: `propagateRotation`
+    // drives a mesh with -1 and a coupling or chain with +1, so a ratio right in magnitude and
+    // wrong in sign is a shaft turning backwards.
+    const ratios: Array<[string, number]> = [
+      [P.MOTOR_SPROCKET_ID, 1], // 1:1 coupling on the motor shaft
+      [P.FAN_ID, 12 / 24], // chain: sign +1, ratio by teeth
+      [P.HELICAL_ID, -(12 / 24)],
+      [P.PLANETARY_ID, (12 / 24) * (24 / 72)],
+      [P.IDLER_ID, -((12 / 24) * (24 / 72)) * (72 / 16)],
+      [P.BULL_ID, (12 / 24) * (24 / 72) * (72 / 16) * (16 / 96)],
+      [P.DRUM_ID, (12 / 24) * (24 / 72) * (72 / 16) * (16 / 96)], // 1:1 coupling off the bull
+      [P.AUX_ID, -((12 / 24) * (24 / 72)) * (72 / 18)],
+      [P.GOVERNOR_ID, (12 / 24) * (24 / 72) * (72 / 18) * (18 / 9)],
+      [P.RATCHET_ID, -((12 / 24) * (24 / 72) * (72 / 16) * (16 / 96)) * (96 / 24)],
+      [P.COUNTER_ID, -((12 / 24) * (24 / 72) * (72 / 16) * (16 / 96)) * (96 / 32)],
+    ];
+    expect(ratios).toHaveLength(11); // the twelfth shaft is the motor the rest are measured from
+
+    let layout = preset();
+    for (let i = 0; i < 600; i++) {
+      const r = tick(layout, 1 / 60, 1, { wear: false });
+      layout = { gears: r.gears, remoteLinks: layout.remoteLinks };
+    }
+    const at = (id: string) => {
+      const g = layout.gears.find((x) => x.id === id);
+      expect(g, `no gear ${id}`).toBeDefined();
+      return g!.angularVelocity;
+    };
+    const motor = at(P.MOTOR_ID);
+    expect(Math.abs(motor)).toBeCloseTo(P.MOTOR_SPEED, 12);
+
+    for (const [id, ratio] of ratios) {
+      expect(at(id), `${id} runs at the wrong speed or direction`).toBeCloseTo(motor * ratio, 9);
+    }
+    // The drum really does turn at one eighth of the motor, which is the whole claim.
+    expect(Math.abs(at(P.DRUM_ID))).toBeCloseTo(Math.abs(motor) / 8, 9);
+    // And the governor really is the fastest thing in the machine, as the header says.
+    const fastest = layout.gears.reduce((a, b) => (Math.abs(a.angularVelocity) >= Math.abs(b.angularVelocity) ? a : b));
+    expect(fastest.id).toBe(P.GOVERNOR_ID);
+  });
+
+  it("hangs the hook on the drum with the radius and direction the renderer will use", () => {
+    // `sceneSync.updateWindingProps` moves a hoisted prop by
+    // clamp(gear.rotation * p.radius, lo, hi) ALONG p.direction. Those two fields are the whole
+    // of the hoist as far as the picture is concerned, and no assertion in this file read
+    // either: setting radius to ROPE_RADIUS / 4 and direction to [1, 0, 0] -- so the hook, block,
+    // shackle, crate and tarps slid sideways at a quarter rate and never rose at all -- left all
+    // twelve tests green. The test below measures a lift it recomputes for itself, so it never
+    // touches these.
+    const hoisted = P.createPlanetaryHoistProps().filter((p) => p.windWith);
+    expect(hoisted.length).toBeGreaterThanOrEqual(5); // hook block, shackle, crate, tarps
+    for (const p of hoisted) {
+      expect(p.windWith!.gear).toBe(P.DRUM_ID);
+      expect(p.windWith!.radius).toBe(P.ROPE_RADIUS); // the rope spools at the drum's own radius
+      expect(p.windWith!.direction).toEqual([0, 1, 0]); // a hoist lifts
+      expect(p.windWith!.travel).toEqual([0, P.HOOK_TRAVEL]);
+    }
+  });
+
   it("raises AND lowers the hook over exactly [0, HOOK_TRAVEL], forever", () => {
     let layout = preset();
     const liftAt = (drumRotation: number) =>
@@ -159,5 +232,37 @@ describe("createPlanetaryHoistProps", () => {
   it("gives the steelwork, masonry and timber their real finishes", () => {
     const used = new Set(P.createPlanetaryHoistProps().map((p) => p.texture).filter(Boolean));
     for (const kind of ["metal", "stone", "wood"]) expect(used.has(kind as never)).toBe(true);
+  });
+
+  it("clears every tie rod of the pinions it passes between", () => {
+    // The four through-rods are the only housing part that crosses the gear plane, and the
+    // constant's own comment says "the test measures the real distance from each rod to each
+    // mating pinion's tip circle". No such test existed: a grep of tests/ for TIE_ROD_ANGLES,
+    // HOUSING_FLANGE_R, RIB_SWEEP, PLANET_ORBIT, SHAFT_STUB or CARRIER_ARM returned nothing, so
+    // the whole "Body geometry the clearance tests pin" block was pinned by nothing and any edit
+    // to the rod angles would have gone unnoticed. Here is the measurement it described.
+    const layout = preset();
+    const [hx, hy] = P.PLANETARY_POS; // the housing is concentric with the planetary
+    const tipR = (g: (typeof layout.gears)[number]) => (g.module * g.teeth) / 2 + g.module;
+
+    // The rods are laid out in the XY plane at z = 0 -- `createPlanetaryHoistProps` places each
+    // at [PLANETARY_POS[0] + cos(a) * R, PLANETARY_POS[1] + sin(a) * R, 0] -- and that is the
+    // plane the gear train turns in, so XY is where the clearance has to be measured. (Measuring
+    // it in XZ, as a first draft of this test did, compares the rods against a plane they do not
+    // lie in and passes whatever the angles are.)
+    const onPlane = layout.gears.filter((g) => Math.abs(g.position[2]) < 1e-9);
+    expect(onPlane.length).toBeGreaterThan(5);
+
+    for (const angle of P.TIE_ROD_ANGLES) {
+      const rx = hx + Math.cos(angle) * P.HOUSING_FLANGE_R;
+      const ry = hy + Math.sin(angle) * P.HOUSING_FLANGE_R;
+      for (const g of onPlane) {
+        const d = Math.hypot(rx - g.position[0], ry - g.position[1]);
+        expect(
+          d,
+          `tie rod at ${((angle * 180) / Math.PI).toFixed(0)} deg fouls ${g.id}`,
+        ).toBeGreaterThan(tipR(g) + P.TIE_ROD_R);
+      }
+    }
   });
 });
