@@ -34,8 +34,23 @@ function seedGear(
 // Side view: the bike travels along +Z. Wheels + pedals all roll about world X (axis
 // [1,0,0]). The bottom bracket (pedals) sits low and central; the rear wheel is behind it.
 const WHEEL_R = 10;
-const HUB_Y = WHEEL_R; // wheel hubs sit one radius up so the tires rest on the ground
-const BB_Y = 6; // bottom-bracket (pedal) height
+/** Half-thickness of the rubber. A `ring` prop is a TORUS, so the tyre's outer surface is at
+ *  WHEEL_R + TYRE_TUBE from the hub, not WHEEL_R. */
+const TYRE_TUBE = 1.1;
+/** Hub height. It has to clear the RUBBER, not the rim: at HUB_Y = WHEEL_R the tyre's outer
+ *  surface sat 1.1 below y = 0, and the comment still said "so the tires rest on the ground".
+ *
+ *  Worse, the tyres were not what touched the ground in the rendered scene either. The lowest
+ *  thing in this preset was the CHAINRING (pitch radius 8.4 at a bottom bracket of y = 6, so
+ *  -2.4), and `seatOnGround` lifts a machine by its lowest point -- so the bike was hoisted 2.4
+ *  and both wheels ended up hanging 1.3 clear of the floor, the whole thing resting on a
+ *  chainring tooth. `tests/meta/everyPresetSitsOnTheGround.test.ts` was satisfied, because the
+ *  machine as a whole did touch y = 0; it just touched it with the wrong part. */
+const HUB_Y = WHEEL_R + TYRE_TUBE; // 11.1
+/** Bottom-bracket (pedal) height. Above the chainring's own pitch radius of 8.4, so the cranks
+ *  hang below the hubs the way a bicycle's do without the chainring becoming the foot of the
+ *  machine. */
+const BB_Y = 9.5;
 const REAR_Z = -22;
 const FRONT_Z = 14;
 
@@ -97,6 +112,24 @@ export function createBicycleProps(): Prop[] {
   const frameCol = 0x1f7a8c; // teal frame tubes
   const seatCol = 0x2a2622; // dark seat/bars
 
+  // KNOWN, MEASURED, NOT FIXED: the chainring is drawn through the front wheel.
+  //
+  // `sprocketGeometry` draws a sprocket out to pitchRadius * 0.85 + module * 0.9 = 3.84 for the
+  // 28-tooth ring at module 0.6... no: 8.4 * 0.85 + 0.54 = 7.68. Its centre is 14.09 from the
+  // front hub, and the tyre's own centreline circle passes within 14.09 - WHEEL_R = 4.09 of
+  // that centre -- well inside the 7.68 rim. Both sit at x = 0 (a gear body is GEAR_THICKNESS
+  // thick, the tyre's tube +/-1.1), so the rubber really does pass through the metal, by up to
+  // about 4 units at the deepest sample. The front spokes sweep a 9-radius circle about the same
+  // hub and come 2.1 inside the rim as well.
+  //
+  // `classify` cannot see it: the centres are 14.09 apart against an overlap floor of
+  // 0.95 * (8.4 + 1.5) = 9.4, and props are outside the physics entirely.
+  //
+  // Left as drawn because every fix is a design decision this audit should not make alone:
+  // lengthening the wheelbase (the centres would have to be 7.68 + 11.1 = 18.8 apart, so the
+  // front hub moves from z = 14 to about z = 19), or shrinking both sprockets by dropping
+  // BICYCLE_MODULE -- which keeps the 28:14 ratio the tests pin but changes how the drive reads.
+
   const rearHub: [number, number, number] = [0, HUB_Y, REAR_Z];
   const frontHub: [number, number, number] = [0, HUB_Y, FRONT_Z];
   const bb: [number, number, number] = [0, BB_Y, 0]; // bottom bracket (pedals)
@@ -117,8 +150,17 @@ export function createBicycleProps(): Prop[] {
       size: [thickness, len, thickness],
       color,
       texture: "metal",
-      // A box's long axis is Y; rotate about X by -angle so it points along the (dy,dz) vector.
-      rotation: [-angle, 0, 0],
+      // A box's long axis is Y; rotate about X by +angle so it points along the (dy,dz) vector.
+      // A rotation about +X by t carries local +Y to (0, cos t, sin t), so with
+      // angle = atan2(dz, dy) the tube points along (dy, dz) -- and -angle points it along
+      // (dy, -dz), which is the SAME tube mirrored about its own midpoint. Every frame member
+      // was drawn that way: the chainstay ran (y10,z0)->(y6,z-22) where it should run
+      // (y6,z0)->(y10,z-22), the seat tube stood straight up out of the bottom bracket and
+      // landed 16 units behind the saddle (endpoint error 24), and the fork finished 7 above
+      // the front hub instead of at it. So the "diamond frame" joined none of the joints it
+      // names. `factory.ts` and `ferriswheel.ts` build the same kind of tube and both use
+      // +atan2(dz, dy).
+      rotation: [angle, 0, 0],
       metalness: 0.4,
       roughness: 0.5,
     };
@@ -126,9 +168,9 @@ export function createBicycleProps(): Prop[] {
 
   return [
     // Tires (torus) + rims, front and rear.
-    { kind: "ring", position: rearHub, radius: WHEEL_R, tube: 1.1, color: tire, rotation: [0, Math.PI / 2, 0], roughness: 0.8, metalness: 0.05 },
+    { kind: "ring", position: rearHub, radius: WHEEL_R, tube: TYRE_TUBE, color: tire, rotation: [0, Math.PI / 2, 0], roughness: 0.8, metalness: 0.05 },
     { kind: "ring", position: rearHub, radius: WHEEL_R - 1.2, tube: 0.35, color: rim, texture: "metal", rotation: [0, Math.PI / 2, 0], metalness: 0.6, roughness: 0.35 },
-    { kind: "ring", position: frontHub, radius: WHEEL_R, tube: 1.1, color: tire, rotation: [0, Math.PI / 2, 0], roughness: 0.8, metalness: 0.05 },
+    { kind: "ring", position: frontHub, radius: WHEEL_R, tube: TYRE_TUBE, color: tire, rotation: [0, Math.PI / 2, 0], roughness: 0.8, metalness: 0.05 },
     { kind: "ring", position: frontHub, radius: WHEEL_R - 1.2, tube: 0.35, color: rim, texture: "metal", rotation: [0, Math.PI / 2, 0], metalness: 0.6, roughness: 0.35 },
     // Diamond frame: bottom bracket to rear hub (chainstay), BB to seat top (seat tube),
     // seat top to rear hub (seatstay), BB to head top (down tube), seat top to head top
