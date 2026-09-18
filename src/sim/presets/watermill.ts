@@ -473,9 +473,16 @@ export function createWatermillProps(): Prop[] {
   // ---------------------------------------------------------------------------------
   // 5. The mill house (static). x from 20 to 50, z from -12 to 12, walls 30 tall.
   //    The left (wheel-side) wall is built in two pieces with an opening between
-  //    y = 13 and y = 24, because the wallower's disc occupies x 18 -> 30 at y = 20 --
+  //    y = 13 and y = 25.5, because the wallower's disc occupies x 18 -> 30 at y = 20 --
   //    a solid wall there would run straight through the gearing. A real mill has
   //    exactly this opening where the wheel race enters the building.
+  //
+  //    The opening used to stop at 24, which was sized for the wallower alone and forgot the
+  //    millstone furniture turning on the same shaft above it: the runner stone reaches 24.6
+  //    and the iron rynd 25.35, so the UPPER wall ran through both. The rynd is the worst of
+  //    it -- 8.6 long about the shaft and turning on a 4.30 radius, it crossed the wall's full
+  //    1.2 thickness and poked 0.30 out the far face, twice a revolution. Nothing could report
+  //    it: `classify` compares gear centres and props are not in the physics.
   // ---------------------------------------------------------------------------------
   props.push({
     kind: "box",
@@ -486,8 +493,8 @@ export function createWatermillProps(): Prop[] {
   });
   props.push({
     kind: "box",
-    position: [20.6, 27, 0],
-    size: [1.2, 6, 24], // 24 -> 30
+    position: [20.6, 27.75, 0],
+    size: [1.2, 4.5, 24], // 25.5 -> 30, clear of the rynd's 25.35
     color: stoneWall, texture: "stone", textureRepeat: [4, 2],
     roughness: 0.94, metalness: 0.02,
   });
@@ -522,12 +529,19 @@ export function createWatermillProps(): Prop[] {
     color: darkTimber, texture: "wood", textureRepeat: [8, 1],
     roughness: 0.8, metalness: 0.05,
   });
-  // The stone floor the millstones stand on: top face at y = 18, i.e. 1.5 below the
-  // wallower, so the gearing sits proud of it the way a real wallower does.
+  // The stone floor the millstones stand on. Its top face reaches the bedstone's underside at
+  // y = 20.7, so the stones are actually CARRIED; before, the floor stopped at 18.0 and a
+  // nine-unit stone disc hung 2.7 units up in clear air with nothing under it but the rotating
+  // shaft through its eye -- the same defect as a carousel deck hovering over its pad. The
+  // underside stays where it was (16.8), so the floor thickened rather than moved.
+  //
+  // The comment here also used to say the top face sat "1.5 below the wallower". It was 2.0:
+  // the wallower's centre is AXLE_Y = 20 and the old top face was 18.0. It is now flush with
+  // the stones instead, which is the relationship worth stating.
   props.push({
     kind: "box",
-    position: [35, 17.4, 0],
-    size: [28, 1.2, 22],
+    position: [35, 18.75, 0],
+    size: [28, 3.9, 22],
     color: darkStone, texture: "tile", textureRepeat: [6, 5],
     roughness: 0.88, metalness: 0.05,
   });
@@ -672,24 +686,36 @@ export function createWatermillProps(): Prop[] {
     color: oak, texture: "wood", textureRepeat: [2, 2],
     roughness: 0.82, metalness: 0.04,
   });
-  // Its frame: two legs standing on the stone floor at z = +/-5.6, outside the stones'
-  // 4.5 radius, plus the cross beam they carry.
+  // Its frame: two legs standing on the stone floor at z = +/-5.6, outside the stones' 4.5
+  // radius, plus the pair of beams they carry.
+  //
+  // A SINGLE beam across the middle is what a real horse has, and it is what this had -- but
+  // authored at [SHAFT_X, 29.4, 0] it lay exactly on the upright shaft's own axis line, so the
+  // static timber sat inside the rotating shaft (radius 1 about x = 24), and the iron key at
+  // y = 29.5 swept through it on a 2.40 radius every revolution. That key exists solely to make
+  // the shaft's spin legible -- a plain cylinder is symmetric and looks motionless -- so burying
+  // it in a beam defeated the one prop put there to be seen.
+  //
+  // Two beams either side of the shaft, lifted above the key, carry the hopper just as well and
+  // leave the shaft and its key turning in clear air between them.
   for (const z of [-5.6, 5.6]) {
     props.push({
       kind: "box",
-      position: [SHAFT_X, 23.6, z],
-      size: [0.6, 11.2, 0.6], // floor top (18) up to 29.2
+      position: [SHAFT_X, 23.95, z],
+      size: [0.6, 11.9, 0.6], // floor top (18) up to the beams' underside (29.9)
       color: darkTimber, texture: "wood", textureRepeat: [1, 6],
       roughness: 0.8, metalness: 0.05,
     });
   }
-  props.push({
-    kind: "box",
-    position: [SHAFT_X, 29.4, 0],
-    size: [1.6, 0.6, 12],
-    color: darkTimber, texture: "wood", textureRepeat: [1, 5],
-    roughness: 0.8, metalness: 0.05,
-  });
+  for (const z of [-3.6, 3.6]) {
+    props.push({
+      kind: "box",
+      position: [SHAFT_X, 30.2, z],
+      size: [1.6, 0.6, 4.8], // |z| 1.2 .. 6: clear of the shaft, above the key's 29.8
+      color: darkTimber, texture: "wood", textureRepeat: [1, 5],
+      roughness: 0.8, metalness: 0.05,
+    });
+  }
   // The shoe that feeds grain from the hopper into the eye.
   props.push({
     kind: "box",
