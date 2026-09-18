@@ -28,6 +28,10 @@ import {
   SLOT_COUNT,
   WHEEL_TIP_R,
   wormLineClearX,
+  HANDWHEEL_X,
+  MOTOR_CASE_R,
+  MOTOR_CASE_X,
+  BEARING_X,
 } from "../../../src/sim/presets/wormtable";
 import type { GearInstance, LayoutState } from "../../../src/sim/types";
 import { evaluatePair, isOverlapping } from "../../../src/sim/meshing";
@@ -286,14 +290,54 @@ describe("createWormTablePreset -- clearances the doc comment claims", () => {
   });
 
   it("derives every shaft fitting's standoff from the wheel's tip circle", () => {
-    // A body of radius `rho` around the worm's shaft line reaches inward to z = 21 - rho, and the
-    // wheel's tip circle reaches z = sqrt(21^2 - x^2). `wormLineClearX` solves those for x, and
-    // the prop placements are measured against it.
-    expect(wormLineClearX(2)).toBeCloseTo(Math.sqrt(80), 12); // pillow block half-depth: 8.94 < 11
-    expect(wormLineClearX(2)).toBeLessThan(11);
-    expect(wormLineClearX(4)).toBeCloseTo(Math.sqrt(152), 12); // motor case radius: 12.33 < 14
-    expect(wormLineClearX(4)).toBeLessThan(14);
-    expect(wormLineClearX(5.1)).toBeLessThan(16); // handwheel rim outer radius: 13.72 < 16
+    // A body of radius `rho` around the worm's shaft line reaches inward to z = WHEEL_TIP_R -
+    // rho, and the wheel's tip circle reaches z = sqrt(WHEEL_TIP_R^2 - x^2); `wormLineClearX`
+    // solves those for x.
+    //
+    // This test used to call that function on literal rho values and compare the answers with
+    // literal 11, 14 and 16 -- so both sides came from the same place and it only re-checked a
+    // square root. BEARING_X, MOTOR_CASE_X and HANDWHEEL_X were not even imported here, and
+    // createWormTableProps() was never called. Measured: moving every fitting far inside its
+    // own standoff (BEARING_X 11 -> 3, MOTOR_CASE_X 18.5 -> 6, HANDWHEEL_X -16 -> -2, which
+    // buries the handwheel rim 4.97 inside the wheel's teeth) left all eighteen tests passing.
+    //
+    // So compare the FITTINGS against it.
+    const clearance = (x: number, rho: number) => Math.abs(x) - wormLineClearX(rho);
+    expect(clearance(BEARING_X, 2)).toBeGreaterThan(0); // pillow block half-depth 2
+    expect(clearance(MOTOR_CASE_X, MOTOR_CASE_R)).toBeGreaterThan(0);
+    expect(clearance(HANDWHEEL_X, 5.1)).toBeGreaterThan(0); // handwheel rim outer radius
+
+    // And the derivation itself is still what it says it is.
+    expect(wormLineClearX(2)).toBeCloseTo(Math.sqrt(WHEEL_TIP_R ** 2 - (WHEEL_TIP_R - 2) ** 2), 12);
+  });
+
+  it("lays each clamp bar on its own stud instead of inside the other bar", () => {
+    // The two bars were WORK_SIZE[2] + 2.4 = 7.4 long -- the length for a single bar on the
+    // table's midline -- but centred at +/-1.85, so they shared their entire 2.2 x 1 cross
+    // section over 3.7 units of z. Both being the same grey, they rendered as one 11.1-long bar
+    // across a 5-deep workpiece: twice the depth of any other parts-inside-parts defect found
+    // in this repo, and nothing could report it (props are outside the physics; `classify`
+    // compares gear centres).
+    const bars = createWormTableProps().filter(
+      (p): p is Extract<typeof p, { kind: "box" }> =>
+        p.kind === "box" && p.size[0] === 2.2 && p.size[1] === 1,
+    );
+    expect(bars).toHaveLength(2);
+    const [a, b] = bars.sort((p, q) => p.position[2] - q.position[2]);
+    expect(a.position[1]).toBe(b.position[1]); // same height, so z is the only separation
+    expect(a.position[2] + a.size[2] / 2).toBeLessThanOrEqual(b.position[2] - b.size[2] / 2);
+
+    // Each still reaches in to the workpiece it holds and out over its own stud.
+    const studs = createWormTableProps().filter(
+      (p): p is Extract<typeof p, { kind: "cylinder" }> =>
+        p.kind === "cylinder" && Math.abs(p.position[2]) > 2 && p.position[1] > 11,
+    );
+    expect(studs.length).toBeGreaterThanOrEqual(2);
+    for (const bar of bars) {
+      const near = studs.find((st) => Math.sign(st.position[2]) === Math.sign(bar.position[2]));
+      expect(near, "a clamp bar with no stud under it").toBeDefined();
+      expect(Math.abs(near!.position[2] - bar.position[2])).toBeLessThanOrEqual(bar.size[2] / 2);
+    }
   });
 
   it("wears the worm through in ~29.6 s with the platter in its component, which is why the kinematics tests run wear-off", () => {

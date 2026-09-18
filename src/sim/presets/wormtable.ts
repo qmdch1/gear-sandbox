@@ -402,8 +402,16 @@ export function createWormTableProps(): Prop[] {
   });
 
   // The workpiece: a steel block standing on the table at WORK_R, held down by two clamp bars,
-  // each on a stud with a T-nut in the slot beneath it. All attached to the wheel, so the whole
-  // setup orbits the table's axis exactly as a real clamped job does.
+  // each on a stud with a T-nut under it. All attached to the wheel, so the whole setup orbits
+  // the table's axis exactly as a real clamped job does.
+  //
+  // The T-nuts are NOT in a slot, whatever this comment used to say. The slots lie on the eight
+  // rays at k * 45 degrees, 1.4 wide; a nut at (x = WORK_R, z = +/-3.7) sits on a ray of about
+  // 24.8 degrees, 3.04 from the nearest slot centreline -- more than four slot half-widths away
+  // -- and its box spans y 11.0..11.7, entirely ABOVE the table's top face rather than sunk into
+  // anything. Putting the studs on a slot angle would make the old sentence true; until someone
+  // decides to move the whole clamped job round to 45 degrees, the honest description is that
+  // the nuts sit on the table.
   props.push({
     kind: "box",
     position: [WORK_R, TABLE_TOP_Y + WORK_SIZE[1] / 2, 0],
@@ -417,11 +425,21 @@ export function createWormTableProps(): Prop[] {
   });
   for (const side of [-1, 1] as const) {
     const clampZ = side * (WORK_SIZE[2] / 2 + 1.2); // just outside the block's face
-    // Clamp bar: spans from the block's top edge outward over the stud.
+    // Clamp bar: spans from the block's top edge outward over its own stud.
+    //
+    // It used to be WORK_SIZE[2] + 2.4 = 7.4 long -- the length for ONE bar centred on the
+    // table's midline -- while being centred at clampZ / 2 = +/-1.85 instead. So the two bars
+    // shared their whole 2.2 x 1 cross-section over 3.7 units of z, at the same x and the same
+    // y: eight cubic units of coincident steel, and since both are clampGrey they rendered as a
+    // single 11.1-long bar lying across a 5-deep workpiece. Twice the depth of any of the other
+    // parts-inside-parts defects found in this repo.
+    //
+    // A bar belongs ON its stud, reaching in as far as the block's face and out as far past the
+    // stud as it reaches in: z from WORK_SIZE[2] / 2 to clampZ + (clampZ - WORK_SIZE[2] / 2).
     props.push({
       kind: "box",
-      position: [WORK_R, TABLE_TOP_Y + WORK_SIZE[1] + 0.5, clampZ / 2],
-      size: [2.2, 1, WORK_SIZE[2] + 2.4],
+      position: [WORK_R, TABLE_TOP_Y + WORK_SIZE[1] + 0.5, clampZ],
+      size: [2.2, 1, (Math.abs(clampZ) - WORK_SIZE[2] / 2) * 2],
       color: clampGrey,
       texture: "metal",
       roughness: 0.45,
@@ -481,7 +499,12 @@ export function createWormTableProps(): Prop[] {
   });
 
   // Pillow blocks either side of the worm, each on a stand off the bed. BEARING_X = 11 clears the
-  // wheel's tip circle by 19 - sqrt(441 - 121) = 1.1 at the block's inner face.
+  // wheel's tip circle by 0.40 in z at the block's inner CORNER -- which is the number that
+  // matters, and not the 1.1 this comment used to give. That 1.1 is 19 - sqrt(441 - 11^2),
+  // i.e. the tip circle evaluated at x = BEARING_X, the block's centre line; the block is 2.5
+  // wide, so its inner face is at x = 9.75 and the tip circle there reaches
+  // sqrt(441 - 9.75^2) = 18.60 against the corner's z = 19. It still clears -- the figure was
+  // wrong, not the placement -- but by about a third of what was claimed.
   for (const side of [-1, 1] as const) {
     props.push({
       kind: "box",
