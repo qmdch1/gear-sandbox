@@ -129,11 +129,24 @@ export function createWellPumpProps(): Prop[] {
 
   const props: Prop[] = [
     // Stone well ring, and a low apron around its foot.
+    //
+    // The apron has to be an ANNULUS, not a disc. It used to be a solid cylinder of radius
+    // WELL_R + 1.5 spanning y 0..2, which paved straight across the shaft the bucket hangs down:
+    // the bucket's top 0.70 was inside the stone, the iron hoop lay wholly buried in it at every
+    // angle of its circle, and the rope ran through all 2 units of it. A well with a sealed
+    // mouth. A flat torus leaves the shaft open: centred at (WELL_R - 1.6 + WELL_R + 1.5) / 2
+    // with a tube that reaches from the well ring's inner face out to the old apron radius.
     { kind: "ring", position: [0, 3, 0], radius: WELL_R, tube: 1.6, color: stone, texture: "stone", rotation: [Math.PI / 2, 0, 0], roughness: 0.95, metalness: 0.03 },
-    { kind: "cylinder", position: [0, 1, 0], radius: WELL_R + 1.5, height: 2, color: stone, texture: "stone", textureRepeat: [4, 1], roughness: 0.95, metalness: 0.03 },
+    { kind: "ring", position: [0, 1, 0], radius: (WELL_R - 1.6 + WELL_R + 1.5) / 2, tube: (WELL_R + 1.5 - (WELL_R - 1.6)) / 2, color: stone, texture: "stone", rotation: [Math.PI / 2, 0, 0], roughness: 0.95, metalness: 0.03 },
     // Two posts carrying the windlass across the mouth of the well.
-    { kind: "box", position: [0, 13, -WELL_R], size: [1.6, 22, 1.6], color: timber, texture: "wood", roughness: 0.8, metalness: 0.04 },
-    { kind: "box", position: [0, 13, WELL_R], size: [1.6, 22, 1.6], color: timber, texture: "wood", roughness: 0.8, metalness: 0.04 },
+    //
+    // They stand at the BARREL'S ENDS, x = +/-WELL_R, because that is what carrying it means.
+    // They used to stand at z = +/-WELL_R instead -- offset along the axis the barrel does NOT
+    // run down -- so the nearest post face was 4.0 units of clear air away from the barrel's
+    // surface, the barrel's real ends at x = +/-7 had nothing under them at all, and the post
+    // tops stopped 1.3 below the ridge beam they appear to hold up.
+    { kind: "box", position: [-WELL_R, 13, 0], size: [1.6, 22, 1.6], color: timber, texture: "wood", roughness: 0.8, metalness: 0.04 },
+    { kind: "box", position: [WELL_R, 13, 0], size: [1.6, 22, 1.6], color: timber, texture: "wood", roughness: 0.8, metalness: 0.04 },
     // Ridge beam and a shingled roof over the top.
     { kind: "box", position: [0, DRUM_Y + 4, 0], size: [1.4, 1.4, 2 * WELL_R + 4], color: timber, texture: "wood", roughness: 0.8, metalness: 0.04 },
     { kind: "cone", position: [0, DRUM_Y + 7, 0], radius: WELL_R + 4, height: 6, color: shingle, texture: "tile", textureRepeat: [6, 2], radialSegments: 4, rotation: [0, Math.PI / 4, 0], roughness: 0.85, metalness: 0.04 },
