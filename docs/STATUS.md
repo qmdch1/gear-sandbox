@@ -54,6 +54,14 @@ something to reflect.
 `{ wear: false }` so machines run indefinitely, and `repair.ts` restores durability if it is
 turned back on.
 
+**The render layer has now been audited too.** Sixteen findings across `sceneSync.ts`,
+`props.ts`, `gearGeometry.ts` and `chainGeometry.ts`, all fixed. The two that mattered most were
+coverage holes rather than wrong code: `setProps` — the only way a moving prop is registered —
+was called by no test, so all five prop-motion mechanisms were unverified; and `props.ts`, where
+a preset's numbers become geometry, had no test file at all. One real rendering bug came out of
+it: `mergeGeometries` dropped `uv`, so half the gear types were drawn with no grain, roughness
+or bump.
+
 ## Deliberately not done
 
 - **The clock movement and music box stay out of the yard on purpose.** They are tabletop

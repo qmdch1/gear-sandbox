@@ -148,6 +148,31 @@ What works instead, and what every preset's suite should do for the parts that m
   whenever a machine was authored below the floor. Measure the seated result when the claim is
   about the ground.
 
+### The render layer was the least-tested part of the repo
+
+Everything a preset draws goes through `src/render/`, so a defect there is a defect in all 23
+machines at once. It had almost no coverage, and the gaps were not small:
+
+- **`setProps` was called by no test at all.** `spinAttachedPose` and `crankSliderPose` had
+  suites, so the FORMULAS were covered — but nothing ran the five passes in `sync()` that feed
+  them. Commenting out all five left 185 tests passing with every prop in every machine nailed
+  in place. `tests/render/propMotion.test.ts` now drives them; break any one pass and it fails.
+- **`props.ts` had no test file.** Swapping `BoxGeometry`'s second and third arguments and
+  `TorusGeometry`'s radius and tube left the whole suite green, `tsc` included — while drawing
+  the locomotive's frame rail as a wall through the floor and the ferris wheel's rim as a solid
+  barrel that swallows its gondolas.
+- **`mergeGeometries` dropped `uv`**, so six of the twelve gear types rendered with no grain,
+  no per-pixel roughness and no bump while the other six kept all three.
+- **The preset suites looked like they covered the render layer, and did not.** They
+  re-implement its arithmetic by hand — one says "What `sceneSync.updateWindingProps` does:
+  clamp(rotation * radius, lo, hi)" and then does exactly that itself. Both sides of the
+  assertion come from the same place; the real code never runs. If you find yourself copying a
+  formula out of `src/` into a test, you are writing one of these.
+
+Under jsdom `getProceduralTexture` returns null, so the texture and opacity branches of
+`props.ts` and the belt-rib scroll in `sceneSync.ts` cannot execute in any test here. Say so
+rather than writing an assertion that passes because the branch never ran.
+
 **If you run parallel agents to audit this repo, give each one its own worktree.** Proving a
 test can fail means editing a source file, and several agents doing that at once in one checkout
 means every full-suite run is measuring somebody else's half-finished injection, and a `git add
@@ -160,7 +185,7 @@ output.
 ## Verifying a change
 
 ```bash
-npx vitest run          # full suite (958 tests in 75 files); `npm test` is the same thing
+npx vitest run          # full suite (989 tests in 77 files); `npm test` is the same thing
 npx tsc --noEmit        # types — vitest does NOT type-check, so this catches real bugs it misses
 npx vite build          # production build
 ```
