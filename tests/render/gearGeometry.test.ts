@@ -107,6 +107,19 @@ describe("computeSpurProfilePoints", () => {
       // as the radius grows -- i.e. the tooth gets angularly thinner further out.
       expect(angles[i]).toBeGreaterThanOrEqual(angles[i - 1] - 1e-9);
     }
+
+    // ...and it really NARROWS. `>= previous` alone is satisfied by a constant angle, so the
+    // check above passes for a tooth whose flanks are straight radial lines -- which is
+    // precisely the thing an involute is not, and the whole property this test is named for.
+    // Measure the taper instead of merely forbidding it from going the wrong way.
+    const total = angles[angles.length - 1] - angles[0];
+    expect(total).toBeGreaterThan(1e-3);
+
+    // The narrowing is a real fraction of the tooth, not a rounding artefact: the angular
+    // half-width at the tip is meaningfully smaller than at the root.
+    const radii = leftFlank.map((p) => p.length());
+    expect(radii[radii.length - 1]).toBeGreaterThan(radii[0]); // we did walk outward
+    expect(Math.abs(angles[angles.length - 1])).toBeLessThan(Math.abs(angles[0]) * 0.95);
   });
 
   it("traces one simple (non-self-intersecting) closed polygon around the whole gear", () => {
@@ -137,11 +150,16 @@ describe("computeSpurProfilePoints", () => {
   // simple polygon, plausible area) were only ever exercised at teeth=20/module=1 -- the
   // one size the original self-intersection (bow-tie) bug fix happened to test. Since the
   // flank math (involuteAngleAtRadius, flankAngle) depends on teeth count (toothAngularPitch
-  // = 2*PI/teeth) and module (which sets addendum/dedendum radii relative to the pitch
-  // circle) in ways that don't simplify away, a fix verified at one size doesn't guarantee
-  // correctness at very few teeth (where the tooth is angularly wide and the dedendum
-  // circle sits closest to the base circle) or very many (where the tooth is angularly
-  // thin) -- covering the sandbox's realistic range here (spec'd range: 6-8 teeth on the
+  // = 2*PI/teeth) in ways that don't simplify away, a fix verified at one tooth count doesn't
+  // guarantee
+  // correctness at very few teeth (where the tooth is angularly wide and the dedendum circle
+  // sits closest to the base circle) or very many (where the tooth is angularly thin).
+  //
+  // MODULE, by contrast, does simplify away exactly: addendumRadius / pitchRadius = 1 + 2/teeth
+  // and dedendumRadius / pitchRadius = 1 - 2.5/teeth, both functions of the tooth count alone,
+  // so the profile's shape relative to its pitch circle -- and therefore every flank angle -- is
+  // independent of it. Sweeping module buys nothing the tooth-count sweep does not already give;
+  // it is kept below only because it costs nothing and documents the invariance -- covering the sandbox's realistic range here (spec'd range: 6-8 teeth on the
   // low end, 60+ on the high end) as a regression guard. Confirmed by direct computation
   // (see investigation) that no self-intersection or degenerate/negative area actually
   // occurs anywhere in this range -- this is a coverage gap being closed, not a bug fix.
@@ -316,6 +334,19 @@ describe("buildGeometryForType", () => {
       const sizeZ = box.max.z - box.min.z;
       expect(sizeZ).toBeGreaterThan(sizeX);
       expect(sizeZ).toBeGreaterThan(sizeY);
+
+      // A bounding box is sign-blind: it has the same extents whichever way round the bar was
+      // laid, so the three assertions above pass for a rack extruded backwards along -Z as
+      // readily as forwards. Pin the DIRECTION too.
+      //
+      // `rackGeometry` lays tooth k at z = k * pitch and each tooth spans +/- pitch/2, so the
+      // bar runs from -pitch/2 to (teeth - 1) * pitch + pitch/2 -- overwhelmingly into +Z, with
+      // the gear's own position sitting at its first tooth rather than at its middle. Reversing
+      // the extrusion mirrors those two numbers and fails here, while leaving every extent
+      // above unchanged.
+      const pitch = Math.PI * 1; // module 1
+      expect(box.min.z).toBeCloseTo(-pitch / 2, 5);
+      expect(box.max.z).toBeCloseTo((teeth - 1) * pitch + pitch / 2, 5);
     }
   });
 
@@ -531,6 +562,37 @@ describe("helicalTwistPerUnit (visual twist scaling)", () => {
     const newValues = [8, 16, 20, 50].map(newPitchesOfTwist);
     for (const v of newValues) {
       expect(v).toBeCloseTo(newValues[0], 3);
+    }
+  });
+});
+
+describe("every gear type carries UVs, because every gear is textured", () => {
+  it("gives all twelve types a uv attribute", () => {
+    // `gearMesh.ts` sets `material.map`, `roughnessMap` and `bumpMap` on EVERY gear, at
+    // repeat.set(3, 3). All three sample `uv`, and a material with a map but no uv attribute
+    // reads the texture at one point -- so the finish collapses to a flat colour.
+    //
+    // Six of the twelve types are built by merging primitives together, and `mergeGeometries`
+    // copied position and normal only. The primitives it merges (cylinders, boxes, lathes) all
+    // carry uv; it was dropped in the concatenation. So crank, worm, planetary, ratchet,
+    // sprocket and differential rendered without grain, per-pixel roughness or bump while the
+    // other six kept all three, and nothing could say so.
+    const types = [
+      "spur", "helical", "crank", "bevel", "worm", "load",
+      "rack", "planetary", "ratchet", "sprocket", "pulley", "differential",
+    ] as const;
+    for (const type of types) {
+      const geometry = buildGeometryForType(type, 16, 1);
+      const uv = geometry.attributes.uv;
+      expect(uv, `${type} has no uv attribute`).toBeDefined();
+      expect(uv.count).toBe(geometry.attributes.position.count);
+
+      // ...and the coordinates are real, not a block of zeroes standing in for them.
+      let nonZero = 0;
+      for (let i = 0; i < uv.count; i++) {
+        if (uv.getX(i) !== 0 || uv.getY(i) !== 0) nonZero++;
+      }
+      expect(nonZero / uv.count, `${type} has an all-zero uv map`).toBeGreaterThan(0.5);
     }
   });
 });

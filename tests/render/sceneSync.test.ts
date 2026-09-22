@@ -122,6 +122,8 @@ describe("SceneSync", () => {
       const sync = new SceneSync(ctx);
       const gear = makeGear({ id: "a", type: "spur", teeth: 20, module: 1, durabilityCurrent: 100, durabilityMax: 100 });
       sync.sync([gear], [], { unconnectedIds: [], noPowerIds: [], overlapPairs: [] });
+      const meshBefore = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
+      const beforeVertexCount = (meshBefore.geometry as THREE.BufferGeometry).attributes.position.count;
 
       // Change both the shape (forces rebuild) and durability, in the same sync() call.
       const changed = { ...gear, type: "worm" as const, durabilityCurrent: 0, broken: true };
@@ -129,6 +131,15 @@ describe("SceneSync", () => {
       const meshAfter = ctx.scene.children.find((c) => c.name === "a") as THREE.Mesh;
       const material = meshAfter.material as THREE.MeshStandardMaterial;
       expect(material.color.r).toBeCloseTo(material.color.g, 1); // broken -> gray, not the type's healthy color
+
+      // ...and it really was a REBUILD that produced it. The assertion above alone cannot tell:
+      // it drops durability 100 -> 0 and sets broken in the same call, so `update()` repaints
+      // grey whether or not the rebuild branch ran, and the stale-cache hazard the comment names
+      // is only reachable when the object SURVIVES. Pin the rebuild itself.
+      expect(meshAfter).not.toBe(meshBefore);
+      expect((meshAfter.geometry as THREE.BufferGeometry).attributes.position.count).not.toBe(
+        beforeVertexCount,
+      );
     });
 
     it("does NOT dispose/recreate the mesh when a gear's fields are unchanged across two sync() calls (fast path)", () => {
@@ -361,5 +372,69 @@ describe("a vehicle carries everything that is drawn on it", () => {
     expect(length(driven)).toBeCloseTo(length(parked), 6);
     expect(driven.min.z - parked.min.z).toBeCloseTo(30, 6);
     expect(driven.max.z - parked.max.z).toBeCloseTo(30, 6);
+  });
+
+  describe("problem and preview highlighting", () => {
+    // Every one of this file's other tests passes an empty diagnostics literal, so
+    // `problemIds` was always empty and both highlight arms were dead code under test.
+    // Replacing the whole set with `new Set<string>()` -- so no gear could ever be flagged --
+    // left all 19 passing. `emissive` and `setPreviewHighlight` appeared in no test in the repo.
+    const clean = { unconnectedIds: [], noPowerIds: [], overlapPairs: [] };
+    const emissiveOf = (ctx: ReturnType<typeof createScene>, id: string) =>
+      ((ctx.scene.children.find((c) => c.name === id) as THREE.Mesh)
+        .material as THREE.MeshStandardMaterial).emissive;
+
+    it("tints a gear red when the diagnostics name it, and clears it when they stop", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gears = [makeGear({ id: "a" }), makeGear({ id: "b", position: [50, 0, 0] })];
+
+      sync.sync(gears, [], clean);
+      expect(emissiveOf(ctx, "a").getHex()).toBe(0x000000);
+
+      sync.sync(gears, [], { ...clean, unconnectedIds: ["a"] });
+      expect(emissiveOf(ctx, "a").getHex()).not.toBe(0x000000); // the at-a-glance red
+      expect(emissiveOf(ctx, "b").getHex()).toBe(0x000000); // and only the one named
+
+      // It has to come back OFF once the problem is fixed, or the warning is permanent.
+      sync.sync(gears, [], clean);
+      expect(emissiveOf(ctx, "a").getHex()).toBe(0x000000);
+    });
+
+    it("flags gears from all three diagnostic lists, overlap pairs included", () => {
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gears = ["a", "b", "c", "d"].map((id, i) => makeGear({ id, position: [i * 50, 0, 0] }));
+
+      sync.sync(gears, [], {
+        unconnectedIds: ["a"],
+        noPowerIds: ["b"],
+        overlapPairs: [["c", "d"]], // both halves of a pair must light up
+      });
+      for (const id of ["a", "b", "c", "d"]) {
+        expect(emissiveOf(ctx, id).getHex(), `${id} was not flagged`).not.toBe(0x000000);
+      }
+    });
+
+    it("lets the drag preview override a problem tint, and releases it again", () => {
+      // While dragging a link endpoint the green "would connect here" tint takes precedence:
+      // it is answering the question the user is asking right now.
+      const ctx = createScene(document.createElement("canvas"));
+      const sync = new SceneSync(ctx);
+      const gears = [makeGear({ id: "a" })];
+
+      sync.sync(gears, [], { ...clean, unconnectedIds: ["a"] });
+      const problem = emissiveOf(ctx, "a").getHex();
+
+      sync.setPreviewHighlight("a");
+      sync.sync(gears, [], { ...clean, unconnectedIds: ["a"] });
+      const preview = emissiveOf(ctx, "a").getHex();
+      expect(preview).not.toBe(0x000000);
+      expect(preview).not.toBe(problem); // a different colour, not the same warning
+
+      sync.setPreviewHighlight(null);
+      sync.sync(gears, [], { ...clean, unconnectedIds: ["a"] });
+      expect(emissiveOf(ctx, "a").getHex()).toBe(problem); // back to the warning underneath
+    });
   });
 });

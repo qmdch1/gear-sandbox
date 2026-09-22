@@ -302,22 +302,41 @@ function sprocketGeometry(teeth: number, module: number): THREE.BufferGeometry {
   return mergeGeometries(geometries);
 }
 
+/** Non-indexed concatenation of several geometries into one display mesh.
+ *
+ *  CARRIES UV THROUGH. It used to copy position and normal only, and the comment called that
+ *  "sufficient for a display mesh with one material" -- which stopped being true when
+ *  `gearMesh.ts` began giving EVERY gear a `map`, a `roughnessMap` and a `bumpMap` at
+ *  `repeat.set(3, 3)`. All three sample `uv`, and a material with a map but no uv attribute
+ *  reads the texture at a single point, so the finish collapses to one flat colour.
+ *
+ *  Six of the twelve gear types are built by merging -- crank, worm, planetary, ratchet,
+ *  sprocket and differential -- so half the palette silently lost its grain, its per-pixel
+ *  roughness and its bump while the other half kept them. The primitives being merged
+ *  (cylinders, boxes, lathes) all carry uv already; it was only being dropped here.
+ *
+ *  A geometry with no uv of its own contributes zeroes, which is what it would have sampled
+ *  anyway -- better than leaving the attribute off the whole merge and taking every other
+ *  part down with it. */
 function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeometry {
-  // Simple non-indexed concatenation — sufficient for a display mesh with one material.
   const merged = new THREE.BufferGeometry();
   const positions: number[] = [];
   const normals: number[] = [];
+  const uvs: number[] = [];
   for (const geo of geometries) {
     const g = geo.index ? geo.toNonIndexed() : geo;
     const pos = g.attributes.position;
     const norm = g.attributes.normal;
+    const uv = g.attributes.uv;
     for (let i = 0; i < pos.count; i++) {
       positions.push(pos.getX(i), pos.getY(i), pos.getZ(i));
       normals.push(norm.getX(i), norm.getY(i), norm.getZ(i));
+      uvs.push(uv ? uv.getX(i) : 0, uv ? uv.getY(i) : 0);
     }
   }
   merged.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
   merged.setAttribute("normal", new THREE.Float32BufferAttribute(normals, 3));
+  merged.setAttribute("uv", new THREE.Float32BufferAttribute(uvs, 2));
   return merged;
 }
 
