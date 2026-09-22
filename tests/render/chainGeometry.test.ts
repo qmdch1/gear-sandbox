@@ -118,4 +118,36 @@ describe("buildLinkRibbon", () => {
     const length = chain.boundingBox!.max.x - chain.boundingBox!.min.x;
     expect(length).toBeGreaterThan(GROUND_PLANE_DIAGONAL * 0.95);
   });
+
+  it("runs a belt's U along its length and V around its girth", () => {
+    // `sceneSync` scrolls a belt's rib texture to make it read as driven rather than painted
+    // between two pulleys, and which UV axis does that depends entirely on this layout. It was
+    // getting it wrong -- `repeat.set(1, BELT_RIB_REPEAT)` and `offset.y` put 24 rib repeats
+    // around a girth drawn with six radial segments and exactly ONE along the whole run, and
+    // scrolled the pattern sideways across the direction of travel. Nothing could catch it
+    // there: under jsdom `getProceduralTexture` returns null, so the block that sets the map
+    // never executes in the suite. It is catchable HERE, because it rests on this fact.
+    const geometry = buildLinkRibbon([0, 0, 0], [100, 0, 0], 0.25, "belt", 0);
+    const pos = geometry.attributes.position;
+    const uv = geometry.attributes.uv;
+    expect(uv).toBeDefined();
+
+    // Every vertex at the near end shares u = 0; every vertex at the far end shares u = 1.
+    // So u is the along-the-belt axis, and BELT_RIB_REPEAT belongs on repeat.x / offset.x.
+    const near: number[] = [];
+    const far: number[] = [];
+    for (let i = 0; i < pos.count; i++) {
+      if (pos.getX(i) < 0.5) near.push(uv.getX(i));
+      if (pos.getX(i) > 99.5) far.push(uv.getX(i));
+    }
+    expect(near.length).toBeGreaterThan(2);
+    expect(far.length).toBeGreaterThan(2);
+    for (const u of near) expect(u).toBeCloseTo(0, 9);
+    for (const u of far) expect(u).toBeCloseTo(1, 9);
+
+    // ...and v varies around a single ring, which is the girth.
+    const ringVs = new Set<number>();
+    for (let i = 0; i < pos.count; i++) if (pos.getX(i) < 0.5) ringVs.add(+uv.getY(i).toFixed(6));
+    expect(ringVs.size).toBeGreaterThan(2);
+  });
 });

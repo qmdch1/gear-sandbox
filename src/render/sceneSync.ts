@@ -96,7 +96,16 @@ export function crankSliderPose(
 
 
 /** How many rib repeats a belt's surface texture gets along its whole run. Fixed rather than
- *  proportional to length so every belt in a scene shows ribs at a consistent visual density. */
+ *  proportional to length so every belt in a scene shows ribs at a consistent visual density.
+ *
+ *  It belongs on the U axis. `buildLinkRibbon` returns a `TubeGeometry` whose u runs 0..1 ALONG
+ *  the belt and whose v runs 0..1 AROUND the girth -- measured: every vertex at the start end
+ *  has uv.x = 0 and every vertex at the far end uv.x = 1, while v steps 0, 1/6, 2/6 ... round
+ *  each ring. This was applied as `repeat.set(1, BELT_RIB_REPEAT)`, which crammed 24 repeats
+ *  around a girth drawn with six radial segments -- four whole tiles per quad, aliased to noise
+ *  -- and stretched exactly ONE tile along the run, whatever its length. The scroll went the
+ *  same way, sideways across the belt instead of along it, so the belt still read as painted
+ *  between its two pulleys: precisely the thing the comment below says this fixes. */
 const BELT_RIB_REPEAT = 24;
 
 /** Straight-line distance between two world positions. */
@@ -489,7 +498,7 @@ export class SceneSync {
           if (ribs) {
             const map = ribs.clone();
             map.needsUpdate = true;
-            map.repeat.set(1, BELT_RIB_REPEAT);
+            map.repeat.set(BELT_RIB_REPEAT, 1); // U runs along the belt; V goes round it
             material.map = map;
             material.bumpMap = map;
             material.bumpScale = 0.25;
@@ -506,8 +515,10 @@ export class SceneSync {
         if (material.map) {
           const span = Math.max(1e-6, distanceBetween(a.position, b.position));
           // One full texture repeat spans `span / BELT_RIB_REPEAT` world units, so dividing the
-          // travel by that converts world units of belt movement into texture repeats.
-          material.map.offset.y = -(travel * BELT_RIB_REPEAT) / span;
+          // travel by that converts world units of belt movement into texture repeats. On the U
+          // axis, which is the one that runs along the belt -- this was `offset.y`, which scrolls
+          // around the tube's girth, i.e. sideways across the direction of travel.
+          material.map.offset.x = -(travel * BELT_RIB_REPEAT) / span;
         }
       }
     }
