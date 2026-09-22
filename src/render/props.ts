@@ -1,17 +1,31 @@
 import * as THREE from "three";
 import { getProceduralTexture, type TextureKind } from "./textures";
 
-/** A decorative, NON-SIMULATED scene prop. Props exist purely to give a preset a
- *  recognizable physical body -- a car's chassis frame, a clock's bezel and tick marks,
- *  a hoist's mast -- around the gears that actually move. They are never part of
- *  `LayoutState` (they aren't gears, they don't mesh, they don't rotate, they aren't
- *  persisted or diagnosed); a preset supplies them alongside its layout, and `SceneSync`
- *  renders them as static meshes that are cleared and replaced whenever a new layout is
- *  loaded.
+/** A decorative, NON-SIMULATED scene prop. Props exist purely to give a preset a recognizable
+ *  physical body -- a car's chassis frame, a clock's bezel and tick marks, a hoist's mast --
+ *  around the gears that actually move. They are never part of `LayoutState`: they aren't
+ *  gears, they don't mesh, they aren't persisted, and `classify` never sees them, so nothing in
+ *  the simulation can notice a prop drawn through another one.
  *
- *  Deliberately a small, declarative set of primitives (box beam, cylinder/rod, ring,
- *  flat panel) rather than arbitrary geometry -- enough to sketch the silhouette of a
- *  real object out of simple parts, while staying trivially serializable and testable. */
+ *  THEY ARE NOT STATIC, whatever this header used to say. It claimed `SceneSync` "renders them
+ *  as static meshes", which was true when props were introduced and stopped being true across
+ *  five later features; `sceneSync.ts` says the opposite in its own words. Five mechanisms
+ *  re-pose a prop every frame, and the presets use all of them:
+ *
+ *    attachTo    140 props   turn with a gear, about that gear's centre
+ *    windWith     18 props   ride a rope spooling onto a drum
+ *    linkTo       11 props   swing as a crank-slider member
+ *    ridesOn       8 props   travel with a vehicle
+ *    slideWith     7 props   slide with a rack's linear travel
+ *
+ *  The pose passes and their composition rules live in `sceneSync.ts`; `tests/render/
+ *  propMotion.test.ts` drives them.
+ *
+ *  Deliberately a small, declarative set of primitives -- box, cylinder, ring (a TORUS, so its
+ *  material reaches radius +/- tube), sphere and cone -- rather than arbitrary geometry: enough
+ *  to sketch the silhouette of a real object out of simple parts, while staying trivially
+ *  serializable and testable. `position` is always a prop's CENTRE, which is the assumption
+ *  every clearance figure in every preset rests on. */
 /** Fields shared by every prop kind. `attachTo`, if set, is the id of a gear this prop
  *  should SPIN WITH: every frame `SceneSync` rotates the prop about that gear's axis,
  *  around the gear's centre, by the gear's current rotation -- so props that ought to
