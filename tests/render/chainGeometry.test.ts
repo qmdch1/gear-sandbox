@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as THREE from "three";
 import { buildLinkRibbon, CHAIN_MAX_LINKS } from "../../src/render/chainGeometry";
+import { GROUND_SIZE } from "../../src/render/scene";
 
 describe("buildLinkRibbon", () => {
   it("builds a non-empty tube geometry spanning two points (belt path, default kind)", () => {
@@ -48,9 +49,15 @@ describe("buildLinkRibbon", () => {
     const position = chain.attributes.position;
     for (let i = 0; i < position.count; i++) xs.push(position.getX(i));
     const slotWidth = 10 / linkCount;
-    const firstSlotXs = xs.filter((x) => x >= 0 && x < slotWidth);
-    const firstSlotSpan = Math.max(...firstSlotXs) - Math.min(...firstSlotXs);
-    expect(firstSlotSpan).toBeLessThan(slotWidth); // the link doesn't fill its whole slot -- there's a gap
+    // NOT `xs.filter(x => x >= 0 && x < slotWidth)` and then "the span is under slotWidth":
+    // that filter bounds the span by construction, so the assertion held however wide the
+    // plates were -- and got SAFER as they grew, because a fatter link spills further out of
+    // the window and leaves less of itself inside it. Measure the plate instead.
+    const nearXs = xs.filter((x) => x < slotWidth * 1.5);
+    const plateSpan = Math.max(...nearXs) - Math.min(...nearXs);
+    expect(plateSpan).toBeGreaterThan(0);
+    expect(plateSpan).toBeLessThan(slotWidth); // the link doesn't fill its whole slot
+    expect(plateSpan).toBeGreaterThan(slotWidth * 0.3); // ...but it is a link, not a speck
   });
 
   it("scales the chain's link count with the span between the endpoints", () => {
@@ -59,24 +66,26 @@ describe("buildLinkRibbon", () => {
     expect(longChain.attributes.position.count).toBeGreaterThan(shortChain.attributes.position.count);
   });
 
-  // Investigated real-world bound: scene.ts's groundPlane is a 500x500 PlaneGeometry
-  // centered on the origin (x, z each in [-250, 250]), and click-to-place
-  // (placementControls.ts) commits gears at a raycast hit against that exact mesh, so a
-  // hit can never fall outside it. scene.ts's `controls.maxDistance = 300` only bounds
-  // the camera's distance from its OrbitControls *target* -- nothing in this codebase
-  // clamps `controls.target` itself, so panning (OrbitControls' default) lets a user
-  // move that target anywhere and then zoom back in (down to `minDistance = 5`) to
-  // precisely place a gear at any point on the plane, including its far corners. The
-  // true worst case a user can create via the UI is therefore two sprockets sitting at
-  // opposite corners of the ground plane: distance = sqrt(500^2 + 500^2) ~= 707.11.
-  const GROUND_PLANE_DIAGONAL = Math.sqrt(500 ** 2 + 500 ** 2);
+  // Investigated real-world bound: scene.ts's groundPlane is GROUND_SIZE a side, centred on
+  // the origin, and click-to-place (placementControls.ts) commits gears at a raycast hit
+  // against that exact mesh, so a hit can never fall outside it. `controls.maxDistance` only
+  // bounds the camera's distance from its OrbitControls *target* -- nothing here clamps the
+  // target itself, so panning lets a user move it anywhere and zoom back in to place a gear at
+  // any point on the plane, corners included. The worst case reachable through the UI is
+  // therefore two sprockets at opposite corners: the plane's diagonal.
+  //
+  // Taken FROM GROUND_SIZE rather than written out, because it was written out and went stale:
+  // this said "500x500 ... maxDistance = 300 ... 707.11" against a plane that is 800 a side
+  // with maxDistance 1500, so the real worst case is 1131.37. The conclusion survived -- the
+  // cap engages either way, harder now -- but only by luck.
+  const GROUND_PLANE_DIAGONAL = Math.SQRT2 * GROUND_SIZE;
   // sceneSync.ts hardcodes chain ribbons to width = 0.15 (`link.kind === "chain" ? 0.15 : 0.25`).
   const CHAIN_WIDTH = 0.15;
   const singlePlateVertexCount = new THREE.BoxGeometry(0.1, 0.1, 0.1).toNonIndexed().attributes.position.count; // 36
 
-  it("caps vertex count at the real worst-case reachable distance (500x500 ground-plane diagonal) instead of scaling unbounded", () => {
+  it("caps vertex count at the real worst-case reachable distance (the ground-plane diagonal) instead of scaling unbounded", () => {
     // Without a cap, CHAIN_LINK_PITCH_FACTOR=3 and this width would give
-    // round(707.11 / 0.45) = 1571 links -- 1571 * 36 = 56,556 vertices for one ribbon.
+    // round(1131.37 / 0.45) = 2514 links -- 2514 * 36 = 90,504 vertices for one ribbon.
     const uncappedNaiveLinkCount = Math.round(GROUND_PLANE_DIAGONAL / (CHAIN_WIDTH * 3));
     expect(uncappedNaiveLinkCount).toBeGreaterThan(CHAIN_MAX_LINKS); // confirms the cap actually engages for this real span
 
@@ -149,5 +158,62 @@ describe("buildLinkRibbon", () => {
     const ringVs = new Set<number>();
     for (let i = 0; i < pos.count; i++) if (pos.getX(i) < 0.5) ringVs.add(+uv.getY(i).toFixed(6));
     expect(ringVs.size).toBeGreaterThan(2);
+  });
+});
+
+describe("chain travel and plate twist", () => {
+  // `chainTravel.test.ts` exercises the pure `chainLinkPositions`, and every call in this file
+  // passed three or four arguments -- so `travel`, the fifth, never had a value and the wiring
+  // between the two was untested. The whole feature could be deleted from `buildLinkRibbon`
+  // with the suite green.
+  const A: [number, number, number] = [0, 0, 0];
+  const B: [number, number, number] = [20, 0, 0];
+
+  const xsOf = (g: THREE.BufferGeometry) => {
+    const pos = g.attributes.position;
+    const out: number[] = [];
+    for (let i = 0; i < pos.count; i++) out.push(pos.getX(i));
+    return out.sort((a, b) => a - b);
+  };
+
+  it("moves the links along the run as travel advances", () => {
+    const still = buildLinkRibbon(A, B, 0.2, "chain", 0);
+    const moved = buildLinkRibbon(A, B, 0.2, "chain", 0.4);
+
+    expect(moved.attributes.position.count).toBe(still.attributes.position.count);
+    const a = xsOf(still);
+    const b = xsOf(moved);
+    const biggestShift = Math.max(...a.map((x, i) => Math.abs(x - b[i])));
+    expect(biggestShift).toBeGreaterThan(0.05);
+  });
+
+  it("wraps rather than running off the end, so the chain stays between its sprockets", () => {
+    for (const travel of [0, 0.3, 0.7, 1.3, -0.6]) {
+      const xs = xsOf(buildLinkRibbon(A, B, 0.2, "chain", travel));
+      expect(Math.min(...xs)).toBeGreaterThan(-1);
+      expect(Math.max(...xs)).toBeLessThan(21);
+    }
+  });
+
+  it("alternates each plate's twist, so the chain reads as links rather than a ladder", () => {
+    // The twist swaps a plate's Y and Z extents and leaves its X extent along the run alone.
+    // Every other assertion in this file reads `position.count` or X values, so none of them
+    // could see it: deleting the twist changes nothing they measure.
+    const g = buildLinkRibbon(A, B, 0.4, "chain", 0);
+    const pos = g.attributes.position;
+
+    const plates = new Map<number, { y: number[]; z: number[] }>();
+    for (let i = 0; i < pos.count; i++) {
+      const key = Math.round(pos.getX(i) * 2) / 2;
+      const slot = plates.get(key) ?? { y: [], z: [] };
+      slot.y.push(pos.getY(i));
+      slot.z.push(pos.getZ(i));
+      plates.set(key, slot);
+    }
+    const shapes = [...plates.values()]
+      .filter((p) => p.y.length > 8)
+      .map((p) => Math.max(...p.y) - Math.min(...p.y) > Math.max(...p.z) - Math.min(...p.z));
+    expect(shapes.length).toBeGreaterThan(3);
+    expect(new Set(shapes).size).toBe(2); // both orientations present
   });
 });
